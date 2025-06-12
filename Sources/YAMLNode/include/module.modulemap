@@ -1,0 +1,3 @@
+module YAMLNode {
+    header "../YAMLNode.h"
+}
