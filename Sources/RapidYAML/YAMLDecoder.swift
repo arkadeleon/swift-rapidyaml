@@ -16,6 +16,7 @@ public enum YAMLError: Error {
 /// user info mapping. Similar to `Foundation.JSONDecoder`.
 public class YAMLDecoder {
 
+    /// Creates a `YAMLDecoder` instance.
     public init() {
     }
 
