@@ -61,8 +61,8 @@ python-wheel-matrix =::
 - ! pywhl('3.7'  37  'i686'       'manylinux_i686'    'ubuntu-22.04')
 - ! pywhl('3.7'  37  'x86_64'     'macosx_x86_64'     'macos-13'    )
 #          pyv        arch         platform            os
-- ! pywhl('3.6'  36  'x86_64'     'manylinux_x86_64'  'ubuntu-20.04') # setup-python 3.6 requires ubuntu 20.04
-- ! pywhl('3.6'  36  'i686'       'manylinux_i686'    'ubuntu-20.04') # setup-python 3.6 requires ubuntu 20.04
+#- ! pywhl('3.6'  36  'x86_64'     'manylinux_x86_64'  'ubuntu-20.04') # setup-python 3.6 requires ubuntu 20.04
+#- ! pywhl('3.6'  36  'i686'       'manylinux_i686'    'ubuntu-20.04') # setup-python 3.6 requires ubuntu 20.04
 - ! pywhl('3.6'  36  'x86_64'     'macosx_x86_64'     'macos-13'    )
 
 
@@ -278,10 +278,10 @@ jobs:
        #   sfxg: unix64.deb,
        #   sfxp: ubuntu-18.04.deb,
        #   gen: DEB, mime: vnd.debian.binary-package, os: ubuntu-18.04}
-        - {name: Windows VS2019 zip,
+        - {name: Windows VS2022 zip,
            sfxg: win64.zip,
-           sfxp: windows-vs2019.zip,
-           gen: ZIP, mime: zip, os: windows-2019, cxx: vs2019}
+           sfxp: windows-vs2022.zip,
+           gen: ZIP, mime: zip, os: windows-2022, cxx: vs2022}
         - {name: MacOSX sh,
            sfxg: apple64.sh,
            sfxp: macosx-xcode.sh,
@@ -300,7 +300,14 @@ jobs:
     - name: shared64-pack
       run: source .github/setenv.sh && c4_package shared64 $GEN
     - name: shared64-normalize
-      run:: bash('release-shared-normalize')
+      run: |
+        set -x
+        source vars.sh
+        mkdir -p assets
+        asset_src=`ls -1 ./build/shared64/*-${{matrix.config.sfxg}}`
+        asset_dst=./assets/${PROJ_PKG_NAME}${SRC_VERSION}-${{matrix.config.sfxp}}
+        [ ! -f $asset_src ] && exit 1
+        cp -fav $asset_src $asset_dst
     - name: Save artifacts
       uses: actions/upload-artifact@v4
       with: {name: 'assets-${{matrix.config.sfxp}}', path: assets/}
@@ -317,10 +324,12 @@ jobs:
       - name: install python 3.9
         uses: actions/setup-python@v5
         with: {python-version: 3.9}
-      - name: package python src packages
-        run:: bash('release-package-python')
-      - name: normalize src package names
-        run:: bash('release-normalize')
+      - name: python version
+        run: python --version
+      - name: python requirements
+        run: pip install -v -r requirements.txt
+      - name: package python src
+        run: python setup.py sdist --formats=gztar
       - name: Save artifacts
         uses: actions/upload-artifact@v4
         with: {name: dist-python_src, path: dist/}
@@ -395,9 +404,6 @@ jobs:
         )
         ls -lFhp assets*/ || echo 'none found'
         ls -lFhp dist*/ || echo 'none found'
-    - name: Move Python packages to assets folder
-      if: contains(github.ref, 'tags/v')
-      run: mv -fv dist/*src.zip assets/.
     # Github
     - :: version-get-vars
     - name: Create Github Release
@@ -422,17 +428,17 @@ jobs:
         assets_path: ./assets/
     # PyPI (test)
     - name: Publish python packages to test PyPI
-      uses: pypa/gh-action-pypi-publish@v1.4.2
+      uses: pypa/gh-action-pypi-publish@v1.13.0
       with:
-        repository_url: https://test.pypi.org/legacy/
+        repository-url: https://test.pypi.org/legacy/
         user: __token__
         password: ${{secrets.PYPI_TOKEN_TEST}}
         verbose: true
-        skip_existing: true
+        skip-existing: true
     # PyPI (production)
     - name: Publish python packages to production PyPI
       if: contains(github.ref, 'tags/v')
-      uses: pypa/gh-action-pypi-publish@v1.4.2
+      uses: pypa/gh-action-pypi-publish@v1.13.0
       with:
         user: __token__
         password: ${{secrets.PYPI_TOKEN}}

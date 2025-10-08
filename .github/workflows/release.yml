@@ -1,4 +1,4 @@
-# DO NOT EDIT - GENERATED FROM .github/workflows/release.ys
+# DO NOT EDIT - GENERATED FROM .github/workflows-in/release.ys
 
 name: release
 defaults:
@@ -178,13 +178,13 @@ jobs:
           gen: DEB
           mime: vnd.debian.binary-package
           os: ubuntu-22.04
-        - name: Windows VS2019 zip
+        - name: Windows VS2022 zip
           sfxg: win64.zip
-          sfxp: windows-vs2019.zip
+          sfxp: windows-vs2022.zip
           gen: ZIP
           mime: zip
-          os: windows-2019
-          cxx: vs2019
+          os: windows-2022
+          cxx: vs2022
         - name: MacOSX sh
           sfxg: apple64.sh
           sfxp: macosx-xcode.sh
@@ -261,17 +261,12 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: 3.9
-    - name: package python src packages
-      run: |
-        python --version
-        pip install -v -r requirements.txt
-        python setup.py sdist --formats=zip
-    - name: normalize src package names
-      run: |
-        sdist_orig=`find dist -type f -name 'rapidyaml-*.zip'`
-        [ ! -f $sdist_orig ] && exit 1
-        sdist=`echo $sdist_orig | sed 's:\.zip:-python_src.zip:'`
-        mv -fv $sdist_orig $sdist
+    - name: python version
+      run: python --version
+    - name: python requirements
+      run: pip install -v -r requirements.txt
+    - name: package python src
+      run: python setup.py sdist --formats=gztar
     - name: Save artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -586,22 +581,6 @@ jobs:
           cibw_pyv: 37
           cibw_arch: x86_64
           cibw_platform: macosx_x86_64
-          vsenvarch: ''
-        - name: python/3.6/manylinux_x86_64
-          sfx: python3.6-manylinux_x86_64
-          os: ubuntu-20.04
-          pythonv: '3.6'
-          cibw_pyv: 36
-          cibw_arch: x86_64
-          cibw_platform: manylinux_x86_64
-          vsenvarch: ''
-        - name: python/3.6/manylinux_i686
-          sfx: python3.6-manylinux_i686
-          os: ubuntu-20.04
-          pythonv: '3.6'
-          cibw_pyv: 36
-          cibw_arch: i686
-          cibw_platform: manylinux_i686
           vsenvarch: ''
         - name: python/3.6/macosx_x86_64
           sfx: python3.6-macosx_x86_64
@@ -966,9 +945,6 @@ jobs:
         )
         ls -lFhp assets*/ || echo 'none found'
         ls -lFhp dist*/ || echo 'none found'
-    - name: Move Python packages to assets folder
-      if: contains(github.ref, 'tags/v')
-      run: mv -fv dist/*src.zip assets/.
     - name: Download vars.sh
       uses: actions/download-artifact@v4
       with:
@@ -1014,16 +990,16 @@ jobs:
         release_id: ${{steps.create_release.outputs.id}}
         assets_path: ./assets/
     - name: Publish python packages to test PyPI
-      uses: pypa/gh-action-pypi-publish@v1.4.2
+      uses: pypa/gh-action-pypi-publish@v1.13.0
       with:
-        repository_url: https://test.pypi.org/legacy/
+        repository-url: https://test.pypi.org/legacy/
         user: __token__
         password: ${{secrets.PYPI_TOKEN_TEST}}
         verbose: true
-        skip_existing: true
+        skip-existing: true
     - name: Publish python packages to production PyPI
       if: contains(github.ref, 'tags/v')
-      uses: pypa/gh-action-pypi-publish@v1.4.2
+      uses: pypa/gh-action-pypi-publish@v1.13.0
       with:
         user: __token__
         password: ${{secrets.PYPI_TOKEN}}

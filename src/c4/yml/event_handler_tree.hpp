@@ -19,11 +19,12 @@ namespace yml {
  * @{ */
 
 
-/** The stack state needed specifically by @ref EventHandlerTree */
+/** @cond dev */
 struct EventHandlerTreeState : public ParserState
 {
     NodeData *tr_data;
 };
+/** @endcond */
 
 
 /** The event handler to create a ryml @ref Tree. See the
@@ -189,7 +190,7 @@ public:
             id_type first = m_tree->first_child(m_tree->root_id());
             _RYML_CB_ASSERT(m_stack.m_callbacks, m_tree->is_stream(m_tree->root_id()));
             _RYML_CB_ASSERT(m_stack.m_callbacks, m_tree->num_children(m_tree->root_id()) == 1u);
-            if(m_tree->has_children(first) || m_tree->is_val(first))
+            if(m_tree->is_container(first) || m_tree->is_val(first))
             {
                 _c4dbgp("push!");
                 _push();
@@ -463,9 +464,8 @@ public:
     {
         _c4dbgpf("node[{}]: set key anchor: [{}]~~~{}~~~", m_curr->node_id, anchor.len, anchor);
         _RYML_CB_ASSERT(m_stack.m_callbacks, m_tree);
-        if(C4_UNLIKELY(_has_any_(KEYREF)))
-            _RYML_CB_ERR_(m_tree->callbacks(), "key cannot have both anchor and ref", m_curr->pos);
-        _RYML_CB_ASSERT(m_tree->callbacks(), !anchor.begins_with('&'));
+        _RYML_CB_ASSERT(m_stack.m_callbacks, !_has_any_(KEYREF));
+        _RYML_CB_ASSERT(m_stack.m_callbacks, !anchor.begins_with('&'));
         _enable_(KEYANCH);
         m_curr->tr_data->m_key.anchor = anchor;
     }
@@ -473,9 +473,8 @@ public:
     {
         _c4dbgpf("node[{}]: set val anchor: [{}]~~~{}~~~", m_curr->node_id, anchor.len, anchor);
         _RYML_CB_ASSERT(m_stack.m_callbacks, m_tree);
-        if(C4_UNLIKELY(_has_any_(VALREF)))
-            _RYML_CB_ERR_(m_tree->callbacks(), "val cannot have both anchor and ref", m_curr->pos);
-        _RYML_CB_ASSERT(m_tree->callbacks(), !anchor.begins_with('&'));
+        _RYML_CB_ASSERT(m_stack.m_callbacks, !_has_any_(VALREF));
+        _RYML_CB_ASSERT(m_stack.m_callbacks, !anchor.begins_with('&'));
         _enable_(VALANCH);
         m_curr->tr_data->m_val.anchor = anchor;
     }
@@ -694,15 +693,10 @@ public:
         _c4dbgp("set root as stream");
         _RYML_CB_ASSERT(m_tree->callbacks(), m_tree->root_id() == 0u);
         _RYML_CB_ASSERT(m_tree->callbacks(), m_curr->node_id == 0u);
-        const bool hack = !m_tree->has_children(m_curr->node_id) && !m_tree->is_val(m_curr->node_id);
-        if(hack)
-            m_tree->_p(m_tree->root_id())->m_type.add(VAL);
         m_tree->set_root_as_stream();
         _RYML_CB_ASSERT(m_tree->callbacks(), m_tree->is_stream(m_tree->root_id()));
         _RYML_CB_ASSERT(m_tree->callbacks(), m_tree->has_children(m_tree->root_id()));
         _RYML_CB_ASSERT(m_tree->callbacks(), m_tree->is_doc(m_tree->first_child(m_tree->root_id())));
-        if(hack)
-            m_tree->_p(m_tree->first_child(m_tree->root_id()))->m_type.rem(VAL);
         _set_state_(m_curr, m_tree->root_id());
     }
 

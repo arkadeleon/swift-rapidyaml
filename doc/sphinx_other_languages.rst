@@ -2,11 +2,35 @@ Other languages
 ===============
 
 One of the aims of ryml is to provide an efficient YAML API for other
-languages. JavaScript is fully available, and there is already a cursory
-implementation for Python using only the low-level API. After ironing
-out the general approach, other languages are likely to follow (all of
-this is possible because we’re using `SWIG <http://www.swig.org/>`__,
-which makes it easy to do so).
+languages. JavaScript is fully available, and there is already a
+cursory implementation for Python using only the low-level API. After
+ironing out the general approach, other languages are likely to follow
+suit.
+
+
+
+Event buffer int handler
+------------------------
+
+Recently we added an alternative parser event handler (not part of the
+library). This handler parses the YAML source into a linear buffer of
+integers, which contains events encoded as bitmasks, interleaved with
+strings encoded as an offset (from the beginning of the source buffer)
+and length.
+
+This handler is fully compliant (ie it can handle container keys,
+unlike the ryml C++ tree), and is also 2x to 3x faster to parse.
+
+This handler is meant to be used in other programming languages while
+also minimizing speed-killing inter-language calls, creating a full
+representation of the YAML tree that can be processed at once in the
+target programming language.
+
+You can find the int event handler in the `src_extra source folder
+<https://github.com/biojppm/rapidyaml/tree/master/src_extra>`__. See
+its doxygen documentation for details on how to use it, and how to
+process the event array.
+
 
 
 JavaScript
@@ -46,11 +70,11 @@ are string views into the source buffer, and not typed. With that
 said, it is really fast, and once you have the tree, you can still walk
 over the tree to create the native python structure. Have a look at
 this `test file
-<https://github.com/biojppm/rapidyaml/tree/v0.9.0/api/python/tests/test_readme.py>`__
+<https://github.com/biojppm/rapidyaml/tree/v0.10.0/api/python/tests/test_readme.py>`__
 to see how the python API works, and to judge whether it may be useful to your
 case.
 
-As for performance, in a `timeit benchmark <https://github.com/biojppm/rapidyaml/tree/v0.9.0/api/python/bm/parse_bm.py>`__ comparing against
+As for performance, in a `timeit benchmark <https://github.com/biojppm/rapidyaml/tree/v0.10.0/api/python/bm/parse_bm.py>`__ comparing against
 `PyYaml <https://pyyaml.org/>`__ and
 `ruamel.yaml <https://yaml.readthedocs.io/en/latest/>`__, ryml parses
 quicker by generally 100x and up to 400x:

@@ -1,4 +1,4 @@
-# DO NOT EDIT - GENERATED FROM .github/workflows/benchmarks.ys
+# DO NOT EDIT - GENERATED FROM .github/workflows-in/benchmarks.ys
 
 name: benchmarks
 defaults:
@@ -102,10 +102,6 @@ jobs:
           comp: clang18
           os: ubuntu-24.04
           cmkflags: -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_C_COMPILER=clang-18
-        - std: 17
-          comp: vs2019
-          os: windows-2019
-          cmkflags: -G 'Visual Studio 16 2019' -A x64
         - std: 17
           comp: vs2022
           os: windows-2022

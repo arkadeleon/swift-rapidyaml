@@ -11,46 +11,231 @@
 #endif
 #include <gtest/gtest.h>
 #include "./test_lib/test_case.hpp"
-#include "./test_suite/test_suite_event_handler.hpp"
+#include "./test_lib/test_events_ints_helpers.hpp"
+#include "testsuite/testsuite_events.hpp"
+#include "c4/yml/extra/ints_to_testsuite.hpp"
+#include "c4/yml/extra/ints_utils.hpp"
+#include "c4/yml/extra/event_handler_testsuite.hpp"
+#include "c4/yml/extra/event_handler_ints.hpp"
 
 
 namespace c4 {
 namespace yml {
 
 
-struct ReferenceYaml
+//-----------------------------------------------------------------------------
+
+struct OptionalScalar
 {
-    ReferenceYaml(                                       std::string const& s                      ) : test_case_flags(), expected_error_location(), parsed(s), emitted(s) {}
-    ReferenceYaml(                                       std::string const& p, std::string const& e) : test_case_flags(), expected_error_location(), parsed(p), emitted(e) {}
-    ReferenceYaml(TestCaseFlags_e tf,                    std::string const& p, std::string const& e) : test_case_flags(tf), expected_error_location(), parsed(p), emitted(e) {}
-    ReferenceYaml(TestCaseFlags_e tf,                    std::string const& p                      ) : test_case_flags(tf), expected_error_location(), parsed(p), emitted(p) {}
-    ReferenceYaml(                    Location linecol_, std::string const& p                      ) : test_case_flags(), expected_error_location(linecol_), parsed(p), emitted(p) { RYML_ASSERT(linecol_); }
-    ReferenceYaml(TestCaseFlags_e tf, Location linecol_, std::string const& p, std::string const& e) : test_case_flags(tf), expected_error_location(linecol_), parsed(p), emitted(e) { RYML_ASSERT(linecol_); }
-    ReferenceYaml(TestCaseFlags_e tf, Location linecol_, std::string const& p                      ) : test_case_flags(tf), expected_error_location(linecol_), parsed(p), emitted(p) { RYML_ASSERT(linecol_); }
+    csubstr val = {};
+    bool was_set = false;
+    operator csubstr() const { return get(); }
+    operator bool() const { return was_set; }
+    void operator= (csubstr v) { val = v; was_set = true; }
+    csubstr get() const { RYML_ASSERT(was_set); return val; }
+    csubstr maybe_get() const { return was_set ? val : csubstr(""); }
+};
+
+csubstr parse_anchor_and_tag(csubstr tokens, OptionalScalar *anchor, OptionalScalar *tag);
+
+void test_compare_events(csubstr ref_evts,
+                    csubstr emt_evts,
+                    bool ignore_doc_style,
+                    bool ignore_container_style,
+                    bool ignore_scalar_style,
+                    bool ignore_tag_normalization);
+
+
+//-----------------------------------------------------------------------------
+
+struct EngineEvtTestCase
+{
+    EngineEvtTestCase(                                       std::string s               , std::string ev) : test_case_flags(  ), expected_error_location(        ), parsed(s           ), emitted(std::move(s)), expected_events(std::move(ev)), expected_ints(), expected_ints_enabled(false) {}
+    EngineEvtTestCase(                                       std::string p, std::string e, std::string ev) : test_case_flags(  ), expected_error_location(        ), parsed(std::move(p)), emitted(std::move(e)), expected_events(std::move(ev)), expected_ints(), expected_ints_enabled(false) {}
+    EngineEvtTestCase(TestCaseFlags_e tf,                    std::string p, std::string e, std::string ev) : test_case_flags(tf), expected_error_location(        ), parsed(std::move(p)), emitted(std::move(e)), expected_events(std::move(ev)), expected_ints(), expected_ints_enabled(false) {}
+    EngineEvtTestCase(TestCaseFlags_e tf,                    std::string p               , std::string ev) : test_case_flags(tf), expected_error_location(        ), parsed(p           ), emitted(std::move(p)), expected_events(std::move(ev)), expected_ints(), expected_ints_enabled(false) {}
+    EngineEvtTestCase(                    Location linecol_, std::string p               , std::string ev) : test_case_flags(  ), expected_error_location(linecol_), parsed(p           ), emitted(std::move(p)), expected_events(std::move(ev)), expected_ints(), expected_ints_enabled(false) { RYML_ASSERT(linecol_); }
+    EngineEvtTestCase(TestCaseFlags_e tf, Location linecol_, std::string p, std::string e, std::string ev) : test_case_flags(tf), expected_error_location(linecol_), parsed(std::move(p)), emitted(std::move(e)), expected_events(std::move(ev)), expected_ints(), expected_ints_enabled(false) { RYML_ASSERT(linecol_); }
+    EngineEvtTestCase(TestCaseFlags_e tf, Location linecol_, std::string p               , std::string ev) : test_case_flags(tf), expected_error_location(linecol_), parsed(p           ), emitted(std::move(p)), expected_events(std::move(ev)), expected_ints(), expected_ints_enabled(false) { RYML_ASSERT(linecol_); }
+
+    EngineEvtTestCase(                                       std::string s               , std::string ev, std::vector<extra::IntEventWithScalar> ints) : test_case_flags(  ), expected_error_location(        ), parsed(s           ), emitted(std::move(s)), expected_events(std::move(ev)), expected_ints(std::move(ints)), expected_ints_enabled(true) {}
+    EngineEvtTestCase(                                       std::string p, std::string e, std::string ev, std::vector<extra::IntEventWithScalar> ints) : test_case_flags(  ), expected_error_location(        ), parsed(std::move(p)), emitted(std::move(e)), expected_events(std::move(ev)), expected_ints(std::move(ints)), expected_ints_enabled(true) {}
+    EngineEvtTestCase(TestCaseFlags_e tf,                    std::string p, std::string e, std::string ev, std::vector<extra::IntEventWithScalar> ints) : test_case_flags(tf), expected_error_location(        ), parsed(std::move(p)), emitted(std::move(e)), expected_events(std::move(ev)), expected_ints(std::move(ints)), expected_ints_enabled(true) {}
+    EngineEvtTestCase(TestCaseFlags_e tf,                    std::string p               , std::string ev, std::vector<extra::IntEventWithScalar> ints) : test_case_flags(tf), expected_error_location(        ), parsed(p           ), emitted(std::move(p)), expected_events(std::move(ev)), expected_ints(std::move(ints)), expected_ints_enabled(true) {}
+    EngineEvtTestCase(                    Location linecol_, std::string p               , std::string ev, std::vector<extra::IntEventWithScalar> ints) : test_case_flags(  ), expected_error_location(linecol_), parsed(p           ), emitted(std::move(p)), expected_events(std::move(ev)), expected_ints(std::move(ints)), expected_ints_enabled(true) { RYML_ASSERT(linecol_); }
+    EngineEvtTestCase(TestCaseFlags_e tf, Location linecol_, std::string p, std::string e, std::string ev, std::vector<extra::IntEventWithScalar> ints) : test_case_flags(tf), expected_error_location(linecol_), parsed(std::move(p)), emitted(std::move(e)), expected_events(std::move(ev)), expected_ints(std::move(ints)), expected_ints_enabled(true) { RYML_ASSERT(linecol_); }
+    EngineEvtTestCase(TestCaseFlags_e tf, Location linecol_, std::string p               , std::string ev, std::vector<extra::IntEventWithScalar> ints) : test_case_flags(tf), expected_error_location(linecol_), parsed(           p), emitted(std::move(p)), expected_events(std::move(ev)), expected_ints(std::move(ints)), expected_ints_enabled(true) { RYML_ASSERT(linecol_); }
     TestCaseFlags_e test_case_flags;
     Location expected_error_location;
     std::string parsed;
     std::string emitted;
+    std::string expected_events;
+    std::vector<extra::IntEventWithScalar> expected_ints;
+    bool expected_ints_enabled;
 };
 
 
 template<template<class> class EventProducerFn>
-C4_NO_INLINE void test_new_parser_str_from_events(std::string const& expected_events)
+C4_NO_INLINE void test_engine_testsuite_from_events(const EngineEvtTestCase& tc)
 {
-    EventHandlerYamlStd::EventSink sink;
-    EventHandlerYamlStd handler(&sink);
+    extra::EventHandlerTestSuite::EventSink sink;
+    extra::EventHandlerTestSuite handler(&sink);
     handler.reset();
-    EventProducerFn<EventHandlerYamlStd> event_producer;
+    EventProducerFn<extra::EventHandlerTestSuite> event_producer;
     event_producer(handler);
     csubstr result = sink;
     _c4dbgpf("~~~\n{}~~~\n", result);
-    EXPECT_EQ(std::string(result.str, result.len), expected_events);
+    EXPECT_EQ(std::string(result.str, result.len), tc.expected_events);
+}
+
+
+struct Separator {};
+template<class Handler, class ArgTransformer>
+struct EventTransformer
+{
+    Handler handler;
+    ArgTransformer transformer{&handler, {}};
+
+    void start_parse(const char* filename, c4::yml::detail::pfn_relocate_arena relocate_arena, void *relocate_arena_data)
+    {
+        handler.start_parse(filename, relocate_arena, relocate_arena_data);
+    }
+
+    #define fwd(evt) void evt() { handler.evt(); }
+    #define fwds(evt) void evt(csubstr s) { handler.evt(transformer(s)); }
+
+    fwd(begin_stream)
+    fwd(end_stream)
+    fwd(begin_doc)
+    fwd(end_doc)
+    fwd(begin_doc_expl)
+    fwd(end_doc_expl)
+
+    fwd(begin_map_key_flow)
+    fwd(begin_map_key_block)
+    fwd(begin_map_val_flow)
+    fwd(begin_map_val_block)
+    fwd(end_map)
+
+    fwd(begin_seq_key_flow)
+    fwd(begin_seq_key_block)
+    fwd(begin_seq_val_flow)
+    fwd(begin_seq_val_block)
+    fwd(end_seq)
+
+    fwd(add_sibling)
+    fwd(actually_val_is_first_key_of_new_map_flow)
+    fwd(actually_val_is_first_key_of_new_map_block)
+    fwd(mark_key_scalar_unfiltered)
+    fwd(mark_val_scalar_unfiltered)
+
+    fwd(set_key_scalar_plain_empty)
+    fwd(set_val_scalar_plain_empty)
+    fwds(set_key_scalar_plain)
+    fwds(set_val_scalar_plain)
+    fwds(set_key_scalar_dquoted)
+    fwds(set_val_scalar_dquoted)
+    fwds(set_key_scalar_squoted)
+    fwds(set_val_scalar_squoted)
+    fwds(set_key_scalar_literal)
+    fwds(set_val_scalar_literal)
+    fwds(set_key_scalar_folded)
+    fwds(set_val_scalar_folded)
+
+    fwds(set_key_anchor)
+    fwds(set_val_anchor)
+    fwds(set_key_ref)
+    fwds(set_val_ref)
+
+    fwds(set_key_tag)
+    fwds(set_val_tag)
+
+    fwds(add_directive)
+
+    #undef fwd
+    #undef fwds
+};
+template<class Handler>
+struct TransformToSourceBufferOrArena
+{
+    Handler *handler;
+    csubstr src;
+    csubstr operator() (csubstr s) const
+    {
+        size_t pos = src.find(s);
+        if(pos != csubstr::npos)
+        {
+            RYML_ASSERT(pos + s.len <= src.len);
+            return src.sub(pos, s.len);
+        }
+        substr dst = handler->alloc_arena(s.len);
+        if(s.len) memcpy(dst.str, s.str, s.len);
+        return dst;
+    }
+};
+
+
+template<template<class> class EventProducerFn>
+C4_NO_INLINE void test_engine_ints_from_events(EngineEvtTestCase const& tc)
+{
+    SCOPED_TRACE("ints_from_events");
+    using Helper = EventTransformer<extra::EventHandlerInts, TransformToSourceBufferOrArena<extra::EventHandlerInts>>;
+    Helper helper;
+    extra::EventHandlerInts &handler = helper.handler;
+    std::string src = tc.parsed;
+    std::string arena;
+    std::vector<int> ints((size_t)extra::estimate_events_ints_size(to_csubstr(src)));
+    arena.resize(src.size());
+    handler.reset(to_substr(src), to_substr(arena), ints.data(), (int)ints.size());
+    helper.transformer.src = to_csubstr(src);
+    EventProducerFn<Helper> event_producer;
+    event_producer(helper);
+    ASSERT_LE(handler.required_size_events(), (int)ints.size());
+    if(!handler.fits_buffers())
+    {
+        // must be because the arena is too small
+        ASSERT_GT(handler.required_size_arena(), (int)arena.size());
+        arena.resize(handler.required_size_arena());
+        // try again
+        src.assign(tc.parsed.begin(), tc.parsed.end());
+        helper.transformer.src = to_csubstr(src);
+        handler.reset(to_substr(src), to_substr(arena), ints.data(), (int)ints.size());
+        event_producer(helper);
+    }
+    ASSERT_TRUE(handler.fits_buffers());
+    ints.resize((size_t)handler.required_size_events());
+    #ifdef RYML_DBG
+    extra::events_ints_print(to_csubstr(src), to_csubstr(arena), ints.data(), (int)ints.size());
+    #endif
+    {
+        SCOPED_TRACE("test_invariants");
+        extra::test_events_ints_invariants(to_csubstr(src), to_csubstr(arena), ints.data(), (int)ints.size());
+    }
+    if(tc.expected_ints_enabled)
+    {
+        SCOPED_TRACE("compare_ints");
+        extra::test_events_ints(tc.expected_ints.data(), tc.expected_ints.size(),
+                                ints.data(), ints.size(),
+                                to_csubstr(tc.parsed),
+                                to_csubstr(src),
+                                to_csubstr(arena));
+    }
+    {
+        std::string actual_testsuite_events = extra::events_ints_to_testsuite<std::string>(to_csubstr(src), to_csubstr(arena), ints.data(), (int)ints.size());
+        _c4dbgpf("~~~\n{}~~~\n", actual_testsuite_events);
+        test_compare_events(to_csubstr(tc.expected_events),
+                            to_csubstr(actual_testsuite_events),
+                            /*ignore_doc_style*/false,
+                            /*ignore_container_style*/false,
+                            /*ignore_scalar_style*/false,
+                            /*ignore_tag_normalization*/true);
+    }
 }
 
 template<template<class> class EventProducerFn>
-C4_NO_INLINE void test_new_parser_tree_from_events(ReferenceYaml const& yaml)
+C4_NO_INLINE void test_engine_tree_from_events(EngineEvtTestCase const& tc)
 {
-    if(yaml.test_case_flags & HAS_CONTAINER_KEYS)
+    if(tc.test_case_flags & HAS_CONTAINER_KEYS)
     {
         ExpectError::check_error([&]{
             Tree tree = {};
@@ -70,21 +255,28 @@ C4_NO_INLINE void test_new_parser_tree_from_events(ReferenceYaml const& yaml)
         #endif
         std::string actual = emitrs_yaml<std::string>(tree);
         _c4dbgpf("~~~\n{}~~~\n", actual);
-        EXPECT_EQ(actual, yaml.emitted);
+        EXPECT_EQ(actual, tc.emitted);
     }
 }
 
-void test_new_parser_events_from_yaml(ReferenceYaml const& yaml, std::string const& expected_events);
-void test_new_parser_tree_from_yaml(ReferenceYaml const& yaml);
-void test_new_parser_events_from_yaml_with_comments(ReferenceYaml const& yaml, std::string const& expected_events);
-void test_new_parser_tree_from_yaml_with_comments(ReferenceYaml const& yaml);
-void test_expected_error_events_from_yaml(std::string const& parsed_yaml, Location const& expected_error_location={});
+void test_engine_testsuite_from_yaml(EngineEvtTestCase const& yaml, std::string const& parsed_yaml, ParserOptions opts);
+void test_engine_ints_from_yaml(EngineEvtTestCase const& yaml, std::string const& parsed_yaml, ParserOptions opts);
+void test_engine_tree_from_yaml(EngineEvtTestCase const& yaml, std::string const& parsed_yaml, ParserOptions opts);
+
+inline void test_engine_testsuite_from_yaml(EngineEvtTestCase const& yaml, ParserOptions opts) { test_engine_testsuite_from_yaml(yaml, yaml.parsed, opts); }
+inline void test_engine_ints_from_yaml(EngineEvtTestCase const& yaml, ParserOptions opts) { test_engine_ints_from_yaml(yaml, yaml.parsed, opts); }
+inline void test_engine_tree_from_yaml(EngineEvtTestCase const& yaml, ParserOptions opts) { test_engine_tree_from_yaml(yaml, yaml.parsed, opts); }
+
+void test_engine_testsuite_from_yaml_with_comments(EngineEvtTestCase const& yaml, ParserOptions opts);
+void test_engine_ints_from_yaml_with_comments(EngineEvtTestCase const& yaml, ParserOptions opts);
+void test_engine_tree_from_yaml_with_comments(EngineEvtTestCase const& yaml, ParserOptions opts);
+
+void test_expected_error_testsuite_from_yaml(std::string const& parsed_yaml, Location const& expected_error_location={});
+void test_expected_error_ints_from_yaml(std::string const& parsed_yaml, Location const& expected_error_location={});
 void test_expected_error_tree_from_yaml(std::string const& parsed_yaml, Location const& expected_error_location={});
 
 
-
 //-----------------------------------------------------------------------------
-
 
 #ifdef RYML_DBG
 #define _RYML_SHOWFILELINE(name) printf("%s:%d: " #name "\n", __FILE__, __LINE__)
@@ -98,11 +290,20 @@ void test_expected_error_tree_from_yaml(std::string const& parsed_yaml, Location
 #define ENGINE_TEST_ERRLOC(name, location, refyaml)             \
                                                                 \
                                                                 \
-TEST(EngineTest, name##_err_events_from_yaml)                   \
+TEST(EngineTest, name##_err_testsuite_from_yaml)                \
 {                                                               \
     _RYML_SHOWFILELINE(name);                                   \
-    SCOPED_TRACE(#name "_err_events_from_yaml");                \
-    test_expected_error_events_from_yaml(refyaml, location);    \
+    SCOPED_TRACE(#name "_err_testsuite_from_yaml");             \
+    test_expected_error_testsuite_from_yaml(refyaml, location); \
+    _RYML_SHOWFILELINE(name);                                   \
+}                                                               \
+                                                                \
+                                                                \
+TEST(EngineTest, name##_err_ints_from_yaml)                     \
+{                                                               \
+    _RYML_SHOWFILELINE(name);                                   \
+    SCOPED_TRACE(#name "_err_ints_from_yaml");                  \
+    test_expected_error_ints_from_yaml(refyaml, location);      \
     _RYML_SHOWFILELINE(name);                                   \
 }                                                               \
                                                                 \
@@ -118,108 +319,157 @@ TEST(EngineTest, name##_err_tree_from_yaml)                     \
 
 //-----------------------------------------------------------------------------
 
-#define ENGINE_TEST_ERR(name, refyaml)                          \
-                                                                \
-                                                                \
-TEST(EngineTest, name##_err_events_from_yaml)                   \
-{                                                               \
-    _RYML_SHOWFILELINE(name);                                   \
-    SCOPED_TRACE(#name "_err_events_from_yaml");                \
-    test_expected_error_events_from_yaml(refyaml);              \
-    _RYML_SHOWFILELINE(name);                                   \
-}                                                               \
-                                                                \
-                                                                \
-TEST(EngineTest, name##_err_tree_from_yaml)                     \
-{                                                               \
-    _RYML_SHOWFILELINE(name);                                   \
-    SCOPED_TRACE(#name "_err_tree_from_yaml");                  \
-    test_expected_error_tree_from_yaml(refyaml);                \
-    _RYML_SHOWFILELINE(name);                                   \
+#define ENGINE_TEST_ERR(name, refyaml)                  \
+                                                        \
+                                                        \
+TEST(EngineTest, name##_err_testsuite_from_yaml)        \
+{                                                       \
+    _RYML_SHOWFILELINE(name);                           \
+    SCOPED_TRACE(#name "_err_testsuite_from_yaml");     \
+    test_expected_error_testsuite_from_yaml(refyaml);   \
+    _RYML_SHOWFILELINE(name);                           \
+}                                                       \
+                                                        \
+                                                        \
+TEST(EngineTest, name##_err_ints_from_yaml)             \
+{                                                       \
+    _RYML_SHOWFILELINE(name);                           \
+    SCOPED_TRACE(#name "_err_ints_from_yaml");          \
+    test_expected_error_ints_from_yaml(refyaml);        \
+    _RYML_SHOWFILELINE(name);                           \
+}                                                       \
+                                                        \
+                                                        \
+TEST(EngineTest, name##_err_tree_from_yaml)             \
+{                                                       \
+    _RYML_SHOWFILELINE(name);                           \
+    SCOPED_TRACE(#name "_err_tree_from_yaml");          \
+    test_expected_error_tree_from_yaml(refyaml);        \
+    _RYML_SHOWFILELINE(name);                           \
 }
 
 
 //-----------------------------------------------------------------------------
 
 
-/* declare a common parser test for the existing event handlers */  \
-#define ENGINE_TEST(name, refyaml, events)                          \
-                                                                    \
-                                                                    \
-/* declare a function that will produce a                           \
-   sequence of events */                                            \
-template<class Ps>                                                  \
-void name##_impl(Ps &ps);                                           \
-                                                                    \
-                                                                    \
-/* package the function into a class */                             \
-template<class Ps>                                                  \
-struct name                                                         \
-{                                                                   \
-    void operator() (Ps &ps)                                        \
-    {                                                               \
-        name##_impl(ps);                                            \
-    }                                                               \
-};                                                                  \
-                                                                    \
-                                                                    \
-TEST(EngineTest, name##_str_from_events)                            \
-{                                                                   \
-    _RYML_SHOWFILELINE(name);                                       \
-    SCOPED_TRACE(#name "_str_from_events");                         \
-    test_new_parser_str_from_events<name>(events);                  \
-    _RYML_SHOWFILELINE(name);                                       \
-}                                                                   \
-                                                                    \
-TEST(EngineTest, name##_tree_from_events)                           \
-{                                                                   \
-    _RYML_SHOWFILELINE(name);                                       \
-    SCOPED_TRACE(#name "_wtree_from_events");                       \
-    ReferenceYaml yaml refyaml;                                     \
-    test_new_parser_tree_from_events<name>(yaml);                   \
-    _RYML_SHOWFILELINE(name);                                       \
-}                                                                   \
-                                                                    \
-TEST(EngineTest, name##_events_from_yaml)                           \
-{                                                                   \
-    _RYML_SHOWFILELINE(name);                                       \
-    SCOPED_TRACE(#name "_events_from_yaml");                        \
-    ReferenceYaml yaml refyaml;                                     \
-    test_new_parser_events_from_yaml(yaml, events);                 \
-    _RYML_SHOWFILELINE(name);                                       \
-}                                                                   \
-                                                                    \
-TEST(EngineTest, name##_tree_from_yaml)                             \
-{                                                                   \
-    _RYML_SHOWFILELINE(name);                                       \
-    SCOPED_TRACE(#name "_wtree_from_yaml");                         \
-    ReferenceYaml yaml refyaml;                                     \
-    test_new_parser_tree_from_yaml(yaml);                           \
-    _RYML_SHOWFILELINE(name);                                       \
-}                                                                   \
-                                                                    \
-TEST(EngineTest, name##_events_from_yaml_with_comments)             \
-{                                                                   \
-    _RYML_SHOWFILELINE(name);                                       \
-    SCOPED_TRACE(#name "_events_from_yaml_with_comments");          \
-    ReferenceYaml yaml refyaml;                                     \
-    test_new_parser_events_from_yaml_with_comments(yaml, events);   \
-}                                                                   \
-                                                                    \
-TEST(EngineTest, name##_tree_from_yaml_with_comments)               \
-{                                                                   \
-    _RYML_SHOWFILELINE(name);                                       \
-    SCOPED_TRACE(#name "_tree_from_yaml");                          \
-    ReferenceYaml yaml refyaml;                                     \
-    test_new_parser_tree_from_yaml_with_comments(yaml);             \
-    _RYML_SHOWFILELINE(name);                                       \
-}                                                                   \
-                                                                    \
-                                                                    \
-/* define the function that will produce the                        \
- * sequence of events */                                            \
-template<class Ps>                                                  \
-void name##_impl(Ps &ps)
+/* declare a parse engine test for the existing event handlers.
+ * The extra arguments are for the ctor of EngineEvtTestCase */
+#define ENGINE_TEST(name, ...) ENGINE_TEST_(name, ParserOptions{}, __VA_ARGS__)
+
+
+/* declare a parse engine test for the existing event handlers.
+ * The extra arguments are for the ctor of EngineEvtTestCase */
+#define ENGINE_TEST_(name, opts, ...)                                   \
+                                                                        \
+                                                                        \
+static const EngineEvtTestCase test_case_##name(__VA_ARGS__);           \
+                                                                        \
+                                                                        \
+/* declare a function that will produce a                               \
+   sequence of events */                                                \
+template<class EvtHandlerClass>                                         \
+void name##_impl(EvtHandlerClass &handler);                             \
+                                                                        \
+                                                                        \
+/* package the function into a class */                                 \
+template<class EvtHandlerClass>                                         \
+struct name                                                             \
+{                                                                       \
+    void operator() (EvtHandlerClass &handler)                          \
+    {                                                                   \
+        name##_impl(handler);                                           \
+    }                                                                   \
+};                                                                      \
+                                                                        \
+                                                                        \
+TEST(EngineTest, name##_testsuite_from_events)                          \
+{                                                                       \
+    _RYML_SHOWFILELINE(name);                                           \
+    SCOPED_TRACE(#name "_testsuite_from_events");                       \
+    auto const &tc = test_case_##name;                                  \
+    test_engine_testsuite_from_events<name>(tc);                        \
+    _RYML_SHOWFILELINE(name);                                           \
+}                                                                       \
+                                                                        \
+TEST(EngineTest, name##_ints_from_events)                               \
+{                                                                       \
+    _RYML_SHOWFILELINE(name);                                           \
+    SCOPED_TRACE(#name "_ints_from_events");                            \
+    auto const &tc = test_case_##name;                                  \
+    test_engine_ints_from_events<name>(tc);                             \
+    _RYML_SHOWFILELINE(name);                                           \
+}                                                                       \
+                                                                        \
+TEST(EngineTest, name##_tree_from_events)                               \
+{                                                                       \
+    _RYML_SHOWFILELINE(name);                                           \
+    SCOPED_TRACE(#name "_tree_from_events");                            \
+    auto const &tc = test_case_##name;                                  \
+    test_engine_tree_from_events<name>(tc);                             \
+    _RYML_SHOWFILELINE(name);                                           \
+}                                                                       \
+                                                                        \
+                                                                        \
+                                                                        \
+TEST(EngineTest, name##_testsuite_from_yaml)                            \
+{                                                                       \
+    _RYML_SHOWFILELINE(name);                                           \
+    SCOPED_TRACE(#name "_testsuite_from_yaml");                         \
+    auto const &tc = test_case_##name;                                  \
+    test_engine_testsuite_from_yaml(tc, opts);                          \
+    _RYML_SHOWFILELINE(name);                                           \
+}                                                                       \
+                                                                        \
+TEST(EngineTest, name##_ints_from_yaml)                                 \
+{                                                                       \
+    _RYML_SHOWFILELINE(name);                                           \
+    SCOPED_TRACE(#name "_event_ints_from_yaml");                        \
+    auto const &tc = test_case_##name;                                  \
+    test_engine_ints_from_yaml(tc, opts);                               \
+    _RYML_SHOWFILELINE(name);                                           \
+}                                                                       \
+                                                                        \
+TEST(EngineTest, name##_tree_from_yaml)                                 \
+{                                                                       \
+    _RYML_SHOWFILELINE(name);                                           \
+    SCOPED_TRACE(#name "_tree_from_yaml");                              \
+    auto const &tc = test_case_##name;                                  \
+    test_engine_tree_from_yaml(tc, opts);                               \
+    _RYML_SHOWFILELINE(name);                                           \
+}                                                                       \
+                                                                        \
+                                                                        \
+                                                                        \
+TEST(EngineTest, name##_testsuite_from_yaml_with_comments)              \
+{                                                                       \
+    _RYML_SHOWFILELINE(name);                                           \
+    SCOPED_TRACE(#name "_testsuite_from_yaml_with_comments");           \
+    auto const &tc = test_case_##name;                                  \
+    test_engine_testsuite_from_yaml_with_comments(tc, opts);            \
+}                                                                       \
+                                                                        \
+TEST(EngineTest, name##_ints_from_yaml_with_comments)                   \
+{                                                                       \
+    _RYML_SHOWFILELINE(name);                                           \
+    SCOPED_TRACE(#name "_ints_from_yaml_with_comments");                \
+    auto const &tc = test_case_##name;                                  \
+    test_engine_ints_from_yaml_with_comments(tc, opts);                 \
+}                                                                       \
+                                                                        \
+TEST(EngineTest, name##_tree_from_yaml_with_comments)                   \
+{                                                                       \
+    _RYML_SHOWFILELINE(name);                                           \
+    SCOPED_TRACE(#name "_tree_from_yaml");                              \
+    auto const &tc = test_case_##name;                                  \
+    test_engine_tree_from_yaml_with_comments(tc, opts);                 \
+    _RYML_SHOWFILELINE(name);                                           \
+}                                                                       \
+                                                                        \
+                                                                        \
+/* define the function that will produce the                            \
+ * sequence of events */                                                \
+template<class EvtHandlerClass>                                         \
+void name##_impl(EvtHandlerClass &ps)
 
 
 
@@ -228,7 +478,25 @@ void name##_impl(Ps &ps)
 #if !defined(RYML_DBG)
 #define ___(stmt) stmt
 #else
-inline void _print_handler_info(EventHandlerYamlStd const& ps, csubstr stmt, const char *file, int line)
+#define ___(stmt)                       \
+    do                                  \
+    {                                   \
+       stmt;                            \
+       _print_handler_info(ps, #stmt, __FILE__, __LINE__);  \
+    } while(0)
+
+inline C4_NO_INLINE void _print_handler_info(EventHandlerTree const& ps, csubstr stmt, const char *file, int line)
+{
+    if(ps.m_parent)
+        _dbg_printf("{}:{}: parent.id={} curr.id={}  {}\n",
+                    file, line, ps.m_parent->node_id, ps.m_curr->node_id, stmt);
+    else
+        _dbg_printf("{}:{}: parent.id=-- curr.id={}  {}\n",
+                    file, line, ps.m_curr->node_id, stmt);
+    print_tree(*ps.m_tree);
+}
+
+inline C4_NO_INLINE void _print_handler_info(extra::EventHandlerTestSuite const& ps, csubstr stmt, const char *file, int line)
 {
     _dbg_printf("{}:{}: {}", file, line, stmt);
     auto indent = [](id_type n){
@@ -249,22 +517,18 @@ inline void _print_handler_info(EventHandlerYamlStd const& ps, csubstr stmt, con
         }
     }
 }
-inline void _print_handler_info(EventHandlerTree const& ps, csubstr stmt, const char *file, int line)
+
+inline C4_NO_INLINE void _print_handler_info(extra::EventHandlerInts const& ps, csubstr stmt, const char *file, int line)
 {
-    if(ps.m_parent)
-        _dbg_printf("{}:{}: parent.id={} curr.id={}  {}\n",
-                    file, line, ps.m_parent->node_id, ps.m_curr->node_id, stmt);
-    else
-        _dbg_printf("{}:{}: parent.id=-- curr.id={}  {}\n",
-                    file, line, ps.m_curr->node_id, stmt);
-    print_tree(*ps.m_tree);
+    _dbg_printf("{}:{}: {}\n", file, line, stmt);
+    (void)ps;
 }
-#define ___(stmt)                       \
-    do                                  \
-    {                                   \
-       stmt;                            \
-       _print_handler_info(ps, #stmt, __FILE__, __LINE__);  \
-    } while(0)
+
+template<class Handler, class Transformer>
+inline C4_NO_INLINE void _print_handler_info(EventTransformer<Handler, Transformer> const& ps, csubstr stmt, const char *file, int line)
+{
+    _print_handler_info(ps.handler, stmt, file, line);
+}
 #endif
 
 } // namespace yml

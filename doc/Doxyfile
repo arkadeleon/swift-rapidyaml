@@ -48,7 +48,7 @@ PROJECT_NAME           = rapidyaml
 # could be handy for archiving the generated documentation or if some version
 # control system is used.
 
-PROJECT_NUMBER         = 0.9.0
+PROJECT_NUMBER         = 0.10.0
 
 # Using the PROJECT_BRIEF tag one can provide an optional one line description
 # for a project that appears at the top of each page and should give viewer a
@@ -952,8 +952,7 @@ WARN_LOGFILE           =
 INPUT                  = \
                          ./doxy_main.md \
                          ../src \
-                         ../test/test_suite/test_suite_event_handler.hpp \
-                         ../test/test_suite/test_suite_event_handler.cpp \
+                         ../src_extra \
                          ../samples/quickstart.cpp \
                          ../ext/c4core/src/c4/substr.hpp \
                          ../ext/c4core/src/c4/charconv.hpp \

@@ -62,9 +62,10 @@ void sample_emit_to_container();    ///< emit to memory, eg a string or vector-l
 void sample_emit_to_stream();       ///< emit to a stream, eg std::ostream
 void sample_emit_to_file();         ///< emit to a FILE*
 void sample_emit_nested_node();     ///< pick a nested node as the root when emitting
-void sample_emit_style();           ///< set the nodes to FLOW/BLOCK format
+void sample_style();                ///< set node styles [experimental]
 void sample_json();                 ///< JSON parsing and emitting
 void sample_anchors_and_aliases();  ///< deal with YAML anchors and aliases
+void sample_anchors_and_aliases_create(); ///< how to create YAML anchors and aliases
 void sample_tags();                 ///< deal with YAML type tags
 void sample_tag_directives();       ///< deal with YAML tag namespace directives
 void sample_docs();                 ///< deal with YAML docs
@@ -102,9 +103,10 @@ int main()
     sample::sample_emit_to_stream();
     sample::sample_emit_to_file();
     sample::sample_emit_nested_node();
-    sample::sample_emit_style();
+    sample::sample_style();
     sample::sample_json();
     sample::sample_anchors_and_aliases();
+    sample::sample_anchors_and_aliases_create();
     sample::sample_tags();
     sample::sample_tag_directives();
     sample::sample_docs();
@@ -127,6 +129,9 @@ C4_SUPPRESS_WARNING_GCC_CLANG_PUSH
 C4_SUPPRESS_WARNING_GCC_CLANG("-Wcast-qual")
 C4_SUPPRESS_WARNING_GCC_CLANG("-Wold-style-cast")
 C4_SUPPRESS_WARNING_GCC("-Wuseless-cast")
+#if __GNUC__ >= 6
+C4_SUPPRESS_WARNING_GCC_WITH_PUSH("-Wnull-dereference")
+#endif
 
 namespace sample {
 
@@ -166,7 +171,7 @@ namespace sample {
  * include(FetchContent)
  * FetchContent_Declare(ryml
  *     GIT_REPOSITORY https://github.com/biojppm/rapidyaml.git
- *     GIT_TAG v0.9.0
+ *     GIT_TAG v0.10.0
  *     GIT_SHALLOW FALSE  # ensure submodules are checked out
  * )
  * FetchContent_MakeAvailable(ryml)
@@ -878,7 +883,7 @@ I am something: indeed
     // ... and use it when querying
     ryml::ConstNodeRef subject_node = tree2["bar"][1];
     CHECK(subject_node.val() == "30");
-    ryml::Location loc = parser.location(subject_node);
+    ryml::Location loc = subject_node.location(parser);
     CHECK(parser.location_contents(loc).begins_with("30"));
     CHECK(loc.line == 1u);
     CHECK(loc.col == 9u);
@@ -895,7 +900,7 @@ ja: 惑星（ガス）
 zh: 行星（气体）
 # UTF8 decoding only happens in double-quoted strings,
 # as per the YAML standard
-decode this: "\u263A \xE2\x98\xBA"
+decode this: "\u263A c\x61f\xE9"
 and this as well: "\u2705 \U0001D11E"
 not decoded: '\u263A \xE2\x98\xBA'
 neither this: '\u2705 \U0001D11E'
@@ -909,7 +914,7 @@ neither this: '\u2705 \U0001D11E'
     // and \x \u \U codepoints are decoded, but only when they appear
     // inside double-quoted strings, as dictated by the YAML
     // standard:
-    CHECK(langs["decode this"].val() == "☺ ☺");
+    CHECK(langs["decode this"].val() == "☺ café");
     CHECK(langs["and this as well"].val() == "✅ 𝄞");
     CHECK(langs["not decoded"].val() == "\\u263A \\xE2\\x98\\xBA");
     CHECK(langs["neither this"].val() == "\\u2705 \\U0001D11E");
@@ -4217,59 +4222,178 @@ void sample_emit_nested_node()
 
 //-----------------------------------------------------------------------------
 
-/** [experimental] pick flow/block style for certain nodes. */
-void sample_emit_style()
+/** [experimental] how to query/set/modify node style. */
+void sample_style()
 {
     ryml::Tree tree = ryml::parse_in_arena(R"(
-NodeOne:
-  - key: a
-    desc: b
-    class: c
-    number: d
-  - key: e
-    desc: f
-    class: g
-    number: h
-  - key: i
-    desc: j
-    class: k
-    number: l
+block map:
+  block key: block val
+block seq:
+  - block val 1
+  - block val 2
+  - 'quoted'
+flow map: {flow key: flow val}
+flow seq: [flow val, flow val]
 )");
-    // ryml uses block style by default:
-    CHECK(ryml::emitrs_yaml<std::string>(tree) == R"(NodeOne:
-  - key: a
-    desc: b
-    class: c
-    number: d
-  - key: e
-    desc: f
-    class: g
-    number: h
-  - key: i
-    desc: j
-    class: k
-    number: l
+    // while parsing, ryml marks parsed nodes with their original style:
+    CHECK(tree.rootref().is_block());
+    CHECK(tree["block map"].key_style() & ryml::KEY_PLAIN);
+    CHECK(tree["block seq"].key_style() & ryml::KEY_PLAIN);
+    CHECK(tree["flow map"].key_style() & ryml::KEY_PLAIN);
+    CHECK(tree["flow seq"].key_style() & ryml::KEY_PLAIN);
+    CHECK(tree["block map"].is_block());
+    CHECK(tree["block seq"].is_block());
+    CHECK(tree["flow map"].is_flow());
+    CHECK(tree["flow seq"].is_flow());
+    // which means that if you emit a tree, its style will be
+    // preserved:
+    CHECK(ryml::emitrs_yaml<std::string>(tree) ==
+R"(block map:
+  block key: block val
+block seq:
+  - block val 1
+  - block val 2
+  - 'quoted'
+flow map: {flow key: flow val}
+flow seq: [flow val,flow val]
 )");
-    // you can override the emit style of individual nodes:
-    for(ryml::NodeRef child : tree["NodeOne"].children())
-        child |= ryml::FLOW_SL; // flow, single-line
-    CHECK(ryml::emitrs_yaml<std::string>(tree) == R"(NodeOne:
-  - {key: a,desc: b,class: c,number: d}
-  - {key: e,desc: f,class: g,number: h}
-  - {key: i,desc: j,class: k,number: l}
+    // you can set the style programatically:
+    tree["block map"].set_container_style(ryml::FLOW_SL); // container style: to flow
+    tree["block seq"].set_container_style(ryml::FLOW_SL);
+    tree["flow map"].set_container_style(ryml::BLOCK);    // container style: to block
+    tree["flow seq"].set_container_style(ryml::BLOCK);
+    tree["block map"].set_key_style(ryml::KEY_SQUO);      // scalar style: to single-quoted scalar
+    tree["block seq"].set_key_style(ryml::KEY_DQUO);      // scalar style: to double-quoted scalar
+    tree["flow map"].set_key_style(ryml::KEY_LITERAL);    // scalar style: to literal scalar
+    tree["flow seq"].set_key_style(ryml::KEY_FOLDED);     // scalar style: to folded scalar
+    tree["block seq"][2].set_val_style(ryml::VAL_PLAIN);  // scalar style: to plain
+    tree["flow seq"][0].set_val_style(ryml::VAL_SQUO);
+    tree["flow seq"][1].set_val_style(ryml::VAL_DQUO);
+    // note the difference now:
+    CHECK(ryml::emitrs_yaml<std::string>(tree) ==
+R"('block map': {block key: block val}
+"block seq": [block val 1,block val 2,quoted]
+? |-
+  flow map
+:
+  flow key: flow val
+? >-
+  flow seq
+:
+  - 'flow val'
+  - "flow val"
 )");
-    tree["NodeOne"] |= ryml::FLOW_SL;
-    CHECK(ryml::emitrs_yaml<std::string>(tree) == R"(NodeOne: [{key: a,desc: b,class: c,number: d},{key: e,desc: f,class: g,number: h},{key: i,desc: j,class: k,number: l}]
+    // you can clear the style of single nodes:
+    tree["block map"].clear_style();
+std::cout << tree;
+    CHECK(ryml::emitrs_yaml<std::string>(tree) ==
+R"(block map:
+  block key: block val
+"block seq": [block val 1,block val 2,quoted]
+? |-
+  flow map
+:
+  flow key: flow val
+? >-
+  flow seq
+:
+  - 'flow val'
+  - "flow val"
 )");
-    tree.rootref() |= ryml::FLOW_SL;
-    CHECK(ryml::emitrs_yaml<std::string>(tree) == R"({NodeOne: [{key: a,desc: b,class: c,number: d},{key: e,desc: f,class: g,number: h},{key: i,desc: j,class: k,number: l}]})");
+    // you can clear the style recursively:
+    tree.rootref().clear_style(/*recurse*/true);
+    CHECK(ryml::emitrs_yaml<std::string>(tree) ==
+R"(block map:
+  block key: block val
+block seq:
+  - block val 1
+  - block val 2
+  - quoted
+flow map:
+  flow key: flow val
+flow seq:
+  - flow val
+  - flow val
+)");
+    // you can also set the style based on type conditions:
+    {
+        // set a single key to single-quoted
+        tree["block map"].set_style_conditionally(ryml::KEY,
+                                                  /*remflags*/ryml::KEY_STYLE,
+                                                  /*addflags*/ryml::KEY_SQUO,
+                                                  /*recurse*/false);
+        CHECK(ryml::emitrs_yaml<std::string>(tree) ==
+R"('block map':
+  block key: block val
+block seq:
+  - block val 1
+  - block val 2
+  - quoted
+flow map:
+  flow key: flow val
+flow seq:
+  - flow val
+  - flow val
+)");
+        // set all keys to single-quoted:
+        tree.rootref().set_style_conditionally(/*type_mask*/ryml::KEY,
+                                               /*remflags*/ryml::KEY_STYLE,
+                                               /*addflags*/ryml::KEY_SQUO,
+                                               /*recurse*/true);
+        // set all vals to double-quoted
+        tree.rootref().set_style_conditionally(/*type_mask*/ryml::VAL,
+                                               /*remflags*/ryml::VAL_STYLE,
+                                               /*addflags*/ryml::VAL_DQUO,
+                                               /*recurse*/true);
+        // set all seqs to flow
+        tree.rootref().set_style_conditionally(/*type_mask*/ryml::SEQ,
+                                               /*remflags*/ryml::CONTAINER_STYLE,
+                                               /*addflags*/ryml::FLOW_SL,
+                                               /*recurse*/true);
+        // set all maps to flow
+        tree.rootref().set_style_conditionally(/*type_mask*/ryml::MAP,
+                                               /*remflags*/ryml::CONTAINER_STYLE,
+                                               /*addflags*/ryml::BLOCK,
+                                               /*recurse*/true);
+        // done!
+        CHECK(ryml::emitrs_yaml<std::string>(tree) ==
+R"('block map':
+  'block key': "block val"
+'block seq': ["block val 1","block val 2","quoted"]
+'flow map':
+  'flow key': "flow val"
+'flow seq': ["flow val","flow val"]
+)");
+        // you can also set a conditional style in a single node:
+        tree["flow seq"].set_style_conditionally(/*type_mask*/ryml::SEQ,
+                                                 /*remflags*/ryml::CONTAINER_STYLE,
+                                                 /*addflags*/ryml::BLOCK,
+                                                 /*recurse*/false);
+        CHECK(ryml::emitrs_yaml<std::string>(tree) ==
+R"('block map':
+  'block key': "block val"
+'block seq': ["block val 1","block val 2","quoted"]
+'flow map':
+  'flow key': "flow val"
+'flow seq':
+  - "flow val"
+  - "flow val"
+)");
+    }
+    // see also:
+    //  - ryml::scalar_style_choose()
+    //  - ryml::scalar_style_json_choose()
+    //  - ryml::scalar_style_query_squo()
+    //  - ryml::scalar_style_query_plain()
 }
 
 
 //-----------------------------------------------------------------------------
 
-
-/** shows how to parse and emit JSON. */
+/** shows how to parse and emit JSON.
+ *
+ * To emit YAML parsed from JSON, see also @ref sample_style() for
+ * info on clearing the style flags (example below). */
 void sample_json()
 {
     ryml::csubstr json = R"({
@@ -4303,6 +4427,46 @@ void sample_json()
     //
     // - anchors and references cannot be emitted as json and
     //   are not allowed.
+    //
+
+    // Note that when parsing JSON, ryml will the style of each node
+    // in the JSON. This means that if you emit as YAML it will look
+    // mostly the same as the JSON:
+    CHECK(ryml::emitrs_yaml<std::string>(json_tree) == R"({"doe": "a deer, a female deer","ray": "a drop of golden sun","me": "a name, I call myself","far": "a long long way to go"})");
+    // If you want to avoid this, you will need to clear the style.
+    json_tree.rootref().clear_style(); // clear the style of the map, but do not recurse
+    // note that this is now block mode. That is because when no
+    // style is set, the emit function will default to block mode.
+    CHECK(ryml::emitrs_yaml<std::string>(json_tree) ==
+          R"("doe": "a deer, a female deer"
+"ray": "a drop of golden sun"
+"me": "a name, I call myself"
+"far": "a long long way to go"
+)");
+    // if you don't want the double quotes in the scalar, you can
+    // recurse:
+    json_tree.rootref().clear_style(/*recurse*/true);
+    // so now you when emittingwill get this:
+    // (the scalars with a comma are single-qu)
+    CHECK(ryml::emitrs_yaml<std::string>(json_tree) ==
+          R"(doe: 'a deer, a female deer'
+ray: a drop of golden sun
+me: 'a name, I call myself'
+far: a long long way to go
+)");
+    // you can do custom style changes based on a type mask. this
+    // will change set the style of all scalar values to single-quoted
+    json_tree.rootref().set_style_conditionally(ryml::VAL,
+                                                /*remflags*/ryml::VAL_STYLE,
+                                                /*addflags*/ryml::VAL_SQUO,
+                                                /*recurse*/true);
+    CHECK(ryml::emitrs_yaml<std::string>(json_tree) ==
+          R"(doe: 'a deer, a female deer'
+ray: 'a drop of golden sun'
+me: 'a name, I call myself'
+far: 'a long long way to go'
+)");
+    // see in particular sample_style() for more examples
 }
 
 
@@ -4311,23 +4475,23 @@ void sample_json()
 /** demonstrates usage with anchors and alias references.
 
 Note that dereferencing is opt-in; after parsing, you have to call
-`Tree::resolve()` explicitly if you want resolved references in the
-tree. This method will resolve all references and substitute the anchored
-values in place of the reference.
+@ref c4::yml::Tree::resolve() explicitly if you want resolved
+references in the tree. This method will resolve all references and
+substitute the anchored values in place of the reference.
 
-The `Tree::resolve()` method first does a full traversal of the tree to
-gather all anchors and references in a separate collection, then it goes
-through that collection to locate the names, which it does by obeying the
-YAML standard diktat that
+The @ref c4::yml::Tree::resolve() method first does a full traversal
+of the tree to gather all anchors and references in a separate
+collection, then it goes through that collection to locate the names,
+which it does by obeying the YAML standard diktat that
 
-    an alias node refers to the most recent node in
-    the serialization having the specified anchor
+    > an alias node refers to the most recent node in
+    > the serialization having the specified anchor
 
-So, depending on the number of anchor/alias nodes, this is a potentially
-expensive operation, with a best-case linear complexity (from the initial
-traversal) and a worst-case quadratic complexity (if every node has an
-alias/anchor). This potential cost is the reason for requiring an explicit
-call to `Tree::resolve()`. */
+So, depending on the number of anchor/alias nodes, this is a
+potentially expensive operation, with a best-case linear complexity
+(from the initial traversal) and a worst-case quadratic complexity (if
+every node has an alias/anchor). This potential cost is the reason for
+requiring an explicit call to @ref c4::yml::Tree::resolve() */
 void sample_anchors_and_aliases()
 {
     std::string unresolved = R"(base: &base
@@ -4399,6 +4563,88 @@ val: key
 
     CHECK(tree["ship_to"]["city"].val() == "East Centerville");
     CHECK(tree["ship_to"]["state"].val() == "KS");
+}
+
+/** demonstrates how to use the API to programatically create anchors
+ * and aliases */
+void sample_anchors_and_aliases_create()
+{
+    // part 1: anchor/ref
+    {
+        ryml::Tree t;
+        t.rootref() |= ryml::MAP|ryml::BLOCK;
+        t["kanchor"] = "2";
+        t["kanchor"].set_key_anchor("kanchor");
+        t["vanchor"] = "3";
+        t["vanchor"].set_val_anchor("vanchor");
+        // to set a reference, need to call .set_val_ref()/.set_key_ref()
+        t["kref"].set_val_ref("kanchor");
+        t["vref"].set_val_ref("vanchor");
+        t["nref"] = "*vanchor";  // NOTE: this is not set as a reference in the tree!
+        CHECK(ryml::emitrs_yaml<std::string>(t) == R"(&kanchor kanchor: 2
+vanchor: &vanchor 3
+kref: *kanchor
+vref: *vanchor
+nref: '*vanchor'
+)"); // note that ryml emits nref with quotes to disambiguate (because no style was set)
+        t.resolve();
+        CHECK(ryml::emitrs_yaml<std::string>(t) == R"(kanchor: 2
+vanchor: 3
+kref: kanchor
+vref: 3
+nref: '*vanchor'
+)"); // note that nref was not resolved
+    }
+
+    // part 2: simple inheritance (ie, adding `<<: *anchor` nodes)
+    {
+        ryml::Tree t = ryml::parse_in_arena(R"(
+orig: &orig {foo: bar, baz: bat}
+copy: {}
+notcopy: {}
+notref: {}
+)");
+        t["copy"]["<<"].set_val_ref("orig");
+        t["notcopy"]["test"].set_val_ref("orig");
+        t["notcopy"]["<<"].set_val_ref("orig");
+        t["notref"]["<<"] = "*orig"; // not a reference! .set_val_ref() was not called
+        CHECK(ryml::emitrs_yaml<std::string>(t) == R"(orig: &orig {foo: bar,baz: bat}
+copy: {<<: *orig}
+notcopy: {test: *orig,<<: *orig}
+notref: {<<: '*orig'}
+)");
+        t.resolve();
+        CHECK(ryml::emitrs_yaml<std::string>(t) == R"(orig: {foo: bar,baz: bat}
+copy: {foo: bar,baz: bat}
+notcopy: {test: {foo: bar,baz: bat},foo: bar,baz: bat}
+notref: {<<: '*orig'}
+)");
+    }
+
+    // part 3: multiple inheritance (ie, `<<: [*ref1,*ref2,*etc]`)
+    {
+        ryml::Tree t = ryml::parse_in_arena(R"(orig1: &orig1 {foo: bar}
+orig2: &orig2 {baz: bat}
+orig3: &orig3 {and: more}
+copy: {}
+)");
+        ryml::NodeRef seq = t["copy"]["<<"];
+        seq |= ryml::SEQ;
+        seq.append_child().set_val_ref("orig1");
+        seq.append_child().set_val_ref("orig2");
+        seq.append_child().set_val_ref("orig3");
+        CHECK(ryml::emitrs_yaml<std::string>(t) == R"(orig1: &orig1 {foo: bar}
+orig2: &orig2 {baz: bat}
+orig3: &orig3 {and: more}
+copy: {<<: [*orig1,*orig2,*orig3]}
+)");
+        t.resolve();
+        CHECK(ryml::emitrs_yaml<std::string>(t) == R"(orig1: {foo: bar}
+orig2: {baz: bat}
+orig3: {and: more}
+copy: {foo: bar,baz: bat,and: more}
+)");
+    }
 }
 
 
@@ -4711,7 +4957,7 @@ d: 3
 // ryml provides a default error handler, which calls
 // std::abort(). You can use the cmake option and the macro
 // RYML_DEFAULT_CALLBACK_USES_EXCEPTIONS to have the default error
-// handler throw a std::runtime_error instead.
+// handler throw an exception instead.
 
 /** demonstrates how to set a custom error handler for ryml */
 void sample_error_handler()
@@ -5041,7 +5287,7 @@ foo: [one, [two, three]]
     // Now the structure will be built during parsing:
     ryml::Tree tree = parse_in_arena(&parser, "source.yml", yaml);
     // After this, we are ready to query the location from the parser:
-    ryml::Location loc = parser.location(tree.rootref());
+    ryml::Location loc = tree.rootref().location(parser);
     // As for the complexity of the query: for large buffers it is
     // O(log(numlines)). For short source buffers (30 lines and less),
     // it is O(numlines), as a plain linear search is faster in this
@@ -5052,31 +5298,31 @@ foo: [one, [two, three]]
     CHECK(loc.col == 0u);
     // on the next call, we only pay O(log(numlines)) because the
     // rebuild is already available:
-    loc = parser.location(tree["aa"]);
+    loc = tree["aa"].location(parser);
     CHECK(parser.location_contents(loc).begins_with("aa"));
     CHECK(loc.offset == 2u);
     CHECK(loc.line == 1u);
     CHECK(loc.col == 0u);
     // KEYSEQ in flow style: points at the key
-    loc = parser.location(tree["foo"]);
+    loc = tree["foo"].location(parser);
     CHECK(parser.location_contents(loc).begins_with("foo"));
     CHECK(loc.offset == 16u);
     CHECK(loc.line == 2u);
     CHECK(loc.col == 0u);
-    loc = parser.location(tree["foo"][0]);
+    loc = tree["foo"][0].location(parser);
     CHECK(parser.location_contents(loc).begins_with("one"));
     CHECK(loc.line == 2u);
     CHECK(loc.col == 6u);
     // SEQ in flow style: location points at the opening '[' (there's no key)
-    loc = parser.location(tree["foo"][1]);
+    loc = tree["foo"][1].location(parser);
     CHECK(parser.location_contents(loc).begins_with("["));
     CHECK(loc.line == 2u);
     CHECK(loc.col == 11u);
-    loc = parser.location(tree["foo"][1][0]);
+    loc = tree["foo"][1][0].location(parser);
     CHECK(parser.location_contents(loc).begins_with("two"));
     CHECK(loc.line == 2u);
     CHECK(loc.col == 12u);
-    loc = parser.location(tree["foo"][1][1]);
+    loc = tree["foo"][1][1].location(parser);
     CHECK(parser.location_contents(loc).begins_with("three"));
     CHECK(loc.line == 2u);
     CHECK(loc.col == 17u);
@@ -5089,8 +5335,8 @@ foo: [one, [two, three]]
     ryml::Tree docval = parse_in_arena(&parser, "docval.yaml", "this is a docval");
     // From now on, none of the locations from the previous tree can
     // be queried:
-    //loc = parser.location(tree.rootref()); // ERROR, undefined behavior
-    loc = parser.location(docval.rootref()); // OK. this is the latest tree from this parser
+    //loc = tree.rootref().location(parser); // ERROR, undefined behavior
+    loc = docval.rootref().location(parser); // OK. this is the latest tree from this parser
     CHECK(parser.location_contents(loc).begins_with("this is a docval"));
     CHECK(loc.line == 0u);
     CHECK(loc.col == 0u);
@@ -5118,63 +5364,63 @@ seq with key:
     // points at the first child's key. For example, in this case
     // the root does not have a key, so its location is taken
     // to be at the first child:
-    loc = parser.location(tree2.rootref());
+    loc = tree2.rootref().location(parser);
     CHECK(parser.location_contents(loc).begins_with("a new"));
     CHECK(loc.offset == 1u);
     CHECK(loc.line == 1u);
     CHECK(loc.col == 0u);
     // note the first child points exactly at the same place:
-    loc = parser.location(tree2["a new"]);
+    loc = tree2["a new"].location(parser);
     CHECK(parser.location_contents(loc).begins_with("a new"));
     CHECK(loc.offset == 1u);
     CHECK(loc.line == 1u);
     CHECK(loc.col == 0u);
-    loc = parser.location(tree2["to"]);
+    loc = tree2["to"].location(parser);
     CHECK(parser.location_contents(loc).begins_with("to"));
     CHECK(loc.line == 2u);
     CHECK(loc.col == 0u);
     // but of course, if the block-style map is a KEYMAP, then the
     // location is the map's key, and not the first child's key:
-    loc = parser.location(tree2["map with key"]);
+    loc = tree2["map with key"].location(parser);
     CHECK(parser.location_contents(loc).begins_with("map with key"));
     CHECK(loc.line == 3u);
     CHECK(loc.col == 0u);
-    loc = parser.location(tree2["map with key"]["first"]);
+    loc = tree2["map with key"]["first"].location(parser);
     CHECK(parser.location_contents(loc).begins_with("first"));
     CHECK(loc.line == 4u);
     CHECK(loc.col == 2u);
-    loc = parser.location(tree2["map with key"]["second"]);
+    loc = tree2["map with key"]["second"].location(parser);
     CHECK(parser.location_contents(loc).begins_with("second"));
     CHECK(loc.line == 5u);
     CHECK(loc.col == 2u);
     // same thing for KEYSEQ:
-    loc = parser.location(tree2["seq with key"]);
+    loc = tree2["seq with key"].location(parser);
     CHECK(parser.location_contents(loc).begins_with("seq with key"));
     CHECK(loc.line == 6u);
     CHECK(loc.col == 0u);
-    loc = parser.location(tree2["seq with key"][0]);
+    loc = tree2["seq with key"][0].location(parser);
     CHECK(parser.location_contents(loc).begins_with("first value"));
     CHECK(loc.line == 7u);
     CHECK(loc.col == 4u);
-    loc = parser.location(tree2["seq with key"][1]);
+    loc = tree2["seq with key"][1].location(parser);
     CHECK(parser.location_contents(loc).begins_with("second value"));
     CHECK(loc.line == 8u);
     CHECK(loc.col == 4u);
     // SEQ nested in SEQ: container location points at the first child's "- " dash
-    loc = parser.location(tree2["seq with key"][2]);
+    loc = tree2["seq with key"][2].location(parser);
     CHECK(parser.location_contents(loc).begins_with("- nested first value"));
     CHECK(loc.line == 10u);
     CHECK(loc.col == 4u);
-    loc = parser.location(tree2["seq with key"][2][0]);
+    loc = tree2["seq with key"][2][0].location(parser);
     CHECK(parser.location_contents(loc).begins_with("nested first value"));
     CHECK(loc.line == 10u);
     CHECK(loc.col == 6u);
     // MAP nested in SEQ: same as above: point to key
-    loc = parser.location(tree2["seq with key"][3]);
+    loc = tree2["seq with key"][3].location(parser);
     CHECK(parser.location_contents(loc).begins_with("nested first: "));
     CHECK(loc.line == 13u);
     CHECK(loc.col == 4u);
-    loc = parser.location(tree2["seq with key"][3][0]);
+    loc = tree2["seq with key"][3][0].location(parser);
     CHECK(parser.location_contents(loc).begins_with("nested first: "));
     CHECK(loc.line == 13u);
     CHECK(loc.col == 4u);
