@@ -16,6 +16,8 @@ ryml_add_test_no_lib(ryml-test-quickstart-ints
         ../samples/quickstart-ints.cpp
         ../src_extra/c4/yml/extra/event_handler_ints.hpp
         ../src_extra/c4/yml/extra/event_handler_ints.cpp
+        ../src_extra/c4/yml/extra/ints_utils.hpp
+        ../src_extra/c4/yml/extra/ints_utils.cpp
     INC_DIRS ../src_extra)
 
 
@@ -38,8 +40,6 @@ c4_add_library(ryml-_testlib LIBRARY_TYPE STATIC
        ../src_extra/c4/yml/extra/ints_utils.hpp
        ../src_extra/c4/yml/extra/ints_to_testsuite.cpp
        ../src_extra/c4/yml/extra/ints_to_testsuite.hpp
-       ../src_extra/c4/yml/extra/scalar.hpp
-       ../src_extra/c4/yml/extra/scalar.cpp
        ../src_extra/c4/yml/extra/string.hpp
     INC_DIRS ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/../src_extra
     LIBS ryml c4fs gtest
@@ -54,12 +54,22 @@ if(RYML_DBG)
     target_compile_definitions(ryml-_testlib PUBLIC RYML_DBG)
 endif()
 
+c4_add_library(ryml-_testmain LIBRARY_TYPE OBJECT
+    SOURCES test_lib/test_main.cpp test_lib/test_main.hpp
+    LIBS ryml
+    FOLDER test
+)
+if(DEFINED RYML_DEFAULT_CALLBACKS)
+    if(NOT RYML_DEFAULT_CALLBACKS)
+        target_compile_definitions(ryml-_testmain PUBLIC RYML_NO_DEFAULT_CALLBACKS)
+    endif()
+endif()
 
 function(ryml_add_test test_name)
     set(t ryml-test-${test_name})
     c4_add_executable(${t}
         SOURCES test_${test_name}.cpp
-        LIBS ${ARGN} ryml-_testlib gtest_main
+        LIBS ${ARGN} ryml-_testlib ryml-_testmain
         FOLDER test)
     c4_add_test(${t})
 endfunction()
@@ -82,11 +92,12 @@ endfunction()
 
 
 ryml_add_test(engine_1_doc)
-ryml_add_test(engine_2_map)
-ryml_add_test(engine_3_seq)
+ryml_add_test(engine_2_seq)
+ryml_add_test(engine_3_map)
 ryml_add_test(engine_4_anchor)
 ryml_add_test(engine_5_tag)
-ryml_add_test(engine_6_qmrk)
+ryml_add_test(engine_6_qmrk_1)
+ryml_add_test(engine_6_qmrk_2)
 ryml_add_test(engine_7_seqimap)
 ryml_add_test(engine_8_scalars_tokens)
 ryml_add_test(extra_testsuite)
@@ -107,6 +118,8 @@ ryml_add_test(json)
 ryml_add_test(preprocess)
 ryml_add_test(merge)
 ryml_add_test(location)
+ryml_add_test(bom)
+ryml_add_test(escape_scalar)
 ryml_add_test_case_group(empty_file)
 ryml_add_test_case_group(doc)
 ryml_add_test_case_group(seq)
@@ -124,8 +137,8 @@ ryml_add_test_case_group(scalar_dquoted)
 ryml_add_test_case_group(scalar_literal)
 ryml_add_test_case_group(scalar_folded)
 ryml_add_test_case_group(scalar_plain)
-ryml_add_test_case_group(tag_property)
-ryml_add_test_case_group(explicit_key)
+ryml_add_test_case_group(tag)
+ryml_add_test_case_group(qmrk)
 ryml_add_test_case_group(map_nestedx2)
 ryml_add_test_case_group(seq_nestedx2)
 ryml_add_test_case_group(map_nestedx3)
@@ -145,6 +158,18 @@ if(CMAKE_COMPILER_IS_GNUCXX
     if(std EQUAL 20)
         c4_target_compile_flags(ryml-test-scalar_plain PUBLIC GCC -Wno-array-bounds -Wno-stringop-overflow)
     endif()
+endif()
+# MSVC bigobj
+if(MSVC)
+    target_compile_options(ryml-test-engine_1_doc            PRIVATE /bigobj)
+    target_compile_options(ryml-test-engine_2_seq            PRIVATE /bigobj)
+    target_compile_options(ryml-test-engine_3_map            PRIVATE /bigobj)
+    target_compile_options(ryml-test-engine_4_anchor         PRIVATE /bigobj)
+    target_compile_options(ryml-test-engine_5_tag            PRIVATE /bigobj)
+    target_compile_options(ryml-test-engine_6_qmrk_1         PRIVATE /bigobj)
+    target_compile_options(ryml-test-engine_6_qmrk_2         PRIVATE /bigobj)
+    target_compile_options(ryml-test-engine_7_seqimap        PRIVATE /bigobj)
+    target_compile_options(ryml-test-engine_8_scalars_tokens PRIVATE /bigobj)
 endif()
 
 
@@ -251,8 +276,6 @@ if(RYML_TEST_SUITE)
             ../src_extra/c4/yml/extra/ints_utils.hpp
             ../src_extra/c4/yml/extra/ints_to_testsuite.cpp
             ../src_extra/c4/yml/extra/ints_to_testsuite.hpp
-            ../src_extra/c4/yml/extra/scalar.cpp
-            ../src_extra/c4/yml/extra/scalar.hpp
             ../src_extra/c4/yml/extra/string.hpp
             testsuite.cpp
             testsuite/testsuite_common.hpp
@@ -261,7 +284,7 @@ if(RYML_TEST_SUITE)
             testsuite/testsuite_events.hpp
             testsuite/testsuite_parts.cpp
             testsuite/testsuite_parts.hpp
-        LIBS ryml-_testlib c4log
+        LIBS ryml-_testlib ryml-_testmain c4log
         INC_DIRS ${CMAKE_CURRENT_LIST_DIR}/../src_extra
         FOLDER test)
     add_dependencies(ryml-test-build ryml-test-suite)
@@ -351,7 +374,7 @@ if(RYML_TEST_FUZZ)
                 test_fuzz/test_fuzz_main.cpp
                 ${ARGN}
             INC_DIRS ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/../src_extra
-            LIBS ryml c4fs
+            LIBS ryml ryml-_testmain c4fs
             FOLDER test/fuzz)
         if(RYML_DBG)
             target_compile_definitions(ryml-test-fuzz-${name} PUBLIC RYML_DBG)
@@ -372,12 +395,8 @@ if(RYML_TEST_FUZZ)
     ryml_add_fuzz_test(events_testsuite
         ../src_extra/c4/yml/extra/event_handler_testsuite.hpp
         ../src_extra/c4/yml/extra/event_handler_testsuite.cpp
-        ../src_extra/c4/yml/extra/scalar.hpp
-        ../src_extra/c4/yml/extra/scalar.cpp
         ../src_extra/c4/yml/extra/string.hpp)
     ryml_add_fuzz_test(events_ints
         ../src_extra/c4/yml/extra/event_handler_ints.hpp
-        ../src_extra/c4/yml/extra/event_handler_ints.cpp
-        ../src_extra/c4/yml/extra/scalar.hpp
-        ../src_extra/c4/yml/extra/scalar.cpp)
+        ../src_extra/c4/yml/extra/event_handler_ints.cpp)
 endif()

@@ -182,7 +182,7 @@ C4_SUPPRESS_WARNING_GCC_POP
 
 #if !(defined(__GNUC__) && (__GNUC__ == 4) && (__GNUC_MINOR__ >= 8))
 
-/** use this macro to add a case to the test group. */
+/** use this macro to add a case (of type @ref Case) to the test group. */
 #define ADD_CASE_TO_GROUP(...)                  \
     group_cases__->emplace_back(csubstr(__FILE__), __LINE__+1, __VA_ARGS__)
 
@@ -195,8 +195,8 @@ struct CaseAdderGcc4_8
     const int line;
 
     template<typename... Args>
-    void operator ()(Args... parameters) const {
-        group_cases->emplace_back(csubstr(file), line, parameters...);
+    void operator ()(Args &&... parameters) const {
+        group_cases->emplace_back(csubstr(file), line, std::forward<Args>(parameters)...);
     }
 };
 

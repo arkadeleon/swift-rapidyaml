@@ -21,6 +21,10 @@
 #   pragma GCC diagnostic push
 #endif
 
+// inf and nan are tested in test_number.cpp
+
+RYML_DEFINE_TEST_MAIN()
+
 namespace foo {
 
 template<class T>
@@ -221,238 +225,19 @@ TEST(serialize, integral)
         i = 1; t[2] >> i; EXPECT_EQ(i, 20);
         i = 1; t[3] >> i; EXPECT_EQ(i, -30);
         i = 1; t[4] >> i; EXPECT_EQ(i, 0xaf);
-        ExpectError::check_error(&t, [&]{ t[5] >> i; });
-        ExpectError::check_error(&t, [&]{ t[6] >> i; });
+        ExpectError::check_error_basic(&t, [&]{ t[5] >> i; });
+        ExpectError::check_error_basic(&t, [&]{ t[6] >> i; });
         i = 1; t[0] >> key(i); EXPECT_EQ(i, 0);
         i = 1; t[1] >> key(i); EXPECT_EQ(i, 10);
         i = 1; t[2] >> key(i); EXPECT_EQ(i, 20);
         i = 1; t[3] >> key(i); EXPECT_EQ(i, -30);
         i = 1; t[4] >> key(i); EXPECT_EQ(i, 0xaf);
-        ExpectError::check_error(&t, [&]{ t[5] >> key(i); });
-        ExpectError::check_error(&t, [&]{ t[6] >> key(i); });
+        ExpectError::check_error_basic(&t, [&]{ t[5] >> key(i); });
+        ExpectError::check_error_basic(&t, [&]{ t[6] >> key(i); });
     });
 }
 
-TEST(serialize, nan_0)
-{
-    Tree t;
-    t.rootref() |= SEQ;
-    t[0] << std::numeric_limits<float>::quiet_NaN();
-    t[1] << std::numeric_limits<double>::quiet_NaN();
-    EXPECT_EQ(t[0].val(), ".nan");
-    EXPECT_EQ(t[1].val(), ".nan");
-    EXPECT_EQ(emitrs_yaml<std::string>(t),
-              R"(- .nan
-- .nan
-)");
-}
-
-TEST(serialize, nan_1)
-{
-    csubstr yaml = R"(
-good:
- .nan: .nan
- .nan:   .nan
- .NaN: .NaN
- .NAN: .NAN
- nan: nan
- .nan: .nan
-set:
-  nothing0: nothing
-  nothing1: nothing
-)";
-    test_check_emit_check(yaml, [](Tree const& t){
-        EXPECT_EQ(t["good"][0].val(), ".nan");
-        EXPECT_EQ(t["good"][1].val(), ".nan");
-        EXPECT_EQ(t["good"][2].val(), ".NaN");
-        EXPECT_EQ(t["good"][3].val(), ".NAN");
-        EXPECT_EQ(t["good"][4].val(), "nan");
-        EXPECT_EQ(t["good"][5].val(), ".nan");
-        for(ConstNodeRef ch : t["good"]){
-            SCOPED_TRACE(ch.key());
-            {
-                float f = 0.f;
-                double d = 0.;
-                ch >> f;
-                ch >> d;
-                EXPECT_TRUE(std::isnan(f));
-                EXPECT_TRUE(std::isnan(d));
-            }
-            {
-                float f = 0.f;
-                double d = 0.;
-                ch >> key(f);
-                ch >> key(d);
-                EXPECT_TRUE(std::isnan(f));
-                EXPECT_TRUE(std::isnan(d));
-            }
-        }
-        for(ConstNodeRef ch : t["set"]){
-            SCOPED_TRACE(ch.key());
-            float f = 0.f;
-            double d = 0.;
-            ExpectError::check_error(&t, [&]{ ch >> f; });
-            ExpectError::check_error(&t, [&]{ ch >> d; });
-            ExpectError::check_error(&t, [&]{ ch >> key(f); });
-            ExpectError::check_error(&t, [&]{ ch >> key(d); });
-        }
-    });
-}
-
-TEST(serialize, inf_0)
-{
-    Tree t;
-    t.rootref() |= SEQ;
-    const float finf = std::numeric_limits<float>::infinity();
-    const double dinf = std::numeric_limits<double>::infinity();
-    t[0] << finf;
-    t[1] << dinf;
-    t[2] << -finf;
-    t[3] << -dinf;
-    EXPECT_EQ(t[0].val(), ".inf");
-    EXPECT_EQ(t[1].val(), ".inf");
-    EXPECT_EQ(t[2].val(), "-.inf");
-    EXPECT_EQ(t[3].val(), "-.inf");
-    EXPECT_EQ(scalar_style_choose("-.inf"), SCALAR_PLAIN);
-    EXPECT_EQ(emitrs_yaml<std::string>(t),
-              R"(- .inf
-- .inf
-- -.inf
-- -.inf
-)");
-}
-
-TEST(serialize, inf_1)
-{
-    C4_SUPPRESS_WARNING_GCC_CLANG_WITH_PUSH("-Wfloat-equal");
-    csubstr yaml = R"(
-good:
-  .inf: .inf
-  .inf:   .inf
-  .Inf: .Inf
-  .INF: .INF
-  inf: inf
-  infinity: infinity
-  .inf:
-   .inf
-set:
-  nothing0: nothing
-  nothing1: nothing
-)";
-    test_check_emit_check(yaml, [](Tree const& t){
-        float finf = std::numeric_limits<float>::infinity();
-        double dinf = std::numeric_limits<double>::infinity();
-        EXPECT_EQ(t["good"][0].val(), ".inf");
-        EXPECT_EQ(t["good"][1].val(), ".inf");
-        EXPECT_EQ(t["good"][2].val(), ".Inf");
-        EXPECT_EQ(t["good"][3].val(), ".INF");
-        EXPECT_EQ(t["good"][4].val(), "inf");
-        EXPECT_EQ(t["good"][5].val(), "infinity");
-        EXPECT_EQ(t["good"][6].val(), ".inf");
-        EXPECT_EQ(t["good"][0].key(), ".inf");
-        EXPECT_EQ(t["good"][1].key(), ".inf");
-        EXPECT_EQ(t["good"][2].key(), ".Inf");
-        EXPECT_EQ(t["good"][3].key(), ".INF");
-        EXPECT_EQ(t["good"][4].key(), "inf");
-        EXPECT_EQ(t["good"][5].key(), "infinity");
-        EXPECT_EQ(t["good"][6].key(), ".inf");
-        for(ConstNodeRef ch : t["good"]){
-            SCOPED_TRACE(ch.key());
-            {
-                float f = 0.f;
-                double d = 0.;
-                ch >> f;
-                ch >> d;
-                EXPECT_TRUE(f == finf);
-                EXPECT_TRUE(d == dinf);
-            }
-            {
-                float f = 0.f;
-                double d = 0.;
-                ch >> key(f);
-                ch >> key(d);
-                EXPECT_TRUE(f == finf);
-                EXPECT_TRUE(d == dinf);
-            }
-        }
-        for(ConstNodeRef ch : t["set"]){
-            SCOPED_TRACE(ch.key());
-            float f = 0.f;
-            double d = 0.;
-            ExpectError::check_error(&t, [&]{ ch >> f; });
-            ExpectError::check_error(&t, [&]{ ch >> d; });
-            ExpectError::check_error(&t, [&]{ ch >> key(f); });
-            ExpectError::check_error(&t, [&]{ ch >> key(d); });
-        }
-    });
-    C4_SUPPRESS_WARNING_GCC_CLANG_POP
-}
-
-TEST(serialize, inf_2)
-{
-    C4_SUPPRESS_WARNING_GCC_CLANG_WITH_PUSH("-Wfloat-equal");
-    csubstr yaml = R"(
-good:
-  -.inf: -.inf
-  -.inf:   -.inf
-  -.Inf: -.Inf
-  -.INF: -.INF
-  -inf: -inf
-  -infinity: -infinity
-  -.inf:
-    -.inf
-set:
-  nothing0: nothing
-  nothing1: nothing
-)";
-    test_check_emit_check(yaml, [](Tree const& t){
-        float finf = std::numeric_limits<float>::infinity();
-        double dinf = std::numeric_limits<double>::infinity();
-        EXPECT_EQ(t["good"][0].val(), "-.inf");
-        EXPECT_EQ(t["good"][1].val(), "-.inf");
-        EXPECT_EQ(t["good"][2].val(), "-.Inf");
-        EXPECT_EQ(t["good"][3].val(), "-.INF");
-        EXPECT_EQ(t["good"][4].val(), "-inf");
-        EXPECT_EQ(t["good"][5].val(), "-infinity");
-        EXPECT_EQ(t["good"][6].val(), "-.inf");
-        EXPECT_EQ(t["good"][0].key(), "-.inf");
-        EXPECT_EQ(t["good"][1].key(), "-.inf");
-        EXPECT_EQ(t["good"][2].key(), "-.Inf");
-        EXPECT_EQ(t["good"][3].key(), "-.INF");
-        EXPECT_EQ(t["good"][4].key(), "-inf");
-        EXPECT_EQ(t["good"][5].key(), "-infinity");
-        EXPECT_EQ(t["good"][6].key(), "-.inf");
-        for(ConstNodeRef ch : t["good"]){
-            SCOPED_TRACE(ch.key());
-            {
-                float f = 0.f;
-                double d = 0.;
-                ch >> f;
-                ch >> d;
-                EXPECT_TRUE(f == -finf);
-                EXPECT_TRUE(d == -dinf);
-            }
-            {
-                float f = 0.f;
-                double d = 0.;
-                ch >> key(f);
-                ch >> key(d);
-                EXPECT_TRUE(f == -finf);
-                EXPECT_TRUE(d == -dinf);
-            }
-        }
-        for(ConstNodeRef ch : t["set"]){
-            SCOPED_TRACE(ch.key());
-            float f = 0.f;
-            double d = 0.;
-            ExpectError::check_error(&t, [&]{ ch >> f; });
-            ExpectError::check_error(&t, [&]{ ch >> d; });
-            ExpectError::check_error(&t, [&]{ ch >> key(f); });
-            ExpectError::check_error(&t, [&]{ ch >> key(d); });
-        }
-    });
-    C4_SUPPRESS_WARNING_GCC_CLANG_POP
-}
+// inf and nan are tested in test_number.cpp
 
 TEST(serialize, std_string)
 {
@@ -488,32 +273,55 @@ references:
 
 TEST(serialize, create_anchor_ref_trip)
 {
-    const char expected_yaml[] = R"(anchor_objects:
-  - &id001
-    name: a_name
-reference_list:
-  - *id001
+    const char expected_yaml[] = R"(anchors:
+  - &id0 val0
+  - &id1
+    key1: val1
+  - &id2
+    - val2
+seq:
+  - *id0
+  - *id1
+  - *id2
+seqflow: [*id0,*id1,*id2]
+map:
+  *id0 : *id1
+  next: *id2
+mapflow: {*id0 : *id1,next: *id2}
 )";
 
     Tree tree;
-    const id_type root_id = tree.root_id();
-    tree.to_map(root_id);
-
-    const id_type anchor_list_id = tree.append_child(root_id);
-    tree.to_seq(anchor_list_id, "anchor_objects");
-
-    const id_type anchor_map0 = tree.append_child(anchor_list_id);
-    tree.to_map(anchor_map0);
-    tree.set_val_anchor(anchor_map0, "id001");
-
-    const id_type anchor_elem0 = tree.append_child(anchor_map0);
-    tree.to_keyval(anchor_elem0, "name", "a_name");
-
-    const id_type ref_list_id = tree.append_child(root_id);
-    tree.to_seq(ref_list_id, "reference_list");
-
-    const id_type elem0_id = tree.append_child(ref_list_id);
-    tree.set_val_ref(elem0_id, "id001");
+    tree.rootref() |= MAP;
+    tree["anchors"] |= SEQ;
+    tree["anchors"][0] = "val0";
+    tree["anchors"][0].set_val_anchor("id0");
+    tree["anchors"][1] |= MAP;
+    tree["anchors"][1].set_val_anchor("id1");
+    tree["anchors"][1]["key1"] = "val1";
+    tree["anchors"][2] |= SEQ;
+    tree["anchors"][2].set_val_anchor("id2");
+    tree["anchors"][2][0] = "val2";
+    auto setseq = [](NodeRef n, NodeType style){
+        n |= SEQ|style;
+        n[0] = "id0";
+        n[0].set_val_ref("id0");
+        n[1] = "id1";
+        n[1].set_val_ref("id1");
+        n[2] = "id2";
+        n[2].set_val_ref("id2");
+    };
+    auto setmap = [](NodeRef n, NodeType style){
+        n |= MAP|style;
+        n["*id0"] = "id0";
+        n["*id0"].set_key_ref("id0");
+        n["*id0"].set_val_ref("id1");
+        n["next"] = "id2";
+        n["next"].set_val_ref("id2");
+    };
+    setseq(tree["seq"], BLOCK);
+    setseq(tree["seqflow"], FLOW_SL);
+    setmap(tree["map"], BLOCK);
+    setmap(tree["mapflow"], FLOW_SL);
 
     EXPECT_EQ(emitrs_yaml<std::string>(tree), expected_yaml);
 }
@@ -531,11 +339,11 @@ TEST(deserialize, issue434_0)
         int value = 0;
         EXPECT_FALSE(read(node, &value));
     }
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_basic(&tree, [&]{
         int value = 0;
         cnode >> value;
     });
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_basic(&tree, [&]{
         int value = 0;
         node >> value;
     });
@@ -547,11 +355,11 @@ TEST(deserialize, issue434_0)
         double value = 0;
         EXPECT_FALSE(read(node, &value));
     }
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_basic(&tree, [&]{
         double value = 0;
         cnode >> value;
     });
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_basic(&tree, [&]{
         double value = 0;
         node >> value;
     });
@@ -573,11 +381,11 @@ void test_deserialize_trailing_434(csubstr yaml, csubstr val, csubstr first, dou
         int value = {};
         EXPECT_FALSE(read(node, &value));
     }
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_basic(&tree, [&]{
         int value = 1;
         cnode >> value;
     });
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_basic(&tree, [&]{
         int value = 1;
         node >> value;
     });

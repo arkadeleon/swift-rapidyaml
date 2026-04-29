@@ -1,6 +1,8 @@
 #include "./test_lib/test_group.hpp"
 #include "./test_lib/test_group.def.hpp"
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -107,9 +109,21 @@ bar: {<<: *foo},
     EXPECT_EQ(t["bar"]["<<"].val(), "*foo");
     //EXPECT_EQ(t["bar"]["<<"].key_ref(), "<<"); // not a ref!
     EXPECT_EQ(t["bar"]["<<"].val_ref(), "foo");
-    EXPECT_EQ(emitrs_yaml<std::string>(t), R"({foo: &foo {a: 1,b: 2},bar: {<<: *foo},sq: {'<<': haha},dq: {"<<": hehe}})");
+    EXPECT_EQ(emitrs_yaml<std::string>(t), R"({
+  foo: &foo {a: 1,b: 2},
+  bar: {<<: *foo},
+  sq: {'<<': haha},
+  dq: {"<<": hehe}
+}
+)");
     t.resolve();
-    EXPECT_EQ(emitrs_yaml<std::string>(t), R"({foo: {a: 1,b: 2},bar: {a: 1,b: 2},sq: {'<<': haha},dq: {"<<": hehe}})");
+    EXPECT_EQ(emitrs_yaml<std::string>(t), R"({
+  foo: {a: 1,b: 2},
+  bar: {a: 1,b: 2},
+  sq: {'<<': haha},
+  dq: {"<<": hehe}
+}
+)");
 }
 
 TEST(anchors, programatic_key_ref)
@@ -361,6 +375,105 @@ tpl: &anchor
 
 
 //-----------------------------------------------------------------------------
+
+Tree github566_make_map(NodeType_e root_style)
+{
+    Tree tree;
+    NodeRef root = tree.rootref();
+    root |= MAP|root_style;
+    root.set_val_anchor("ref0");
+    root["a"] = "1";
+    NodeRef self = root["self"];
+    self.set_val("*ref0");
+    self.set_val_ref("ref0");
+    return tree;
+}
+
+Tree github566_make_seq(NodeType_e root_style)
+{
+    Tree tree;
+    NodeRef root = tree.rootref();
+    root |= SEQ|root_style;
+    root.set_val_anchor("ref0");
+    root[0] = "1";
+    root[1].set_val("*ref0");
+    root[1].set_val_ref("ref0");
+    return tree;
+}
+
+void github566_cmp(type_bits mask, Tree const& orig, std::string const& expected)
+{
+    const Tree parsed = parse_in_arena(to_csubstr(expected));
+    test_compare(orig, parsed, "orig", "parsed", mask);
+    EXPECT_EQ(expected, emitrs_yaml<std::string>(parsed));
+    EXPECT_EQ(expected, emitrs_yaml<std::string>(orig));
+}
+
+TEST(anchors, github566_map_NOSTYLE)
+{
+    const Tree orig = github566_make_map(NOTYPE);
+    github566_cmp(_TYMASK, orig, R"(&ref0
+a: 1
+self: *ref0
+)");
+}
+TEST(anchors, github566_map_BLOCK)
+{
+    const Tree orig = github566_make_map(BLOCK);
+    github566_cmp(0xffffffff, orig, R"(&ref0
+a: 1
+self: *ref0
+)");
+}
+TEST(anchors, github566_map_FLOW_ML)
+{
+    const Tree orig = github566_make_map(FLOW_ML);
+    github566_cmp(0xffffffff, orig, R"(&ref0 {
+  a: 1,
+  self: *ref0
+}
+)");
+}
+TEST(anchors, github566_map_FLOW_SL)
+{
+    const Tree orig = github566_make_map(FLOW_SL);
+    github566_cmp(0xffffffff, orig, R"(&ref0 {a: 1,self: *ref0})");
+}
+
+
+TEST(anchors, github566_seq_NOSTYLE)
+{
+    const Tree orig = github566_make_seq(NOTYPE);
+    github566_cmp(_TYMASK, orig, R"(&ref0
+- 1
+- *ref0
+)");
+}
+TEST(anchors, github566_seq_BLOCK)
+{
+    const Tree orig = github566_make_seq(BLOCK);
+    github566_cmp(0xffffffff, orig, R"(&ref0
+- 1
+- *ref0
+)");
+}
+TEST(anchors, github566_seq_FLOW_ML)
+{
+    const Tree orig = github566_make_seq(FLOW_ML);
+    github566_cmp(0xffffffff, orig, R"(&ref0 [
+  1,
+  *ref0
+]
+)");
+}
+TEST(anchors, github566_seq_FLOW_SL)
+{
+    const Tree orig = github566_make_seq(FLOW_SL);
+    github566_cmp(0xffffffff, orig, R"(&ref0 [1,*ref0])");
+}
+
+
+//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
@@ -492,7 +605,7 @@ TEST(CaseNode, anchors)
 
 TEST(simple_anchor, resolve_works_on_an_empty_tree)
 {
-    Tree t;
+    Tree t(0);
     t.resolve();
     EXPECT_TRUE(t.empty());
 }
@@ -658,13 +771,13 @@ TEST(simple_anchor, resolve_nested)
     }
     {
         Tree t = parse_in_arena(yaml);
-        ExpectError::check_error(&t, [&]{
+        ExpectError::check_error_basic(&t, [&]{
             t.resolve(true);
         });
     }
     {
         Tree t = parse_in_arena(yaml);
-        ExpectError::check_error(&t, [&]{
+        ExpectError::check_error_basic(&t, [&]{
             t.resolve(false);
         });
     }
@@ -847,6 +960,25 @@ k2:
 }
 
 
+TEST(simple_anchor, key_anchor_error_json)
+{
+    Tree tree = parse_in_arena("{&k key: val}");
+    EXPECT_EQ(emitrs_json<std::string>(tree), "{\"key\": \"val\"}");
+    ExpectError::check_error_visit(&tree, [&]{
+        emitrs_json<std::string>(tree, EmitOptions{}.json_error_flags(EmitOptions::JSON_ERR_ON_ANCHOR));
+    });
+}
+
+TEST(simple_anchor, val_anchor_error_json)
+{
+    Tree tree = parse_in_arena("{key: &v val}");
+    EXPECT_EQ(emitrs_json<std::string>(tree), "{\"key\": \"val\"}");
+    ExpectError::check_error_visit(&tree, [&]{
+        emitrs_json<std::string>(tree, EmitOptions{}.json_error_flags(EmitOptions::JSON_ERR_ON_ANCHOR));
+    });
+}
+
+
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -862,7 +994,7 @@ N(MFS, L{N(KEY|VP, "*foo", AR(KEYREF, "foo"), "bar")})
 
 ADD_CASE_TO_GROUP("anchor colon ambiguity 2", EXPECT_PARSE_ERROR,
 R"({*foo: bar})",
-   LineCol(1, 8)
+   Location(1, 8)
 );
 
 ADD_CASE_TO_GROUP("merge example, unresolved",
@@ -996,16 +1128,16 @@ bar: &bar {
     age: 20
   }
 })",
-N(MFS,  L{
+N(MFM,  L{
       N(KP|VP, "anchored_content", "This string will appear as the value of two keys.", AR(VALANCH, "anchor_name")),
       N(KP|VAL, "other_anchor", "*anchor_name", AR(VALREF, "anchor_name")),
-      N(KP|SFS, "anchors_in_seqs", L{
+      N(KP|SFM, "anchors_in_seqs", L{
               N(VP, "this value appears in both elements of the sequence", AR(VALANCH, "anchor_in_seq")),
               N(VAL, "*anchor_in_seq", AR(VALREF, "anchor_in_seq")),
           }),
-      N(KP|MFS, "base", L{N(KP|VP, "name", "Everyone has same name")}, AR(VALANCH, "base")),
-      N(KP|MFS, "foo", L{N(KP|VAL, "<<", "*base", AR(VALREF, "base")), N(KP|VP, "age", "10")}, AR(VALANCH, "foo")),
-      N(KP|MFS, "bar", L{N(KP|VAL, "<<", "*base", AR(VALREF, "base")), N(KP|VP, "age", "20")}, AR(VALANCH, "bar")),
+      N(KP|MFM, "base", L{N(KP|VP, "name", "Everyone has same name")}, AR(VALANCH, "base")),
+      N(KP|MFM, "foo", L{N(KP|VAL, "<<", "*base", AR(VALREF, "base")), N(KP|VP, "age", "10")}, AR(VALANCH, "foo")),
+      N(KP|MFM, "bar", L{N(KP|VAL, "<<", "*base", AR(VALREF, "base")), N(KP|VP, "age", "20")}, AR(VALANCH, "bar")),
   })
 );
 
@@ -1058,16 +1190,16 @@ bar: &bar {
     age: 20
   }
 })",
-N(MFS, L{
+N(MFM, L{
       N(KP|VP, "anchored_content", "This string will appear as the value of two keys."),
       N(KP|VP, "other_anchor", "This string will appear as the value of two keys."),
-      N(KP|SFS, "anchors_in_seqs", L{
+      N(KP|SFM, "anchors_in_seqs", L{
               N(VP, "this value appears in both elements of the sequence"),
               N(VP, "this value appears in both elements of the sequence"),
           }),
-      N(KP|MFS, "base", L{N(KP|VP, "name", "Everyone has same name")}),
-      N(KP|MFS, "foo", L{N(KP|VP, "name", "Everyone has same name"), N(KP|VP, "age", "10")}),
-      N(KP|MFS, "bar", L{N(KP|VP, "name", "Everyone has same name"), N(KP|VP, "age", "20")}),
+      N(KP|MFM, "base", L{N(KP|VP, "name", "Everyone has same name")}),
+      N(KP|MFM, "foo", L{N(KP|VP, "name", "Everyone has same name"), N(KP|VP, "age", "10")}),
+      N(KP|MFM, "bar", L{N(KP|VP, "name", "Everyone has same name"), N(KP|VP, "age", "20")}),
   })
 );
 

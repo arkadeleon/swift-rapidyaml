@@ -3,9 +3,14 @@
 // WARNING: don't use raw string literals -- g++4.8 cannot accept them
 // as macro arguments
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
+
+static constexpr const bool multiline = true;
+static constexpr const bool singleline = false;
 
 //-----------------------------------------------------------------------------
 
@@ -20,7 +25,7 @@ ENGINE_TEST(TagPlacementSeqFlow,
             "]\n"
             ""
             ,
-            "[!tag ,!tag 0,!tag [],!tag {}]"
+            "[\n  !tag ,\n  !tag 0,\n  !tag [],\n  !tag {}\n]\n"
             ,
             ""
             "+STR\n"
@@ -47,12 +52,12 @@ ENGINE_TEST(TagPlacementSeqFlow,
     ___(ps.add_sibling());
     ___(ps.set_val_tag("!tag"));
     ___(ps.begin_seq_val_flow());
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
     ___(ps.add_sibling());
     ___(ps.set_val_tag("!tag"));
     ___(ps.begin_map_val_flow());
-    ___(ps.end_map());
-    ___(ps.end_seq());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(multiline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -97,12 +102,12 @@ ENGINE_TEST(TagPlacementSeqBlock,
     ___(ps.add_sibling());
     ___(ps.set_val_tag("!tag"));
     ___(ps.begin_seq_val_flow());
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
     ___(ps.add_sibling());
     ___(ps.set_val_tag("!tag"));
     ___(ps.begin_map_val_flow());
-    ___(ps.end_map());
-    ___(ps.end_seq());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -117,7 +122,7 @@ ENGINE_TEST(TagPlacementMapValFlow,
             "}\n"
             ""
             ,
-            "{x: !tag ,a: !tag 0,b: !tag [],c: !tag {}}"
+            "{\n  x: !tag ,\n  a: !tag 0,\n  b: !tag [],\n  c: !tag {}\n}\n"
             ,
             ""
             "+STR\n"
@@ -151,13 +156,13 @@ ENGINE_TEST(TagPlacementMapValFlow,
     ___(ps.set_key_scalar_plain("b"));
     ___(ps.set_val_tag("!tag"));
     ___(ps.begin_seq_val_flow());
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("c"));
     ___(ps.set_val_tag("!tag"));
     ___(ps.begin_map_val_flow());
-    ___(ps.end_map());
-    ___(ps.end_map());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_map_flow(multiline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -226,12 +231,12 @@ ENGINE_TEST(TagPlacementMapValBlock,
     ___(ps.set_key_scalar_plain("b"));
     ___(ps.set_val_tag("!tag"));
     ___(ps.begin_seq_val_flow());
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("c"));
     ___(ps.set_val_tag("!tag"));
     ___(ps.begin_map_val_flow());
-    ___(ps.end_map());
+    ___(ps.end_map_flow(singleline));
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("d"));
     ___(ps.set_val_tag("!tag"));
@@ -239,15 +244,15 @@ ENGINE_TEST(TagPlacementMapValBlock,
     ___(ps.set_key_scalar_plain("e"));
     ___(ps.set_val_tag("!tag"));
     ___(ps.set_val_scalar_plain_empty());
-    ___(ps.end_map());
+    ___(ps.end_map_flow(singleline));
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("f"));
     ___(ps.set_val_tag("!tag"));
     ___(ps.begin_seq_val_block());
     ___(ps.set_val_tag("!tag"));
     ___(ps.set_val_scalar_plain("g"));
-    ___(ps.end_seq());
-    ___(ps.end_map());
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -298,18 +303,18 @@ ENGINE_TEST(TagPlacementMapKeyFlow,
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!tag"));
     ___(ps.begin_seq_key_flow());
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
     ___(ps.set_val_scalar_plain("x"));
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!tag"));
     ___(ps.begin_map_key_flow());
-    ___(ps.end_map());
+    ___(ps.end_map_flow(singleline));
     ___(ps.set_val_scalar_plain("x"));
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!tag"));
     ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_scalar_plain_empty());
-    ___(ps.end_map());
+    ___(ps.end_map_flow(multiline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -359,18 +364,18 @@ ENGINE_TEST(TagPlacementMapKeyBlock,
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!tag"));
     ___(ps.begin_seq_key_flow());
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
     ___(ps.set_val_scalar_plain("x"));
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!tag"));
     ___(ps.begin_map_key_flow());
-    ___(ps.end_map());
+    ___(ps.end_map_flow(singleline));
     ___(ps.set_val_scalar_plain("x"));
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!tag"));
     ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_scalar_plain_empty());
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -405,8 +410,8 @@ ENGINE_TEST(TagPlacementMapValBlock2_0,
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_scalar_plain_empty());
-    ___(ps.end_map());
-    ___(ps.end_map());
+    ___(ps.end_map_block());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -440,11 +445,11 @@ ENGINE_TEST(TagPlacementMapValBlock2_1,
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_scalar_plain_empty());
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("b"));
     ___(ps.set_val_scalar_plain("c"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -496,14 +501,14 @@ ENGINE_TEST(TagPlacementMapValBlock2,
     ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_tag("!tag3"));
     ___(ps.set_val_scalar_plain_empty());
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("a"));
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_scalar_plain_empty());
-    ___(ps.end_map());
-    ___(ps.end_map());
+    ___(ps.end_map_block());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -575,14 +580,14 @@ ENGINE_TEST(TagPlacementMapComplex,
     ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_tag("!b"));
     ___(ps.set_val_scalar_plain_empty());
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.set_val_tag("!tag1"));
     ___(ps.begin_map_val_block());
     ___(ps.set_key_tag("!a"));
     ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_tag("!b"));
     ___(ps.set_val_scalar_plain_empty());
-    ___(ps.end_map());
+    ___(ps.end_map_block());
 
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!tag2"));
@@ -591,14 +596,14 @@ ENGINE_TEST(TagPlacementMapComplex,
     ___(ps.set_key_scalar_plain("1"));
     ___(ps.set_val_tag("!b"));
     ___(ps.set_val_scalar_plain("2"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.set_val_tag("!tag3"));
     ___(ps.begin_map_val_block());
     ___(ps.set_key_tag("!a"));
     ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_tag("!b"));
     ___(ps.set_val_scalar_plain_empty());
-    ___(ps.end_map());
+    ___(ps.end_map_block());
 
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!tag4"));
@@ -607,21 +612,21 @@ ENGINE_TEST(TagPlacementMapComplex,
     ___(ps.set_val_scalar_plain("1"));
     ___(ps.set_val_tag("!b"));
     ___(ps.set_val_scalar_plain("2"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_block());
     ___(ps.set_val_tag("!tag5"));
     ___(ps.begin_map_val_block());
     ___(ps.set_key_tag("!a"));
     ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_tag("!b"));
     ___(ps.set_val_scalar_plain_empty());
-    ___(ps.end_map());
+    ___(ps.end_map_block());
 
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!tag6"));
     ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_scalar_plain_empty());
 
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -648,7 +653,7 @@ ENGINE_TEST(TagBlockSeq,
     ___(ps.set_val_scalar_plain("fluorescent"));
     ___(ps.add_sibling());
     ___(ps.set_val_scalar_plain("notag"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -672,7 +677,7 @@ ENGINE_TEST(TagFlowSeq,
     ___(ps.set_val_scalar_plain("fluorescent"));
     ___(ps.add_sibling());
     ___(ps.set_val_scalar_plain("notag"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -747,10 +752,10 @@ ENGINE_TEST(TagTestSuiteU99R_2,
     ___(ps.begin_doc());
     ___(ps.begin_seq_val_flow());
     ___(ps.set_val_tag("!!str"));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_val_scalar_plain("xxx"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -771,10 +776,10 @@ ENGINE_TEST(TagTestSuiteU99R_2_1,
     ___(ps.begin_doc());
     ___(ps.begin_seq_val_flow());
     ___(ps.set_val_tag("!str"));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_val_scalar_plain("xxx"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -799,12 +804,12 @@ ENGINE_TEST(TagTestSuiteU99R_3,
     ___(ps.begin_doc());
     ___(ps.begin_map_val_flow());
     ___(ps.set_key_tag("!!str"));
-    ___(ps.set_key_scalar_plain({}));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("xxx"));
-    ___(ps.set_val_scalar_plain({}));
-    ___(ps.end_map());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -829,12 +834,12 @@ ENGINE_TEST(TagTestSuiteU99R_3_1,
     ___(ps.begin_doc());
     ___(ps.begin_map_val_flow());
     ___(ps.set_key_tag("!str"));
-    ___(ps.set_key_scalar_plain({}));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("xxx"));
-    ___(ps.set_val_scalar_plain({}));
-    ___(ps.end_map());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -860,12 +865,12 @@ ENGINE_TEST(TagTestSuiteWZ62_0_0_0,
     ___(ps.begin_map_val_flow());
     ___(ps.set_key_scalar_plain("foo"));
     ___(ps.set_val_tag("!!str"));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!!str"));
-    ___(ps.set_key_scalar_plain({}));
+    ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_scalar_plain("bar"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(singleline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -891,12 +896,12 @@ ENGINE_TEST(TagTestSuiteWZ62_0_0_1,
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain("foo"));
     ___(ps.set_val_tag("!!str"));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!!str"));
-    ___(ps.set_key_scalar_plain({}));
+    ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_scalar_plain("bar"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -922,12 +927,12 @@ ENGINE_TEST(TagTestSuiteWZ62_0_1_0,
     ___(ps.begin_map_val_flow());
     ___(ps.set_key_scalar_plain("foo"));
     ___(ps.set_val_tag("!str"));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!str"));
-    ___(ps.set_key_scalar_plain({}));
+    ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_scalar_plain("bar"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(singleline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -953,12 +958,12 @@ ENGINE_TEST(TagTestSuiteWZ62_0_1_1,
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain("foo"));
     ___(ps.set_val_tag("!str"));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!str"));
-    ___(ps.set_key_scalar_plain({}));
+    ___(ps.set_key_scalar_plain_empty());
     ___(ps.set_val_scalar_plain("bar"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -984,12 +989,12 @@ ENGINE_TEST(TagTestSuiteWZ62_1_0_0,
     ___(ps.begin_map_val_flow());
     ___(ps.set_key_scalar_plain("foo"));
     ___(ps.set_val_tag("!!str"));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!!str:"));
     ___(ps.set_key_scalar_plain("bar"));
-    ___(ps.set_val_scalar_plain({}));
-    ___(ps.end_map());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1015,12 +1020,12 @@ ENGINE_TEST(TagTestSuiteWZ62_1_0_1,
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain("foo"));
     ___(ps.set_val_tag("!!str"));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!!str:"));
     ___(ps.set_key_scalar_plain("bar"));
-    ___(ps.set_val_scalar_plain({}));
-    ___(ps.end_map());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1046,12 +1051,12 @@ ENGINE_TEST(TagTestSuiteWZ62_1_1_0,
     ___(ps.begin_map_val_flow());
     ___(ps.set_key_scalar_plain("foo"));
     ___(ps.set_val_tag("!str"));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!str:"));
     ___(ps.set_key_scalar_plain("bar"));
-    ___(ps.set_val_scalar_plain({}));
-    ___(ps.end_map());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1077,12 +1082,12 @@ ENGINE_TEST(TagTestSuiteWZ62_1_1_1,
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain("foo"));
     ___(ps.set_val_tag("!str"));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.add_sibling());
     ___(ps.set_key_tag("!str:"));
     ___(ps.set_key_scalar_plain("bar"));
-    ___(ps.set_val_scalar_plain({}));
-    ___(ps.end_map());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1120,15 +1125,13 @@ ENGINE_TEST(TagTestSuiteUGM3,
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("date"));
     ___(ps.set_val_scalar_plain("2001-01-23"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
 
 ENGINE_TEST(TagTestSuiteUKK6_02_0,
             "!"
-            ,
-            "! \n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -1139,7 +1142,7 @@ ENGINE_TEST(TagTestSuiteUKK6_02_0,
     ___(ps.begin_stream());
     ___(ps.begin_doc());
     ___(ps.set_val_tag("!"));
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1234,7 +1237,7 @@ ENGINE_TEST(DirectiveTestSuiteMUS6,
     ___(ps.begin_stream());
     ___(ps.add_directive("%YAM 1.1"));
     ___(ps.begin_doc_expl());
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1272,7 +1275,7 @@ ENGINE_TEST(DirectiveMultipleYAML_W4TN,
     ___(ps.end_doc_expl());
     ___(ps.add_directive("%YAML 1.2"));
     ___(ps.begin_doc_expl());
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.end_doc_expl());
     ___(ps.end_stream());
 }
@@ -1342,7 +1345,7 @@ ENGINE_TEST(TagEmptySeq0,
     ___(ps.begin_doc());
     ___(ps.set_val_tag("!!seq"));
     ___(ps.begin_seq_val_flow());
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1359,8 +1362,8 @@ ENGINE_TEST(TagEmptySeq1,
     ___(ps.begin_seq_val_block());
     ___(ps.set_val_tag("!!seq"));
     ___(ps.begin_seq_val_flow());
-    ___(ps.end_seq());
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1379,8 +1382,8 @@ ENGINE_TEST(TagEmptySeq2,
     ___(ps.begin_seq_val_block());
     ___(ps.set_val_tag("!!seq"));
     ___(ps.begin_seq_val_flow());
-    ___(ps.end_seq());
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1399,7 +1402,7 @@ ENGINE_TEST(TagEmptyMap0,
     ___(ps.begin_doc());
     ___(ps.set_val_tag("!!map"));
     ___(ps.begin_map_val_flow());
-    ___(ps.end_map());
+    ___(ps.end_map_flow(singleline));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1416,8 +1419,8 @@ ENGINE_TEST(TagEmptyMap1,
     ___(ps.begin_seq_val_block());
     ___(ps.set_val_tag("!!map"));
     ___(ps.begin_map_val_flow());
-    ___(ps.end_map());
-    ___(ps.end_seq());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1436,8 +1439,8 @@ ENGINE_TEST(TagEmptyMap2,
     ___(ps.begin_seq_val_block());
     ___(ps.set_val_tag("!!map"));
     ___(ps.begin_map_val_flow());
-    ___(ps.end_map());
-    ___(ps.end_seq());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1455,11 +1458,11 @@ ENGINE_TEST(TagYs0,
             ""
             ,
             ""
-            "--- !yamlscript/v0/bare \n"
-            "--- !code \n"
-            "--- !data \n"
-            "--- !code \n"
-            "--- !data \n"
+            "--- !yamlscript/v0/bare\n"
+            "--- !code\n"
+            "--- !data\n"
+            "--- !code\n"
+            "--- !data\n"
             ""
             ,
             "+STR\n"
@@ -1512,7 +1515,7 @@ ENGINE_TEST(TagYs1,
             ""
             ,
             ""
-            "--- !yamlscript/v0/bare \n"
+            "--- !yamlscript/v0/bare\n"
             "--- !code 42\n"
             ""
             ,

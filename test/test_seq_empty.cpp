@@ -1,6 +1,8 @@
 #include "./test_lib/test_group.hpp"
 #include "./test_lib/test_group.def.hpp"
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -23,7 +25,7 @@ ADD_CASE_TO_GROUP("empty seq, multiline",
 R"([
 ]
 )",
-    SFS
+    SFM
 );
 
 ADD_CASE_TO_GROUP("empty seq, multilines",
@@ -33,7 +35,7 @@ R"([
 
 ]
 )",
-    SFS
+    SFM
 );
 }
 

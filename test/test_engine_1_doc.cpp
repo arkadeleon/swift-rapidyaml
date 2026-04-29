@@ -3,6 +3,8 @@
 // WARNING: don't use raw string literals -- g++4.8 cannot accept them
 // as macro arguments
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -19,7 +21,8 @@ ENGINE_TEST(DocEmpty,
 //-----------------------------------------------------------------------------
 
 ENGINE_TEST(DocEmptyExpl,
-            "---\n",
+            "---\n"
+            ,
             "+STR\n"
             "+DOC ---\n"
             "=VAL :\n"
@@ -28,7 +31,7 @@ ENGINE_TEST(DocEmptyExpl,
 {
     ___(ps.begin_stream());
     ___(ps.begin_doc_expl());
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -190,13 +193,13 @@ ENGINE_TEST(DocEmptyExplMult,
 {
     ___(ps.begin_stream());
     ___(ps.begin_doc_expl());
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.end_doc());
     ___(ps.begin_doc_expl());
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.end_doc());
     ___(ps.begin_doc_expl());
-    ___(ps.set_val_scalar_plain({}));
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -264,6 +267,22 @@ ENGINE_TEST(DocScalarPlain1,
     ___(ps.begin_stream());
     ___(ps.begin_doc_expl());
     ___(ps.set_val_scalar_plain("foo"));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(DocScalarPlainEmpty,
+            "---\n"
+            ,
+            "+STR\n"
+            "+DOC ---\n"
+            "=VAL :\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc_expl());
+    ___(ps.set_val_scalar_plain_empty());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -537,7 +556,7 @@ ENGINE_TEST(DocScalarPlainIndentation,
     ___(ps.set_val_scalar_plain("foo bar"));
     ___(ps.add_sibling());
     ___(ps.set_val_scalar_plain("baz"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.begin_doc_expl());
     ___(ps.begin_map_val_block());
@@ -546,7 +565,7 @@ ENGINE_TEST(DocScalarPlainIndentation,
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("ddd"));
     ___(ps.set_val_scalar_plain("eee"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -566,6 +585,24 @@ ENGINE_TEST(DocScalarSQuoted,
     ___(ps.begin_stream());
     ___(ps.begin_doc());
     ___(ps.set_val_scalar_squoted("foo"));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(DocScalarSQuotedExpl,
+            "--- ''"
+            ,
+            "--- ''\n"
+            ,
+            "+STR\n"
+            "+DOC ---\n"
+            "=VAL '\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc_expl());
+    ___(ps.set_val_scalar_squoted(""));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -643,6 +680,24 @@ ENGINE_TEST(DocScalarDQuoted,
     ___(ps.begin_stream());
     ___(ps.begin_doc());
     ___(ps.set_val_scalar_dquoted("foo"));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(DocScalarDQuotedExpl,
+            "--- \"\""
+            ,
+            "--- \"\"\n"
+            ,
+            "+STR\n"
+            "+DOC ---\n"
+            "=VAL \"\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc_expl());
+    ___(ps.set_val_scalar_dquoted(""));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -727,6 +782,26 @@ ENGINE_TEST(DocScalarLiteral,
     ___(ps.end_stream());
 }
 
+ENGINE_TEST(DocScalarLiteralExpl,
+            HAS_MULTILINE_SCALAR
+            ,
+            "--- |1-"
+            ,
+            "--- |-\n"
+            ,
+            "+STR\n"
+            "+DOC ---\n"
+            "=VAL |\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc_expl());
+    ___(ps.set_val_scalar_literal(""));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
 ENGINE_TEST(DocScalarLiteralComment0,
             HAS_MULTILINE_SCALAR
             ,
@@ -783,6 +858,26 @@ ENGINE_TEST(DocScalarFolded,
     ___(ps.begin_stream());
     ___(ps.begin_doc());
     ___(ps.set_val_scalar_folded("foo"));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(DocScalarFoldedExpl,
+            HAS_MULTILINE_SCALAR
+            ,
+            "--- >1-"
+            ,
+            "--- >-\n"
+            ,
+            "+STR\n"
+            "+DOC ---\n"
+            "=VAL >\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc_expl());
+    ___(ps.set_val_scalar_folded(""));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -870,7 +965,7 @@ ENGINE_TEST(ScalarMixedMap,
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain("foo"));
     ___(ps.set_val_scalar_plain(". \"dquo\" plain 'squo'"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -937,8 +1032,8 @@ ENGINE_TEST(DocStreamImplicitDocFirstAnchor,
             "&anch1\n"
             "--- &anch2\n"
             ,
-            "--- &anch1 \n"
-            "--- &anch2 \n"
+            "--- &anch1\n"
+            "--- &anch2\n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -965,8 +1060,8 @@ ENGINE_TEST(DocStreamImplicitDocFirstTag,
             "!!str\n"
             "--- !!str\n"
             ,
-            "--- !!str \n"
-            "--- !!str \n"
+            "--- !!str\n"
+            "--- !!str\n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -993,10 +1088,8 @@ ENGINE_TEST(DocStreamImplicitDocFirstSeqFlowEmpty,
             "[]\n"
             "--- []\n"
             ,
-            "---\n"
-            "[]\n"
-            "---\n"
-            "[]\n"
+            "--- []\n"
+            "--- []\n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -1012,11 +1105,11 @@ ENGINE_TEST(DocStreamImplicitDocFirstSeqFlowEmpty,
     ___(ps.begin_stream());
     ___(ps.begin_doc());
     ___(ps.begin_seq_val_flow());
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(false));
     ___(ps.end_doc());
     ___(ps.begin_doc_expl());
     ___(ps.begin_seq_val_flow());
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(false));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1025,10 +1118,8 @@ ENGINE_TEST(DocStreamImplicitDocFirstSeqFlow,
             "[a]\n"
             "--- [b]\n"
             ,
-            "---\n"
-            "[a]\n"
-            "---\n"
-            "[b]\n"
+            "--- [a]\n"
+            "--- [b]\n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -1047,12 +1138,12 @@ ENGINE_TEST(DocStreamImplicitDocFirstSeqFlow,
     ___(ps.begin_doc());
     ___(ps.begin_seq_val_flow());
     ___(ps.set_val_scalar_plain("a"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(false));
     ___(ps.end_doc());
     ___(ps.begin_doc_expl());
     ___(ps.begin_seq_val_flow());
     ___(ps.set_val_scalar_plain("b"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(false));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1061,10 +1152,8 @@ ENGINE_TEST(DocStreamImplicitDocFirstMapEmpty,
             "{}\n"
             "--- {}\n"
             ,
-            "---\n"
-            "{}\n"
-            "---\n"
-            "{}\n"
+            "--- {}\n"
+            "--- {}\n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -1080,11 +1169,11 @@ ENGINE_TEST(DocStreamImplicitDocFirstMapEmpty,
     ___(ps.begin_stream());
     ___(ps.begin_doc());
     ___(ps.begin_map_val_flow());
-    ___(ps.end_map());
+    ___(ps.end_map_flow(false));
     ___(ps.end_doc());
     ___(ps.begin_doc_expl());
     ___(ps.begin_map_val_flow());
-    ___(ps.end_map());
+    ___(ps.end_map_flow(false));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1093,10 +1182,8 @@ ENGINE_TEST(DocStreamImplicitDocFirstMap,
             "{a: b}\n"
             "--- {c: d}\n"
             ,
-            "---\n"
-            "{a: b}\n"
-            "---\n"
-            "{c: d}\n"
+            "--- {a: b}\n"
+            "--- {c: d}\n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -1118,13 +1205,13 @@ ENGINE_TEST(DocStreamImplicitDocFirstMap,
     ___(ps.begin_map_val_flow());
     ___(ps.set_key_scalar_plain("a"));
     ___(ps.set_val_scalar_plain("b"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(false));
     ___(ps.end_doc());
     ___(ps.begin_doc_expl());
     ___(ps.begin_map_val_flow());
     ___(ps.set_key_scalar_plain("c"));
     ___(ps.set_val_scalar_plain("d"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(false));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1180,9 +1267,9 @@ ENGINE_TEST(SuddenDoc0,
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain("foo"));
     ___(ps.set_val_scalar_plain("bar"));
-    ___(ps.end_map());
-    ___(ps.end_map());
-    ___(ps.end_seq());
+    ___(ps.end_map_block());
+    ___(ps.end_map_block());
+    ___(ps.end_seq_block());
     ___(ps.end_doc_expl());
     ___(ps.begin_doc());
     ___(ps.begin_map_val_block());
@@ -1191,8 +1278,8 @@ ENGINE_TEST(SuddenDoc0,
     ___(ps.set_val_scalar_plain("a"));
     ___(ps.add_sibling());
     ___(ps.set_val_scalar_plain("b"));
-    ___(ps.end_seq());
-    ___(ps.end_map());
+    ___(ps.end_seq_block());
+    ___(ps.end_map_block());
     ___(ps.end_doc_expl());
     ___(ps.end_stream());
 }
@@ -1382,14 +1469,14 @@ ENGINE_TEST(SuddenDoc1,
                                         ___(ps.set_val_scalar_plain("another seq"));
                                         ___(ps.add_sibling());
                                         ___(ps.set_val_scalar_plain("etc"));
-                                    ___(ps.end_seq());
-                                ___(ps.end_map());
-                            ___(ps.end_map());
-                        ___(ps.end_seq());
-                    ___(ps.end_map());
-                ___(ps.end_map());
-            ___(ps.end_map());
-        ___(ps.end_map());
+                                    ___(ps.end_seq_block());
+                                ___(ps.end_map_block());
+                            ___(ps.end_map_block());
+                        ___(ps.end_seq_block());
+                    ___(ps.end_map_block());
+                ___(ps.end_map_block());
+            ___(ps.end_map_block());
+        ___(ps.end_map_block());
     };
     auto build_seq = [&ps]{
         ___(ps.begin_map_val_block());
@@ -1406,13 +1493,13 @@ ENGINE_TEST(SuddenDoc1,
                                 ___(ps.begin_map_val_block());
                                     ___(ps.set_key_scalar_plain("another map"));
                                     ___(ps.set_val_scalar_plain("the value"));
-                                ___(ps.end_map());
-                            ___(ps.end_map());
-                        ___(ps.end_seq());
-                    ___(ps.end_map());
-                ___(ps.end_map());
-            ___(ps.end_map());
-        ___(ps.end_map());
+                                ___(ps.end_map_block());
+                            ___(ps.end_map_block());
+                        ___(ps.end_seq_block());
+                    ___(ps.end_map_block());
+                ___(ps.end_map_block());
+            ___(ps.end_map_block());
+        ___(ps.end_map_block());
     };
     ___(ps.begin_stream());
     ___(ps.begin_doc());

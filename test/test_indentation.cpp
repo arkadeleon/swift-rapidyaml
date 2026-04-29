@@ -1,6 +1,8 @@
 #include "./test_lib/test_group.hpp"
 #include "./test_lib/test_group.def.hpp"
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -36,7 +38,7 @@ R"(a: plain
 scalar
 follows
 )",
-LineCol(2, 7)
+Location(2, 7)
 );
 
 ADD_CASE_TO_GROUP("plain scalar indentation, 2",
@@ -52,7 +54,7 @@ R"(- plain
 scalar
 follows
 )",
-LineCol(2, 1)
+Location(2, 1)
 );
 
 ADD_CASE_TO_GROUP("plain scalar indentation, 3",
@@ -61,7 +63,7 @@ R"(a: [plain
  follows
  ]
 )",
-N(MB, L{N(KP|SFS, "a", L{N(VP, "plain scalar follows")})})
+N(MB, L{N(KP|SFM, "a", L{N(VP, "plain scalar follows")})})
 );
 
 // FIXME: this should be a parse error
@@ -73,7 +75,7 @@ R"(a: [plain
 b: c
 )",
 N(MB, L{
-  N(KP|SFS, "a", L{N(VP, "plain scalar follows")}),
+  N(KP|SFM, "a", L{N(VP, "plain scalar follows")}),
   N(KP|VP, "b", "c"),
 })
 );

@@ -1,6 +1,8 @@
 #include "./test_lib/test_group.hpp"
 #include "test_lib/test_group.def.hpp"
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -25,7 +27,7 @@ R"({
 
 }
 )",
-    MFS
+    MFM
 );
 
 
@@ -36,7 +38,7 @@ R"({
 
 }
 )",
-    MFS
+    MFM
     );
 }
 

@@ -6,6 +6,8 @@
 #include <gtest/gtest.h>
 
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -41,7 +43,7 @@ TEST(locations, default_is_no_location)
 TEST(locations, error_is_triggered_querying_with_locations_disabled)
 {
     bool parsed_ok = false;
-    ExpectError::check_error([&]{
+    ExpectError::check_error_basic([&]{
         Parser::handler_type evt_handler = {};
         Parser parser(&evt_handler, ParserOptions().locations(false));
         Tree t = parse_in_arena(&parser, "test", "foo: bar");

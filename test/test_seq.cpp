@@ -1,13 +1,15 @@
 #include "./test_lib/test_group.hpp"
 #include "./test_lib/test_group.def.hpp"
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
 TEST(simple_seq, bad_seq1)
 {
     Tree tree;
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_parse(&tree, [&]{
         parse_in_arena(R"(
 ---
 [ a, b, c ] ]
@@ -18,7 +20,7 @@ TEST(simple_seq, bad_seq1)
 TEST(simple_seq, bad_seq2)
 {
     Tree tree;
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_parse(&tree, [&]{
         parse_in_arena(R"(
 ---
 [ [ a, b, c ]
@@ -48,7 +50,7 @@ TEST(simple_seq, many_unmatched_brackets)
         Location loc = {};
         loc.line = 1;
         loc.col = num_brackets + 1u;
-        ExpectError::check_error(&tree, [&]{
+        ExpectError::check_error_parse(&tree, [&]{
             parse_in_place(to_substr(src), &tree);
         }, loc);
     }
@@ -85,6 +87,17 @@ TEST(simple_seq, missing_quoted_key)
         EXPECT_TRUE(n["top2"][0].is_val_quoted());
         EXPECT_TRUE(n["top2"][1].is_val_quoted());
     });
+}
+
+TEST(simple_seq, block_nested_with_tags)
+{
+    std::string yaml = R"(- !!seq
+  - !!seq
+    - foo
+- bar
+)";
+    Tree t = parse_in_arena(to_csubstr(yaml));
+    EXPECT_EQ(yaml, emitrs_yaml<std::string>(t));
 }
 
 TEST(simple_seq, deeply_nested_to_cover_parse_stack_resizes)
@@ -157,7 +170,7 @@ TEST(simple_seq, block_tab_tokens__3_tabs_everywhere)
 }
 TEST(simple_seq, block_tab_tokens__4_tabs_indentation_error)
 {
-    ExpectError::check_error([]{
+    ExpectError::check_error_parse([]{
         Tree tree = parse_in_arena(R"(
 	-	0	0	
 	-	1	1	
@@ -210,14 +223,14 @@ TEST(simple_seq, unterminated_seqimap)
     {
         SCOPED_TRACE("space after");
         Tree t;
-        ExpectError::check_error(&t, [&]{
+        ExpectError::check_error_parse(&t, [&]{
             parse_in_arena("[a: ");
         });
     }
     {
         SCOPED_TRACE("no space after");
         Tree t;
-        ExpectError::check_error(&t, [&]{
+        ExpectError::check_error_parse(&t, [&]{
             parse_in_arena("[a:");
         });
     }
@@ -259,7 +272,7 @@ R"([
 2,
 3
 ])",
-N(SFS, L{N{VP, "0"}, N{VP, "1"}, N{VP, "2"}, N{VP, "3"},})
+N(SFM, L{N{VP, "0"}, N{VP, "1"}, N{VP, "2"}, N{VP, "3"},})
 );
 
 ADD_CASE_TO_GROUP("simple seq, flow, multiline, unindented, trailcomma",
@@ -269,7 +282,7 @@ R"([
 2,
 3,
 ])",
-N(SFS, L{N{VP, "0"}, N{VP, "1"}, N{VP, "2"}, N{VP, "3"}})
+N(SFM, L{N{VP, "0"}, N{VP, "1"}, N{VP, "2"}, N{VP, "3"}})
 );
 
 ADD_CASE_TO_GROUP("simple seq, flow, multiline, comments inline",
@@ -279,7 +292,7 @@ R"([
 2,  # bla2
 3   # bla3
 ])",
-N(SFS, L{N{VP, "0"}, N{VP, "1"}, N{VP, "2"}, N{VP, "3"}})
+N(SFM, L{N{VP, "0"}, N{VP, "1"}, N{VP, "2"}, N{VP, "3"}})
 );
 
 ADD_CASE_TO_GROUP("simple seq, flow, multiline, comments prev line",
@@ -293,7 +306,7 @@ R"([
 # bla3
 3
 ])",
-N(SFS, L{N{VP, "0"}, N{VP, "1"}, N{VP, "2"}, N{VP, "3"}})
+N(SFM, L{N{VP, "0"}, N{VP, "1"}, N{VP, "2"}, N{VP, "3"}})
 );
 
 ADD_CASE_TO_GROUP("simple seq, flow, multiline, indented",
@@ -303,7 +316,7 @@ R"([
   2,
   3
 ])",
-N(SFS, L{N{VP, "0"}, N{VP, "1"}, N{VP, "2"}, N{VP, "3"}})
+N(SFM, L{N{VP, "0"}, N{VP, "1"}, N{VP, "2"}, N{VP, "3"}})
 );
 
 ADD_CASE_TO_GROUP("simple seq, comments inline",
@@ -543,7 +556,7 @@ R"([
  a , b,  "c , d",   'e , f',
  a ,b,  "c ,d",   'e ,f',
 ])",
-N(SFS, L{
+N(SFM, L{
   N(VP, "a"), N(VP, "b"), N(VD, "c,d"),   N(VS, "e,f"),
   N(VP, "a"), N(VP, "b"), N(VD, "c, d"),  N(VS, "e, f"),
   N(VP, "a"), N(VP, "b"), N(VD, "c , d"), N(VS, "e , f"),
@@ -591,10 +604,10 @@ R"([
     :z:	,  # this is a map (when tab tokens are enabled)
 ]
 )",
-N(SFS, L{
+N(SFM, L{
    N(VP, ":a"),
    N(VP, ":0"),
-   N(VP, "::"),
+   N(MFS, L{N(KP|VN, ":", {})}),
    N(VP, ":-"),
    N(VP, ":*"),
    N(VP, ":@"),
@@ -606,7 +619,7 @@ N(SFS, L{
    _RYML_WITH_OR_WITHOUT_TAB_TOKENS(N(MFS, L{KN|VN}), N(VP, ":\t")),
    N(VP, "x:a"),
    N(VP, "x:0"),
-   N(VP, "x::"),
+   N(MFS, L{N(KP|VN, "x:", {})}),
    N(VP, "x:-"),
    N(VP, "x:*"),
    N(VP, "x:@"),
@@ -618,7 +631,7 @@ N(SFS, L{
    _RYML_WITH_OR_WITHOUT_TAB_TOKENS(N(MFS, L{N(KP|VN, "x", "")}), N(VP, "x:\t")),
    N(VP, ":z:a"),
    N(VP, ":z:0"),
-   N(VP, ":z::"),
+   N(MFS, L{N(KP|VN, ":z:", {})}),
    N(VP, ":z:-"),
    N(VP, ":z:*"),
    N(VP, ":z:@"),
@@ -626,7 +639,7 @@ N(SFS, L{
    N(VP, ":z:^"),
    N(VP, ":z:$"),
    N(VP, ":z:`"),
-   N(MFS, L{N(KP|VN, ":z", "")}),
+   N(MFS, L{N(KP|VN, ":z", {})}),
    _RYML_WITH_OR_WITHOUT_TAB_TOKENS(N(MFS, L{N(KP|VN, ":z", "")}), N(VP, ":z:\t")),
  })
 );
@@ -719,7 +732,7 @@ R"([
  a : b,  "c : d",   'e : f',
  a :b,  "c :d",   'e :f',
 ])",
-N(SFS, L{
+N(SFM, L{
   N(VP, "a:b"), N(VD, "c:d"),   N(VS, "e:f"),
   N(MFS, L{N(KP|VP, "a", "b")}), N(VD, "c: d"),  N(VS, "e: f"),
   N(MFS, L{N(KP|VP, "a", "b")}), N(VD, "c : d"), N(VS, "e : f"),
@@ -757,7 +770,7 @@ R"([
 , # this is needed because of the comment above
  a #b, "c #d",   'e #f',
 ])",
-N(SFS, L{
+N(SFM, L{
   N(VP, "a#b"), N(VD, "c#d"), N(VS, "e#f"),
   N(VP, "a# b"), N(VD, "c# d"), N(VS, "e# f"),
   N(VP, "a"),
@@ -794,7 +807,7 @@ R"([
  a - b, "c - d",   'e - f',
  a -b, "c -d",   'e -f',
 ])",
-N(SFS, L{
+N(SFM, L{
   N(VP, "a-b"),   N(VD, "c-d"),   N(VS, "e-f"),
   N(VP, "a- b"),  N(VD, "c- d"),  N(VS, "e- f"),
   N(VP, "a - b"), N(VD, "c - d"), N(VS, "e - f"),
@@ -835,7 +848,7 @@ R"([
  #a [b,
  "c [d",   'e [f',
 ])",
-N(SFS, L{
+N(SFM, L{
   /*N(VP, "a[b"),  */ N(VD, "c[d"),   N(VS, "e[f"),
   /*N(VP, "a[ b"), */ N(VD, "c[ d"),  N(VS, "e[ f"),
   /*N(VP, "a [ b"),*/ N(VD, "c [ d"), N(VS, "e [ f"),
@@ -876,7 +889,7 @@ R"([
 # a ]b,
    "c ]d",   'e ]f',
 ])",
-N(SFS, L{
+N(SFM, L{
   /*N(VP, "a]b"), */  N(VD, "c]d"),   N(VS, "e]f"),
   /*N(VP, "a] b"), */ N(VD, "c] d"),  N(VS, "e] f"),
   /*N(VP, "a ] b"),*/ N(VD, "c ] d"), N(VS, "e ] f"),
@@ -917,7 +930,7 @@ R"([
 # a {b,
    "c {d",   'e {f',
 ])",
-N(SFS, L{
+N(SFM, L{
   /*N(VP, "a{b"), */  N(VD, "c{d"),   N(VS, "e{f"),
   /*N(VP, "a{ b"), */ N(VD, "c{ d"),  N(VS, "e{ f"),
   /*N(VP, "a { b"),*/ N(VD, "c { d"), N(VS, "e { f"),
@@ -958,7 +971,7 @@ R"([
 # a }b,
    "c }d",   'e }f',
 ])",
-N(SFS, L{
+N(SFM, L{
   /*N(VP, "a}b"), */  N(VD, "c}d"),   N(VS, "e}f"),
   /*N(VP, "a} b"), */ N(VD, "c} d"),  N(VS, "e} f"),
   /*N(VP, "a } b"),*/ N(VD, "c } d"), N(VS, "e } f"),
@@ -1043,58 +1056,58 @@ ADD_CASE_TO_GROUP("simple seq, invalid character 1", EXPECT_PARSE_ERROR,
 R"(- 0   # this is a foo
 }
 )",
-  LineCol(2, 1)
+  Location(2, 1)
 );
 
 ADD_CASE_TO_GROUP("simple seq, invalid character 2", EXPECT_PARSE_ERROR,
 R"(- 0   # this is a foo
 ]
 )",
-  LineCol(2, 1)
+  Location(2, 1)
 );
 
 ADD_CASE_TO_GROUP("simple seq, invalid character 3", EXPECT_PARSE_ERROR,
 R"(- 0   # this is a foo
 :
 )",
-  LineCol(2, 1)
+  Location(2, 1)
 );
 
 ADD_CASE_TO_GROUP("simple seq, invalid character 4", EXPECT_PARSE_ERROR,
 R"(- 0   # this is a foo
 abcdef!
 )",
-  LineCol(2, 1)
+  Location(2, 1)
 );
 
 ADD_CASE_TO_GROUP("simple seq flow, missing val, 1", EXPECT_PARSE_ERROR,
 R"([,]
 )",
-  LineCol(1, 2)
+  Location(1, 2)
 );
 
 ADD_CASE_TO_GROUP("simple seq flow, missing val, 2", EXPECT_PARSE_ERROR,
 R"([ ,]
 )",
-  LineCol(1, 3)
+  Location(1, 3)
 );
 
 ADD_CASE_TO_GROUP("simple seq flow, missing val, 3", EXPECT_PARSE_ERROR,
 R"([ , ]
 )",
-  LineCol(1, 3)
+  Location(1, 3)
 );
 
 ADD_CASE_TO_GROUP("simple seq flow, missing val, 4", EXPECT_PARSE_ERROR,
 R"([ , val]
 )",
-  LineCol(1, 3)
+  Location(1, 3)
 );
 
 ADD_CASE_TO_GROUP("simple seq flow, missing val, 5", EXPECT_PARSE_ERROR,
 R"([ , , ]
 )",
-  LineCol(1, 3)
+  Location(1, 3)
 );
 
 ADD_CASE_TO_GROUP("simple seq flow, seqimap, at line end",
@@ -1102,7 +1115,7 @@ R"([a:
 
 b]
 )",
-N(SFS, L{N(MFS, L{N(KP|VP, "a", "b")})})
+N(SFM, L{N(MFM, L{N(KP|VP, "a", "b")})})
 );
 
 }

@@ -2,6 +2,8 @@
 #include "./test_lib/test_group.def.hpp"
 
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -1032,7 +1034,7 @@ TEST(block_literal, errors_on_tab_indents)
 TEST(block_literal, error_on_bad_spec_0)
 {
     Tree t;
-    ExpectError::check_error(&t, [&t]{
+    ExpectError::check_error_parse(&t, [&t]{
         t = parse_in_arena("- |012abc\n  must have errors above\n");
     });
 }
@@ -1040,7 +1042,7 @@ TEST(block_literal, error_on_bad_spec_0)
 TEST(block_literal, error_on_bad_spec_1)
 {
     Tree t;
-    ExpectError::check_error(&t, [&t]{
+    ExpectError::check_error_parse(&t, [&t]{
         t = parse_in_arena("- |0\n  a\n");
     });
 }
@@ -1048,7 +1050,7 @@ TEST(block_literal, error_on_bad_spec_1)
 TEST(block_literal, error_on_literal_in_seqflow)
 {
     Tree t;
-    ExpectError::check_error(&t, [&t]{
+    ExpectError::check_error_parse(&t, [&t]{
         t = parse_in_arena("[\n  |\n    a\n,]");
     });
 }
@@ -1056,7 +1058,7 @@ TEST(block_literal, error_on_literal_in_seqflow)
 TEST(block_literal, error_on_literal_in_mapflow)
 {
     Tree t;
-    ExpectError::check_error(&t, [&t]{
+    ExpectError::check_error_parse(&t, [&t]{
         t = parse_in_arena("{\n b: |\n    a\n,}");
     });
 }
@@ -1065,13 +1067,13 @@ TEST(block_literal, indentation_indicator_0)
 {
     {
         Tree t;
-        ExpectError::check_error(&t, [&t]{
+        ExpectError::check_error_parse(&t, [&t]{
             t = parse_in_arena("|0");
         });
     }
     {
         Tree t;
-        ExpectError::check_error(&t, [&t]{
+        ExpectError::check_error_parse(&t, [&t]{
             t = parse_in_arena("|10");
         });
     }
@@ -1113,13 +1115,13 @@ TEST(block_literal, indentation_indicator_1)
 {
     {
         Tree t;
-        ExpectError::check_error(&t, [&t]{
+        ExpectError::check_error_parse(&t, [&t]{
             t = parse_in_arena("--- |0");
         });
     }
     {
         Tree t;
-        ExpectError::check_error(&t, [&t]{
+        ExpectError::check_error_parse(&t, [&t]{
             t = parse_in_arena("--- |10");
         });
     }
@@ -1492,13 +1494,13 @@ N(STREAM, L{
 
 ADD_CASE_TO_GROUP("indentation requirements err, 0", EXPECT_PARSE_ERROR,
 R"(|0)",
-LineCol(1, 1)
+Location(1, 1)
 );
 
 ADD_CASE_TO_GROUP("indentation requirements err, 0.1", EXPECT_PARSE_ERROR,
 R"(|0
 )",
-LineCol(1, 1)
+Location(1, 1)
 );
 
 ADD_CASE_TO_GROUP("indentation requirements err seq", EXPECT_PARSE_ERROR,
@@ -1509,7 +1511,7 @@ there
 ciao
 qua
 )",
-LineCol(2, 1)
+Location(2, 1)
 );
 
 ADD_CASE_TO_GROUP("indentation requirements err map", EXPECT_PARSE_ERROR,
@@ -1520,7 +1522,7 @@ bar: |
 ciao
 qua
 )",
-LineCol(2, 6)
+Location(2, 6)
 );
 
 ADD_CASE_TO_GROUP("indentation requirements err level", EXPECT_PARSE_ERROR,

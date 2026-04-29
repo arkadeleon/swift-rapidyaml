@@ -14,15 +14,21 @@ namespace yml {
 // https://github.com/yaml/yaml-test-suite/tree/master/src
 constexpr const AllowedFailure allowed_failures[] = {
 
+
     //-------------------------------------------------------------------------
-    // SECTION 1. Known issues, TODO
+    // SECTION 1. Known issues on valid YAML
     //
     // These tests are temporarily skipped, and cover issues that must be fixed.
 
-    // this is a container key that is parsed incorrectly
-    _("M2N8_01-in_yaml"         , "container key parsed incorrectly (events)"),
+    // Nothing to see here! All valid YAML cases parse correctly. Yay!
 
-    // errors that fail to materialize
+
+    //-------------------------------------------------------------------------
+    // SECTION 2. Known issues on invalid YAML
+    //
+    // These tests are temporarily skipped, and cover issues that must be fixed.
+
+    // These invalid YAML cases do not materialize parse errors
     _("3HFZ-error"              , "should not accept scalar after ..."),
     _("4EJS-error"              , "should not accept tabs as indendation in a mapping"),
     _("5TRB-error"              , "should not accept document-end marker in double quoted string"),
@@ -61,7 +67,7 @@ constexpr const AllowedFailure allowed_failures[] = {
 
 
     //-------------------------------------------------------------------------
-    // SECTION 2. Deliberate ryml limitations.
+    // SECTION 3. Deliberate ryml limitations.
     //
     // These tests are skipped because they cover parts of YAML that
     // are deliberately not implemented by ryml.
@@ -77,13 +83,14 @@ constexpr const AllowedFailure allowed_failures[] = {
     _("K54U-in_yaml"            , "tabs tokens"),
     _("Y79Y_010-in_yaml"        , "tabs tokens"),
     #endif
+
     // container keys are deliberately not supported by the ryml tree.
     // But they ARE supported by the parse engine. So they are dealt
     // with separately using the event parser. See below.
 
+
     //-------------------------------------------------------------------------
-    // SECTION 3. Problems with the test suite spec. (or our
-    // understanding of it?)
+    // SECTION 4. Problems with the test suite spec.
 
     // malformed json in the test spec
     _("35KP-in_json"            , "malformed JSON from multiple documents"),
@@ -181,7 +188,7 @@ cspan<AllowedFailure> g_container_key_cases = container_key_cases;
 
 AllowedFailure is_failure_expected(csubstr casename)
 {
-    RYML_CHECK(casename.not_empty());
+    _RYML_CHECK_BASIC(casename.not_empty());
     for(AllowedFailure const& af : g_allowed_failures)
         if(af.test_name == casename || casename.begins_with(af.test_name))
             return af;
@@ -190,7 +197,7 @@ AllowedFailure is_failure_expected(csubstr casename)
 
 AllowedFailure case_has_container_keys(csubstr casename)
 {
-    RYML_CHECK(casename.not_empty());
+    _RYML_CHECK_BASIC(casename.not_empty());
     for(AllowedFailure const& af : g_container_key_cases)
         if(af.test_name == casename || casename.begins_with(af.test_name))
             return af;

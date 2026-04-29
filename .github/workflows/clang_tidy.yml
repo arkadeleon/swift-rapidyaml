@@ -1,4 +1,4 @@
-# DO NOT EDIT - GENERATED FROM .github/workflows-in/clang_tidy.ys
+# DO NOT EDIT - GENERATED FROM .github/workflows/clang_tidy.ys
 
 name: clang_tidy
 defaults:
@@ -11,7 +11,7 @@ defaults:
     - master
   pull_request:
     branches:
-    - master
+    - '*'
 env:
   PROJ_PKG_NAME: rapidyaml-
   PROJ_PFX_TARGET: ryml-

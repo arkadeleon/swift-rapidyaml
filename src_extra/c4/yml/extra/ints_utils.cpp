@@ -8,12 +8,12 @@
     #endif
 #endif
 
-#ifndef _C4_YML_EXTRA_SCALAR_HPP_
-#include "c4/yml/extra/scalar.hpp"
-#endif
-
 #ifndef _C4_YML_EXTRA_INTS_UTILS_HPP_
 #include "c4/yml/extra/ints_utils.hpp"
+#endif
+
+#ifndef _C4_YML_ERROR_HPP_
+#include "c4/yml/error.hpp"
 #endif
 
 #ifndef _C4_BITMASK_HPP_
@@ -67,13 +67,14 @@ namespace extra {
 namespace ievt {
 size_t to_chars(substr buf, ievt::DataType flags)
 {
-    return c4::bm2str<ievt::EventFlags>((flags & ievt::MASK), buf.str, buf.len);
+    flags &= ievt::MASK; // clear any other bits
+    return c4::bm2str<ievt::EventFlags>(flags, buf.str, buf.len);
 }
 csubstr to_chars_sub(substr buf, ievt::DataType flags)
 {
     size_t reqsize = ievt::to_chars(buf, flags);
-    RYML_CHECK(reqsize > 0u);
-    RYML_CHECK(reqsize < buf.len);
+    _RYML_CHECK_BASIC(reqsize > 0u);
+    _RYML_CHECK_BASIC(reqsize < buf.len);
     return buf.first(reqsize - 1u);
 }
 } // namespace ievt
@@ -99,10 +100,8 @@ void events_ints_print(csubstr parsed_yaml, csubstr arena, ievt::DataType const*
             evtpos += ((evts[evtpos] & ievt::WSTR) ? 3 : 1))
     {
         ievt::DataType evt = evts[evtpos];
-        {
-            csubstr str = ievt::to_chars_sub(buf, evt);
-            printf("[%d][%d] %.*s(0x%x)", evtnumber, evtpos, (int)str.len, str.str, evt);
-        }
+        csubstr flags = ievt::to_chars_sub(buf, evt);
+        printf("[%d][%d] %.*s(0x%x)", evtnumber, evtpos, (int)flags.len, flags.str, evt);
         if (evt & ievt::WSTR)
         {
             bool in_arena = evt & ievt::AREN;
@@ -110,7 +109,7 @@ void events_ints_print(csubstr parsed_yaml, csubstr arena, ievt::DataType const*
             bool safe = (evts[evtpos + 1] >= 0)
                 && (evts[evtpos + 2] >= 0)
                 && (evts[evtpos + 1] <= (int)region.len)
-                && ((evts[evtpos + 1] + evts[evtpos + 2]) <= (int)region.len);
+		&& (evts[evtpos + 2] <= ((int)region.len - evts[evtpos + 1]));
             const char *str = safe ? (region.str + evts[evtpos + 1]) : "ERR!!!";
             int len = safe ? evts[evtpos + 2] : 6;
             printf(": %d [%d]~~~%.*s~~~", evts[evtpos+1], evts[evtpos+2], len, str);

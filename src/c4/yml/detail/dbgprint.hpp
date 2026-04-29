@@ -1,14 +1,6 @@
 #ifndef _C4_YML_DETAIL_DBGPRINT_HPP_
 #define _C4_YML_DETAIL_DBGPRINT_HPP_
 
-#ifndef _C4_YML_COMMON_HPP_
-#include "../common.hpp"
-#endif
-
-#ifdef RYML_DBG
-#include <cstdio>
-#endif
-
 
 //-----------------------------------------------------------------------------
 // debug prints
@@ -23,106 +15,110 @@
 #   define _c4presc(...)
 #   define _c4prscalar(msg, scalar, keep_newlines)
 #else
-#   define _c4dbgt(fmt, ...)   do { if(_dbg_enabled()) {                \
-                               this->_dbg ("{}:{}: "   fmt     , __FILE__, __LINE__, __VA_ARGS__); } } while(0)
+#   define _c4dbgt(fmt, ...)   do {                                     \
+                                   if(_dbg_enabled()) {                 \
+                                       this->_dbg ("{}:{}: "   fmt     , __FILE__, __LINE__, __VA_ARGS__); \
+                                   }                                    \
+                               } while(0)
 #   define _c4dbgpf(fmt, ...)  _dbg_printf("{}:{}: "   fmt "\n", __FILE__, __LINE__, __VA_ARGS__)
 #   define _c4dbgpf_(fmt, ...) _dbg_printf("{}:{}: "   fmt     , __FILE__, __LINE__, __VA_ARGS__)
 #   define _c4dbgp(msg)        _dbg_printf("{}:{}: "   msg "\n", __FILE__, __LINE__             )
 #   define _c4dbgp_(msg)       _dbg_printf("{}:{}: "   msg     , __FILE__, __LINE__             )
 #   define _c4dbgq(msg)        _dbg_printf(msg "\n")
-#   define _c4presc(...)       do { if(_dbg_enabled()) __c4presc(__VA_ARGS__); } while(0)
+#   define _c4presc(...)       __c4presc(__VA_ARGS__)
 #   define _c4prscalar(msg, scalar, keep_newlines)                  \
     do {                                                            \
-        _c4dbgpf_("{}: [{}]~~~", msg, scalar.len);                  \
         if(_dbg_enabled()) {                                        \
-            __c4presc((scalar).str, (scalar).len, (keep_newlines)); \
+            _c4dbgpf_("{}: [{}]~~~", msg, scalar.len);              \
+            __c4presc((scalar), (keep_newlines));                   \
+            _c4dbgq("~~~");                                         \
         }                                                           \
-        _c4dbgq("~~~");                                             \
     } while(0)
-#endif // RYML_DBG
 
 
 //-----------------------------------------------------------------------------
+// implementation
 
-#ifdef RYML_DBG
+#include <cstdio>
 
-#include <c4/dump.hpp>
+#if defined(C4_MSVC) || defined(C4_MINGW)
+#include <malloc.h>
+#elif (defined(__clang__) && defined(_MSC_VER)) || \
+      defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#include <stdlib.h>
+#else
+#include <alloca.h>
+#endif
+
+#ifndef _C4_YML_ESCAPE_SCALAR_HPP_
+#include "c4/yml/escape_scalar.hpp"
+#endif
+
+#ifndef _C4_DUMP_HPP_
+#include "c4/dump.hpp"
+#endif
+
+
+C4_SUPPRESS_WARNING_GCC_WITH_PUSH("-Wattributes")
+
 namespace c4 {
+namespace yml {
 inline bool& _dbg_enabled() { static bool enabled = true; return enabled; }
-inline void _dbg_set_enabled(bool yes) { _dbg_enabled() = yes; }
-inline void _dbg_dumper(csubstr s)
+inline C4_NO_INLINE void _dbg_set_enabled(bool yes) { _dbg_enabled() = yes; }
+inline C4_NO_INLINE void _dbg_dumper(csubstr s)
 {
-    if(s.str)
+    _RYML_ASSERT_BASIC(s.str || !s.len);
+    if(s.len)
         fwrite(s.str, 1, s.len, stdout);
 }
-inline substr _dbg_buf() noexcept
+template<class DumpFn, class ...Args>
+C4_NO_INLINE void _dbg_dump(DumpFn &&dumpfn, csubstr fmt, Args&& ...args)
 {
-    static char writebuf[2048];
-    return substr{writebuf, sizeof(writebuf)}; // g++-5 has trouble with return writebuf;
+    DumpResults results;
+    // try writing everything:
+    {
+        // buffer for converting individual arguments. it is defined
+        // in a child scope to free it in case the buffer is too small
+        // for any of the arguments.
+        char writebuf[RYML_LOGBUF_SIZE];
+        results = format_dump_resume(std::forward<DumpFn>(dumpfn), writebuf, fmt, std::forward<Args>(args)...);
+    }
+    // if any of the arguments failed to fit the buffer, allocate a
+    // larger buffer (with alloca(), up to a limit) and resume writing.
+    //
+    // results.bufsize is set to the size of the largest element
+    // serialized. Eg int(1) will require 1 byte.
+    if(C4_UNLIKELY(results.bufsize > RYML_LOGBUF_SIZE))
+    {
+        const size_t bufsize = results.bufsize <= RYML_LOGBUF_SIZE_MAX ? results.bufsize : RYML_LOGBUF_SIZE_MAX;
+        #ifdef C4_MSVC
+        substr largerbuf = {static_cast<char*>(_alloca(bufsize)), bufsize};
+        #else
+        substr largerbuf = {static_cast<char*>(alloca(bufsize)), bufsize};
+        #endif
+        results = format_dump_resume(std::forward<DumpFn>(dumpfn), results, largerbuf, fmt, std::forward<Args>(args)...);
+    }
 }
 template<class ...Args>
-C4_NO_INLINE void _dbg_printf(c4::csubstr fmt, Args const& ...args)
+C4_NO_INLINE void _dbg_printf(csubstr fmt, Args const& ...args)
 {
     if(_dbg_enabled())
-    {
-        substr buf = _dbg_buf();
-        const size_t needed_size = c4::format_dump(&_dbg_dumper, buf, fmt, args...);
-        C4_CHECK(needed_size <= buf.len);
-    }
+        _dbg_dump(&_dbg_dumper, fmt, args...);
+}
+inline C4_NO_INLINE void __c4presc(csubstr s, bool keep_newlines=false)
+{
+    if(_dbg_enabled())
+        escape_scalar_fn(_dbg_dumper, s, keep_newlines);
 }
 inline C4_NO_INLINE void __c4presc(const char *s, size_t len, bool keep_newlines=false)
 {
-    RYML_ASSERT(s || !len);
-    size_t prev = 0;
-    for(size_t i = 0; i < len; ++i)
-    {
-        switch(s[i])
-        {
-        case '\n'  : _dbg_printf("{}{}{}", csubstr(s+prev, i-prev), csubstr("\\n"), csubstr(keep_newlines ? "\n":"")); prev = i+1; break;
-        case '\t'  : _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\t")); prev = i+1; break;
-        case '\0'  : _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\0")); prev = i+1; break;
-        case '\r'  : _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\r")); prev = i+1; break;
-        case '\f'  : _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\f")); prev = i+1; break;
-        case '\b'  : _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\b")); prev = i+1; break;
-        case '\v'  : _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\v")); prev = i+1; break;
-        case '\a'  : _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\a")); prev = i+1; break;
-        case '\x1b': _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\x1b")); prev = i+1; break;
-        case -0x3e/*0xc2u*/:
-            if(i+1 < len)
-            {
-                if(s[i+1] == -0x60/*0xa0u*/)
-                {
-                    _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\_")); prev = i+1;
-                }
-                else if(s[i+1] == -0x7b/*0x85u*/)
-                {
-                    _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\N")); prev = i+1;
-                }
-            }
-            break;
-        case -0x1e/*0xe2u*/:
-            if(i+2 < len && s[i+1] == -0x80/*0x80u*/)
-            {
-                if(s[i+2] == -0x58/*0xa8u*/)
-                {
-                    _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\L")); prev = i+1;
-                }
-                else if(s[i+2] == -0x57/*0xa9u*/)
-                {
-                    _dbg_printf("{}{}", csubstr(s+prev, i-prev), csubstr("\\P")); prev = i+1;
-                }
-            }
-            break;
-        }
-    }
-    if(len > prev)
-        _dbg_printf("{}", csubstr(s+prev, len-prev));
+    if(_dbg_enabled())
+        escape_scalar_fn(_dbg_dumper, csubstr(s, len), keep_newlines);
 }
-inline void __c4presc(csubstr s, bool keep_newlines=false)
-{
-    __c4presc(s.str, s.len, keep_newlines);
-}
+} // namespace yml
 } // namespace c4
+
+C4_SUPPRESS_WARNING_GCC_POP
 
 #endif // RYML_DBG
 

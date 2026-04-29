@@ -2,6 +2,8 @@
 #include "./test_lib/test_group.def.hpp"
 #include "c4/error.hpp"
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -10,8 +12,8 @@ C4_SUPPRESS_WARNING_GCC_WITH_PUSH("-Wuseless-cast")
 csubstr getafter(csubstr yaml, csubstr pattern)
 {
     size_t pos = yaml.find(pattern);
-    RYML_ASSERT(pos != npos);
-    RYML_ASSERT(yaml.sub(pos).begins_with(pattern));
+    _RYML_ASSERT_BASIC(pos != npos);
+    _RYML_ASSERT_BASIC(yaml.sub(pos).begins_with(pattern));
     return yaml.sub(pos + pattern.len);
 }
 
@@ -416,17 +418,17 @@ block:
         s = "asd"; bsquoted >> s; EXPECT_EQ(s, "");
         s = "asd"; bliteral >> s; EXPECT_EQ(s, "");
         s = "asd"; bfolded  >> s; EXPECT_EQ(s, "");
-        s = "asd"; ExpectError::check_error(&t, [&]{ fplain >> s; });
-        s = "asd"; ExpectError::check_error(&t, [&]{ bplain >> s; });
+        s = "asd"; ExpectError::check_error_visit(&t, [&]{ fplain >> s; }, fplain.id());
+        s = "asd"; ExpectError::check_error_visit(&t, [&]{ bplain >> s; }, bplain.id());
         s = "asd"; fenull >> s; EXPECT_EQ(s, "null");
         s = "asd"; benull >> s; EXPECT_EQ(s, "null");
         s = "asd"; ftilde >> s; EXPECT_EQ(s, "~");
         s = "asd"; btilde >> s; EXPECT_EQ(s, "~");
         // check error also for integral and float types
-        ExpectError::check_error(&t, [&]{ int   val = 0; fplain >> val; });
-        ExpectError::check_error(&t, [&]{ int   val = 0; bplain >> val; });
-        ExpectError::check_error(&t, [&]{ float val = 0; fplain >> val; });
-        ExpectError::check_error(&t, [&]{ float val = 0; bplain >> val; });
+        ExpectError::check_error_visit(&t, [&]{ int   val = 0; fplain >> val; }, fplain.id());
+        ExpectError::check_error_visit(&t, [&]{ int   val = 0; bplain >> val; }, bplain.id());
+        ExpectError::check_error_visit(&t, [&]{ float val = 0; fplain >> val; }, fplain.id());
+        ExpectError::check_error_visit(&t, [&]{ float val = 0; bplain >> val; }, bplain.id());
     });
 }
 
@@ -558,17 +560,17 @@ block:
         s = "asd"; bsquoted >> key(s); EXPECT_EQ(s, "");
         s = "asd"; bliteral >> key(s); EXPECT_EQ(s, "");
         s = "asd"; bfolded  >> key(s); EXPECT_EQ(s, "");
-        s = "asd"; ExpectError::check_error(&t, [&]{ fplain >> key(s); });
-        s = "asd"; ExpectError::check_error(&t, [&]{ bplain >> key(s); });
+        s = "asd"; ExpectError::check_error_visit(&t, [&]{ fplain >> key(s); }, fplain.id());
+        s = "asd"; ExpectError::check_error_visit(&t, [&]{ bplain >> key(s); }, bplain.id());
         s = "asd"; fenull >> key(s); EXPECT_EQ(s, "null");
         s = "asd"; benull >> key(s); EXPECT_EQ(s, "null");
         s = "asd"; ftilde >> key(s); EXPECT_EQ(s, "~");
         s = "asd"; btilde >> key(s); EXPECT_EQ(s, "~");
         // check error also for integral and float types
-        ExpectError::check_error(&t, [&]{ int   k = 0; fplain >> key(k); });
-        ExpectError::check_error(&t, [&]{ int   k = 0; bplain >> key(k); });
-        ExpectError::check_error(&t, [&]{ float k = 0; fplain >> key(k); });
-        ExpectError::check_error(&t, [&]{ float k = 0; bplain >> key(k); });
+        ExpectError::check_error_visit(&t, [&]{ int   k = 0; fplain >> key(k); }, fplain.id());
+        ExpectError::check_error_visit(&t, [&]{ int   k = 0; bplain >> key(k); }, bplain.id());
+        ExpectError::check_error_visit(&t, [&]{ float k = 0; fplain >> key(k); }, fplain.id());
+        ExpectError::check_error_visit(&t, [&]{ float k = 0; bplain >> key(k); }, bplain.id());
     });
 }
 
@@ -590,9 +592,9 @@ b:
         test_check_emit_check(yaml, [](Tree const& t){
             EXPECT_TRUE(t[0].val_is_null());
             EXPECT_TRUE(t[1].val_is_null());
-            ExpectError::check_error(&t, [&] { std::string s; t["a"] >> s; });
-            ExpectError::check_error(&t, [&] { int s; t["a"] >> s; });
-            ExpectError::check_error(&t, [&] { float s; t["a"] >> s; });
+            ExpectError::check_error_visit(&t, [&] { std::string s; t["a"] >> s; }, t["a"].id());
+            ExpectError::check_error_visit(&t, [&] { int s; t["a"] >> s; }, t["a"].id());
+            ExpectError::check_error_visit(&t, [&] { float s; t["a"] >> s; }, t["a"].id());
         });
     }
 }
@@ -611,9 +613,9 @@ TEST(empty_scalar, issue471_key)
         test_check_emit_check(yaml, [](Tree const& t){
             EXPECT_TRUE(t[0].key_is_null());
             EXPECT_TRUE(t[1].key_is_null());
-            ExpectError::check_error(&t, [&] { std::string s; t[0] >> key(s); });
-            ExpectError::check_error(&t, [&] { int s; t[0] >> key(s); });
-            ExpectError::check_error(&t, [&] { float s; t[0] >> key(s); });
+            ExpectError::check_error_visit(&t, [&] { std::string s; t[0] >> key(s); }, t[0].id());
+            ExpectError::check_error_visit(&t, [&] { int s; t[0] >> key(s); }, t[0].id());
+            ExpectError::check_error_visit(&t, [&] { float s; t[0] >> key(s); }, t[0].id());
         });
     }
 }
@@ -781,7 +783,7 @@ TEST(empty_scalar, std_string)
               "{ser: {stdstr: '',nullss: },eq: {stdstr: '',nullss: }}");
 }
 
-TEST(empty_scalar, to_arena)
+TEST(empty_scalar, to_arena_substr_non_null)
 {
     Tree tr;
     {
@@ -789,21 +791,63 @@ TEST(empty_scalar, to_arena)
         size_t num = to_chars(substr{}, val);
         ASSERT_EQ(num, 0u);
         char buf_[10];
-        csubstr serialized = to_chars_sub(buf_, val);
+        substr serialized = to_chars_sub(buf_, val);
         EXPECT_EQ(serialized.len, 0);
         EXPECT_NE(serialized.str, nullptr);
         EXPECT_NE(serialized, nullptr);
-        csubstr r = tr.to_arena("");
-        EXPECT_EQ(r.len, 0u);
-        EXPECT_NE(r.str, nullptr);
-        EXPECT_NE(r, nullptr);
+        // substr
+        {
+            csubstr r = tr.to_arena(serialized);
+            EXPECT_EQ(r.len, 0u);
+            EXPECT_NE(r.str, nullptr);
+            EXPECT_NE(r, nullptr);
+        }
+        // csubstr
+        {
+            csubstr cserialized = serialized;
+            csubstr r = tr.to_arena(cserialized);
+            EXPECT_EQ(r.len, 0u);
+            EXPECT_NE(r.str, nullptr);
+            EXPECT_NE(r, nullptr);
+        }
     }
+}
+
+TEST(empty_scalar, to_arena_substr_null)
+{
+    Tree tr;
+    {
+        substr serialized;
+        EXPECT_EQ(serialized.len, 0);
+        EXPECT_EQ(serialized.str, nullptr);
+        EXPECT_EQ(serialized, nullptr);
+        // substr
+        {
+            csubstr r = tr.to_arena(serialized);
+            EXPECT_EQ(r.len, 0u);
+            EXPECT_EQ(r.str, nullptr);
+            EXPECT_EQ(r, nullptr);
+        }
+        // csubstr
+        {
+            csubstr cserialized = serialized;
+            csubstr r = tr.to_arena(cserialized);
+            EXPECT_EQ(r.len, 0u);
+            EXPECT_EQ(r.str, nullptr);
+            EXPECT_EQ(r, nullptr);
+        }
+    }
+}
+
+TEST(empty_scalar, to_arena_const_char)
+{
+    Tree tr;
     {
         const char *val = nullptr;
         size_t num = to_chars(substr{}, val);
         ASSERT_EQ(num, 0u);
         char buf_[10];
-        csubstr serialized = to_chars_sub(buf_, val);
+        substr serialized = to_chars_sub(buf_, val);
         EXPECT_EQ(serialized.len, 0);
         EXPECT_NE(serialized.str, nullptr);
         EXPECT_NE(serialized, nullptr);
@@ -816,6 +860,11 @@ TEST(empty_scalar, to_arena)
         EXPECT_EQ(r.str, nullptr);
         EXPECT_EQ(r, nullptr);
     }
+}
+
+TEST(empty_scalar, to_arena_nullptr)
+{
+    Tree tr;
     {
         std::nullptr_t val = nullptr;
         size_t num = to_chars(substr{}, val);
@@ -826,6 +875,7 @@ TEST(empty_scalar, to_arena)
         EXPECT_EQ(r, nullptr);
     }
 }
+
 
 TEST(empty_scalar, gcc_error)
 {

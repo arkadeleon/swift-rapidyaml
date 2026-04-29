@@ -1,6 +1,8 @@
 #include "./test_lib/test_group.hpp"
 #include "./test_lib/test_group.def.hpp"
 
+RYML_DEFINE_TEST_MAIN()
+
 #if defined(_MSC_VER)
 #   pragma warning(push)
 //#   pragma warning(disable: 4127/*conditional expression is constant*/)
@@ -79,7 +81,7 @@ N(MB, L{__(a), __(b), __(c), __(.foo), __(.), __(-a), __(+b), __(/b), __(:c), __
 ADD_CASE_TO_GROUP("funny names, map expl",
 R"({a: a, b: b, c: c, .foo: .foo, .: ., -a: -a, +b: +b, /b: /b, :c: :c, $g: $g,
     '*': '*', '*a':'*a'})",
-N(MFS, L{__(a), __(b), __(c), __(.foo), __(.), __(-a), __(+b), __(/b), __(:c), __($g),
+N(MFM, L{__(a), __(b), __(c), __(.foo), __(.), __(-a), __(+b), __(/b), __(:c), __($g),
   N(KS|VS, "*", "*"), N(KS|VS, "*a", "*a")})
 );
 }

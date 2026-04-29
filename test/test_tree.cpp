@@ -10,6 +10,7 @@
 #include "./test_lib/callbacks_tester.hpp"
 
 #include <gtest/gtest.h>
+#include <unordered_map>
 
 #if defined(_MSC_VER)
 #   pragma warning(push)
@@ -20,6 +21,8 @@
 #elif defined(__GNUC__)
 #   pragma GCC diagnostic push
 #endif
+
+RYML_DEFINE_TEST_MAIN()
 
 namespace c4 {
 namespace yml {
@@ -592,17 +595,28 @@ TEST(Tree, empty_ctor)
 {
     Tree tree;
     EXPECT_EQ(tree.callbacks(), get_callbacks());
-    EXPECT_EQ(tree.empty(), true);
-    EXPECT_EQ(tree.capacity(), 0u);
+    EXPECT_EQ(tree.empty(), RYML_DEFAULT_TREE_CAPACITY == 0);
+    EXPECT_EQ(tree.capacity(), RYML_DEFAULT_TREE_CAPACITY);
+    EXPECT_EQ(tree.size(), RYML_DEFAULT_TREE_CAPACITY != 0); // the root
+    EXPECT_EQ(tree.slack(), RYML_DEFAULT_TREE_CAPACITY ? RYML_DEFAULT_TREE_CAPACITY - 1u : 0);
     EXPECT_EQ(tree.arena_capacity(), 0u);
     EXPECT_EQ(tree.arena_slack(), 0u);
-    EXPECT_EQ(tree.size(), 0u);
-    EXPECT_EQ(tree.slack(), 0u);
     EXPECT_EQ(tree.arena().empty(), true);
 }
 
 TEST(Tree, node_cap_ctor)
 {
+    {
+        Tree tree(0u);
+        EXPECT_EQ(tree.callbacks(), get_callbacks());
+        EXPECT_EQ(tree.empty(), true);
+        EXPECT_EQ(tree.capacity(), 0u);
+        EXPECT_EQ(tree.arena_capacity(), 0u);
+        EXPECT_EQ(tree.arena_slack(), 0u);
+        EXPECT_EQ(tree.size(), 0u);
+        EXPECT_EQ(tree.slack(), 0u);
+        EXPECT_EQ(tree.arena().empty(), true);
+    }
     {
         Tree tree(10u);
         EXPECT_EQ(tree.callbacks(), get_callbacks());
@@ -927,6 +941,49 @@ TEST(Tree, reserve_arena_issue288)
     EXPECT_EQ(t.arena().last(pluses.size()), to_csubstr(pluses));
 }
 
+// https://github.com/biojppm/rapidyaml/issues/564
+namespace issue564 {
+struct AdjacentSizedBlocks {
+    std::vector<char> mem;
+    char* start;
+    char* next;
+};
+using AvailableBlocks = std::unordered_map<size_t, AdjacentSizedBlocks>;
+static void free(void* , size_t size, void* user_data) {
+    (*static_cast<AvailableBlocks *>(user_data))[size].next -= size;
+}
+static void* alloc(size_t len, void* /*hint*/, void* user_data) {
+    auto& blocks = (*static_cast<AvailableBlocks*>(user_data))[len];
+    if (blocks.start == nullptr) {
+        blocks.mem.resize(10 * len);
+        blocks.start = blocks.next = blocks.mem.data();
+    }
+    void *ret = blocks.next;
+    blocks.next += len;
+    return ret;
+}
+} // namespace issue564
+TEST(Tree, issue564_relocate_arena_0)
+{
+    issue564::AvailableBlocks blocks_by_size;
+    Callbacks cb{};
+    cb.m_user_data = &blocks_by_size;
+    cb.m_allocate = issue564::alloc;
+    cb.m_free = issue564::free;
+    Tree dest(cb);
+    Tree source(cb);
+    parse_in_arena("[]", &dest);
+    parse_in_arena("[]", &source);
+    // Shallow copy `source` as a child of `dest`
+    NodeRef child = dest.rootref().append_child();
+    dest.duplicate_contents(&source, source.root_id(), child.id());
+    // trigger a relocation in dest
+    std::string loong(10000, ' ');
+    ExpectError::check_success([&]{
+        dest.to_arena(to_csubstr(loong));  // error
+    });
+}
+
 TEST(Tree, clear)
 {
     Tree t(16, 64);
@@ -1014,7 +1071,7 @@ void verify_success_(csubstr src, Function &&fn)
 template<class Function>
 void verify_assertion_(Tree &tree, Function &&fn)
 {
-    ExpectError::check_assertion(&tree, [&]{
+    ExpectError::check_assert_basic(&tree, [&]{
         (void)fn(tree);
     });
 }
@@ -1022,7 +1079,7 @@ template<class Function>
 void verify_assertion_(csubstr src, Function &&fn)
 {
     Tree tree = parse_in_arena(src);
-    ExpectError::check_assertion(&tree, [&]{
+    ExpectError::check_assert_basic(&tree, [&]{
         (void)fn(tree);
     });
 }
@@ -1030,7 +1087,7 @@ void verify_assertion_(csubstr src, Function &&fn)
 template<class Function>
 void verify_error_(Tree &tree, Function &&fn)
 {
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_basic(&tree, [&]{
         (void)fn(tree);
     });
 }
@@ -1038,7 +1095,7 @@ template<class Function>
 void verify_error_(csubstr src, Function &&fn)
 {
     Tree tree = parse_in_arena(src);
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_basic(&tree, [&]{
         (void)fn(tree);
     });
 }
@@ -4489,7 +4546,7 @@ TEST(Tree, add_tag_directives)
     check_up_to(3);
     t.add_tag_directive(td[3]);
     check_up_to(4);
-    ExpectError::check_error(&t, [&]{ // number exceeded
+    ExpectError::check_error_basic(&t, [&]{ // number exceeded
         t.add_tag_directive(td[4]);
     });
     t.clear_tag_directives();

@@ -1,12 +1,12 @@
 # Rapid YAML
 [![MIT Licensed](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/biojppm/rapidyaml/blob/master/LICENSE.txt)
+<!-- [![Coveralls](https://coveralls.io/repos/github/biojppm/rapidyaml/badge.svg?branch=master)](https://coveralls.io/github/biojppm/rapidyaml) -->
+[![Codecov](https://codecov.io/gh/biojppm/rapidyaml/branch/master/graph/badge.svg?branch=master)](https://codecov.io/gh/biojppm/rapidyaml)
 [![release](https://img.shields.io/github/v/release/biojppm/rapidyaml?color=g&include_prereleases&label=release%20&sort=semver)](https://github.com/biojppm/rapidyaml/releases)
 [![Documentation Status](https://readthedocs.org/projects/rapidyaml/badge/?version=latest)](https://rapidyaml.readthedocs.io/latest/?badge=latest)
 
-[![PyPI](https://img.shields.io/pypi/v/rapidyaml?color=g)](https://pypi.org/project/rapidyaml/)
+<!-- [![PyPI](https://img.shields.io/pypi/v/rapidyaml?color=g)](https://pypi.org/project/rapidyaml/) -->
 
-[![Coveralls](https://coveralls.io/repos/github/biojppm/rapidyaml/badge.svg?branch=master)](https://coveralls.io/github/biojppm/rapidyaml)
-[![Codecov](https://codecov.io/gh/biojppm/rapidyaml/branch/master/graph/badge.svg?branch=master)](https://codecov.io/gh/biojppm/rapidyaml)
 
 Or ryml, for short. ryml is a C++ library to parse and emit YAML,
 and do it fast, on everything from x64 to bare-metal chips without
@@ -242,8 +242,8 @@ level API for accessing and traversing the data tree.
 
 The following snippet is a very quick overview taken from quickstart
 sample ([see on
-doxygen](https://rapidyaml.readthedocs.io/latest/group__doc__quickstart.html)/[see
-on github](samples/quickstart.cpp). After cloning ryml
+doxygen](https://rapidyaml.readthedocs.io/latest/doxygen/group__doc__quickstart.html)/[see
+on github](samples/quickstart.cpp)). After cloning ryml
 (don't forget the `--recursive` flag for git), you can very easily
 build and run this executable using any of the build samples, eg the
 [`add_subdirectory()` sample](samples/add_subdirectory/) (see [the relevant section](#quickstart-samples)).
@@ -526,6 +526,7 @@ Currently [cmake](https://cmake.org/) is required to build ryml; we
 recommend a recent cmake version, at least 3.13.
 
 
+
 ### Package managers
 
 ryml is available in most package managers (thanks to all the
@@ -601,6 +602,9 @@ ryml:
   * `RYML_USE_ASSERT` - enable assertions in the code regardless of
     build type. This is disabled by default. Failed assertions will
     trigger a call to the error callback.
+  * `RYML_SHORT_CHECK_MSG` - Use shorter error message from
+    checks/asserts: do not show the check condition in the error
+    message.
   * `RYML_STANDALONE=ON/OFF`. ryml uses
     [c4core](https://github.com/biojppm/c4core), a C++ library with low-level
     multi-platform utilities for C++. When `RYML_STANDALONE=ON`, c4core is
@@ -665,66 +669,25 @@ A JavaScript+WebAssembly port is available, compiled through [emscripten](https:
 
 ### Python
 
-(Note that this is a work in progress. Additions will be made and
-things will be changed.). The python port is using only the
-index-based low-level API, which works with node indices and string
-views. This API is fast, but you may find it hard to use: it does not
-build a python structure of dicts/seqs/scalars, and all the scalars
-are strings, and not typed. With that said, it is really fast, and
-once you have the tree you can still walk over the tree to create the
-native python structure. Have a look at this [test
-file](api/python/tests/test_readme.py) to see how the python API
-works, and to judge whether it may be useful to your case.
+There is a blazing fast rapidyaml Python package; it now lives in its
+own [dedicated repo](https://github.com/biojppm/rapidyaml-python).
 
-As for performance, in a [timeit benchmark](api/python/bm/parse_bm.py)
-compared against [PyYaml](https://pyyaml.org/) and
-[ruamel.yaml](https://yaml.readthedocs.io/en/latest/), ryml parses
-quicker by generally 100x and up to 400x:
-
-```
-+----------------------------------------+-------+----------+----------+-----------+
-| style_seqs_blck_outer1000_inner100.yml | count | time(ms) | avg(ms)  | avg(MB/s) |
-+----------------------------------------+-------+----------+----------+-----------+
-| parse:RuamelYamlParse                  |     1 | 4564.812 | 4564.812 |     0.173 |
-| parse:PyYamlParse                      |     1 | 2815.426 | 2815.426 |     0.280 |
-| parse:RymlParseInArena                 |    38 |  588.024 |   15.474 |    50.988 |
-| parse:RymlParseInArenaReuse            |    38 |  466.997 |   12.289 |    64.202 |
-| parse:RymlParseInPlace                 |    38 |  579.770 |   15.257 |    51.714 |
-| parse:RymlParseInPlaceReuse            |    38 |  462.932 |   12.182 |    64.765 |
-+----------------------------------------+-------+----------+----------+-----------+
-```
-(Note that the parse timings above are somewhat biased towards ryml, because
-it does not perform any type conversions in Python-land: return types
-are merely `memoryviews` to the source buffer, possibly copied to the tree's
-arena).
-
-As for emitting, the improvement can be as high as 3000x:
-```
-+----------------------------------------+-------+-----------+-----------+-----------+
-| style_maps_blck_outer1000_inner100.yml | count |  time(ms) |  avg(ms)  | avg(MB/s) |
-+----------------------------------------+-------+-----------+-----------+-----------+
-| emit_yaml:RuamelYamlEmit               |     1 | 18149.288 | 18149.288 |     0.054 |
-| emit_yaml:PyYamlEmit                   |     1 |  2683.380 |  2683.380 |     0.365 |
-| emit_yaml:RymlEmitToNewBuffer          |    88 |   861.726 |     9.792 |    99.976 |
-| emit_yaml:RymlEmitReuse                |    88 |   437.931 |     4.976 |   196.725 |
-+----------------------------------------+-------+-----------+-----------+-----------+
-```
 
 
 ------
 
 ## YAML standard conformance
 
-ryml is feature complete with regards to the YAML specification. All
-the YAML features are well covered in the unit tests, and expected to
-work, unless in the exceptions noted below.
+ryml is feature-complete with regards to the YAML specification, and
+it passes 100% (ie, all) of the valid YAML cases in the YAML test
+suite. All the YAML features are well covered in the unit tests, and
+expected to work, unless in the exceptions noted below.
 
 Of course, there are many dark corners in YAML, and there certainly
-can appear cases which ryml fails to parse. Your [bug reports or pull
+can appear cases which ryml fails to parse. If you find any case where
+ryml fails, your [bug reports or pull
 requests](https://github.com/biojppm/rapidyaml/issues) are very
 welcome.
-
-See also [the roadmap](./ROADMAP.md) for a list of future work.
 
 
 ### Known limitations
@@ -733,12 +696,12 @@ ryml deliberately makes no effort to follow the YAML standard in the
 following situations:
 
 * ryml's tree does NOT accept containers as map keys: keys stored in
-  the tree must always be scalars. HOWEVER, this is a limitation only
-  of the final tree. The event-based parse engine DOES parse container
-  keys, as it is meant to be used by other programming languages to
-  create their native data-structures, and it is fully tested and
-  fully conformant (other than the general error permissiveness noted
-  below).
+  the tree must always be scalars. But note that this is a limitation
+  only of the final tree. The event-based parse engine DOES parse
+  container keys, as it is meant to be used by other programming
+  languages to create their native data-structures, and it is fully
+  tested and fully conformant (other than the general error
+  permissiveness noted below).
 * Tab characters after `:` and `-` are not accepted tokens, unless
   ryml is compiled with the macro `RYML_WITH_TAB_TOKENS`. This
   requirement exists because checking for tabs introduces branching
@@ -767,18 +730,18 @@ following situations:
   scalars are ignored. The [standard mandates that they should be
   quoted](https://yaml.org/spec/1.2.2/#52-character-encodings) when
   emitted; this is not done.
-* ryml tends to be on the permissive side in several cases where the
-  YAML standard dictates that there should be an error; in many of these
-  cases, ryml will tolerate the input. This may be good or bad, but in
-  any case is being improved on, meaning ryml will grow progressively
-  less tolerant of YAML errors in the coming releases. So we strongly
-  suggest to stay away from those dark corners of YAML which are
-  generally a source of problems; this is good practice anyway.
+* ryml tends to be on the permissive side, tolerating several cases
+  where the YAML standard dictates that there should be an error. This
+  may be good or bad, but in any case is being improved on, meaning
+  ryml **will grow progressively less tolerant of invalid YAML in the
+  coming releases**. So we strongly suggest to stay away from those dark
+  corners of YAML which are generally a source of problems; this is
+  good practice anyway.
 
 If you do run into trouble and would like to investigate conformance
 of your YAML code, **beware** of existing online YAML linters, many of
 which are not fully conformant. Instead, try using
-[https://play.yaml.io](https://play.yaml.io), an amazingly useful tool
+[https://play.yaml.com](https://play.yaml.com/), an amazingly useful tool
 which lets you dynamically input your YAML and continuously see the
 results from all the existing parsers (kudos to @ingydotnet and the
 people from the YAML test suite). And of course, if you detect
@@ -826,9 +789,9 @@ approach.
 Also, note that in [their own words](http://matrix.yaml.info/), the
 tests from the YAML test suite *contain a lot of edge cases that don't
 play such an important role in real world examples*. And yet, despite
-the extreme focus of the test suite, currently ryml only fails a minor
-fraction of the test cases, mostly related with the deliberate
-limitations noted above.
+the extreme focus of the test suite, currently ryml only fails test
+cases where the YAML is invalid, a minor fraction of the test cases,
+mostly related with the deliberate limitations noted above.
 
 Other than those limitations, by far the main issue with ryml is that
 several standard-mandated parse errors fail to materialize (this will

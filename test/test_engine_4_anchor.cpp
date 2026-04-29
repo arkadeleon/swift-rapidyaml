@@ -3,6 +3,8 @@
 // WARNING: don't use raw string literals -- g++4.8 cannot accept them
 // as macro arguments
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -88,7 +90,7 @@ ENGINE_TEST(AnchorSeqBlock,
     ___(ps.add_sibling());
     ___(ps.set_val_anchor("val2"));
     ___(ps.set_val_scalar_plain("val2"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -134,7 +136,7 @@ ENGINE_TEST(AnchorSeqMapBlock,
     ___(ps.set_key_scalar_plain("key2"));
     ___(ps.set_val_anchor("val2"));
     ___(ps.set_val_scalar_plain("val2"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.add_sibling());
     ___(ps.set_val_anchor("map2"));
     ___(ps.begin_map_val_block());
@@ -147,8 +149,8 @@ ENGINE_TEST(AnchorSeqMapBlock,
     ___(ps.set_key_scalar_plain("key20"));
     ___(ps.set_val_anchor("val20"));
     ___(ps.set_val_scalar_plain("val20"));
-    ___(ps.end_map());
-    ___(ps.end_seq());
+    ___(ps.end_map_block());
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -156,7 +158,7 @@ ENGINE_TEST(AnchorSeqMapBlock,
 ENGINE_TEST(AnchorSeqFlow,
             "&seq [&val1 val1,\n&val2 val2]"
             ,
-            "&seq [&val1 val1,&val2 val2]"
+            "&seq [\n  &val1 val1,\n  &val2 val2\n]\n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -176,7 +178,7 @@ ENGINE_TEST(AnchorSeqFlow,
     ___(ps.add_sibling());
     ___(ps.set_val_anchor("val2"));
     ___(ps.set_val_scalar_plain("val2"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(true));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -201,7 +203,7 @@ ENGINE_TEST(AnchorSeqBlockWithRef,
     ___(ps.set_val_scalar_plain("val1"));
     ___(ps.add_sibling());
     ___(ps.set_val_ref("*val1"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -228,7 +230,7 @@ ENGINE_TEST(AnchorSeqFlowWithRef,
     ___(ps.set_val_scalar_plain("val1"));
     ___(ps.add_sibling());
     ___(ps.set_val_ref("*val1"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(false));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -236,7 +238,7 @@ ENGINE_TEST(AnchorSeqFlowWithRef,
 ENGINE_TEST(AnchorSeqFlowWithRefMultiLine,
             "&seq\n[\n&val1 val1\n,*val1\n]"
             ,
-            "&seq [&val1 val1,*val1]"
+            "&seq [\n  &val1 val1,\n  *val1\n]\n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -255,7 +257,7 @@ ENGINE_TEST(AnchorSeqFlowWithRefMultiLine,
     ___(ps.set_val_scalar_plain("val1"));
     ___(ps.add_sibling());
     ___(ps.set_val_ref("*val1"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(true));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -290,7 +292,7 @@ ENGINE_TEST(AnchorMapBlock,
     ___(ps.set_key_scalar_plain("key2"));
     ___(ps.set_val_anchor("val2"));
     ___(ps.set_val_scalar_plain("val2"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -320,7 +322,7 @@ ENGINE_TEST(AnchorMapBlockWithRef,
     ___(ps.add_sibling());
     ___(ps.set_key_ref("*rkey1"));
     ___(ps.set_val_ref("*rval1"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -357,7 +359,7 @@ ENGINE_TEST(AnchorMapFlow,
     ___(ps.set_key_scalar_plain("key2"));
     ___(ps.set_val_anchor("val2"));
     ___(ps.set_val_scalar_plain("val2"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(false));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -365,7 +367,7 @@ ENGINE_TEST(AnchorMapFlow,
 ENGINE_TEST(AnchorMapFlowMultiLine,
             "&map\n{&key1 key1: &val1 val1,\n&key2 key2: &val2 val2\n}"
             ,
-            "&map {&key1 key1: &val1 val1,&key2 key2: &val2 val2}"
+            "&map {\n  &key1 key1: &val1 val1,\n  &key2 key2: &val2 val2\n}\n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -391,7 +393,7 @@ ENGINE_TEST(AnchorMapFlowMultiLine,
     ___(ps.set_key_scalar_plain("key2"));
     ___(ps.set_val_anchor("val2"));
     ___(ps.set_val_scalar_plain("val2"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(true));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -424,7 +426,7 @@ ENGINE_TEST(AnchorMapFlowWithRef,
     ___(ps.add_sibling());
     ___(ps.set_key_ref("*rkey1"));
     ___(ps.set_val_ref("*rval1"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(false));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -433,7 +435,7 @@ ENGINE_TEST(AnchorMapFlowWithRef,
 ENGINE_TEST(AnchorMapFlowWithRefMultiLine,
             "&map\n{\n&rkey1 key1: &rval1 val1,\n*rkey1 : *rval1\n}"
             ,
-            "&map {&rkey1 key1: &rval1 val1,*rkey1 : *rval1}"
+            "&map {\n  &rkey1 key1: &rval1 val1,\n  *rkey1 : *rval1\n}\n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -457,7 +459,7 @@ ENGINE_TEST(AnchorMapFlowWithRefMultiLine,
     ___(ps.add_sibling());
     ___(ps.set_key_ref("*rkey1"));
     ___(ps.set_val_ref("*rval1"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(true));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -499,8 +501,8 @@ ENGINE_TEST(AnchorMapMapBlock,
     ___(ps.set_key_scalar_plain("key2"));
     ___(ps.set_val_anchor("val2"));
     ___(ps.set_val_scalar_plain("val2"));
-    ___(ps.end_map());
-    ___(ps.end_map());
+    ___(ps.end_map_block());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -548,11 +550,11 @@ ENGINE_TEST(AnchorMapMapFlow,
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("key3"));
     ___(ps.set_val_scalar_plain("val3"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(false));
     ___(ps.add_sibling());
     ___(ps.set_key_scalar_plain("key4"));
     ___(ps.set_val_scalar_plain("val4"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(false));
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -561,7 +563,7 @@ ENGINE_TEST(AnchorMapMapFlow,
 
 //-----------------------------------------------------------------------------
 
-ENGINE_TEST(AnchorTagPlacement,
+ENGINE_TEST(AnchorTagPlacement1,
             "- &a0 !b0 foo0: bar0\n"
             "- &a1 !b1\n"
             "  foo1: bar1\n"
@@ -574,15 +576,16 @@ ENGINE_TEST(AnchorTagPlacement,
             "\n"
             "  !b4\n"
             "\n"
-            "  foo4: bar4\n",
-            "- !b0 &a0 foo0: bar0\n"
-            "- !b1 &a1\n"
+            "  foo4: bar4\n"
+            ,
+            "- &a0 !b0 foo0: bar0\n"
+            "- &a1 !b1\n"
             "  foo1: bar1\n"
             "- &a2\n"
             "  !b2 foo2: bar2\n"
-            "- !b3 &a3\n"
+            "- &a3 !b3\n"
             "  foo3: bar3\n"
-            "- !b4 &a4\n"
+            "- &a4 !b4\n"
             "  foo4: bar4\n"
             ,
             "+STR\n"
@@ -620,36 +623,130 @@ ENGINE_TEST(AnchorTagPlacement,
     ___(ps.set_key_tag("!b0"));
     ___(ps.set_key_scalar_plain("foo0"));
     ___(ps.set_val_scalar_plain("bar0"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.add_sibling());
     ___(ps.set_val_anchor("a1"));
     ___(ps.set_val_tag("!b1"));
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain("foo1"));
     ___(ps.set_val_scalar_plain("bar1"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.add_sibling());
     ___(ps.set_val_anchor("a2"));
     ___(ps.begin_map_val_block());
     ___(ps.set_key_tag("!b2"));
     ___(ps.set_key_scalar_plain("foo2"));
     ___(ps.set_val_scalar_plain("bar2"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.add_sibling());
     ___(ps.set_val_anchor("a3"));
     ___(ps.set_val_tag("!b3"));
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain("foo3"));
     ___(ps.set_val_scalar_plain("bar3"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.add_sibling());
     ___(ps.set_val_anchor("a4"));
     ___(ps.set_val_tag("!b4"));
     ___(ps.begin_map_val_block());
     ___(ps.set_key_scalar_plain("foo4"));
     ___(ps.set_val_scalar_plain("bar4"));
-    ___(ps.end_map());
-    ___(ps.end_seq());
+    ___(ps.end_map_block());
+    ___(ps.end_seq_block());
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(AnchorTagPlacement2,
+            "- !b0 &a0 foo0: bar0\n"
+            "- !b1 &a1\n"
+            "  foo1: bar1\n"
+            "- !b2\n"
+            "  &a2 foo2: bar2\n"
+            "- !b3\n"
+            "  &a3\n"
+            "  foo3: bar3\n"
+            "- !b4\n"
+            "\n"
+            "  &a4\n"
+            "\n"
+            "  foo4: bar4\n"
+            ,
+            "- &a0 !b0 foo0: bar0\n"
+            "- &a1 !b1\n"
+            "  foo1: bar1\n"
+            "- !b2\n"
+            "  &a2 foo2: bar2\n"
+            "- &a3 !b3\n"
+            "  foo3: bar3\n"
+            "- &a4 !b4\n"
+            "  foo4: bar4\n"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ\n"
+            "+MAP\n"
+            "=VAL &a0 <!b0> :foo0\n"
+            "=VAL :bar0\n"
+            "-MAP\n"
+            "+MAP &a1 <!b1>\n"
+            "=VAL :foo1\n"
+            "=VAL :bar1\n"
+            "-MAP\n"
+            "+MAP <!b2>\n"
+            "=VAL &a2 :foo2\n"
+            "=VAL :bar2\n"
+            "-MAP\n"
+            "+MAP &a3 <!b3>\n"
+            "=VAL :foo3\n"
+            "=VAL :bar3\n"
+            "-MAP\n"
+            "+MAP &a4 <!b4>\n"
+            "=VAL :foo4\n"
+            "=VAL :bar4\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_block());
+    ___(ps.begin_map_val_block());
+    ___(ps.set_key_anchor("a0"));
+    ___(ps.set_key_tag("!b0"));
+    ___(ps.set_key_scalar_plain("foo0"));
+    ___(ps.set_val_scalar_plain("bar0"));
+    ___(ps.end_map_block());
+    ___(ps.add_sibling());
+    ___(ps.set_val_anchor("a1"));
+    ___(ps.set_val_tag("!b1"));
+    ___(ps.begin_map_val_block());
+    ___(ps.set_key_scalar_plain("foo1"));
+    ___(ps.set_val_scalar_plain("bar1"));
+    ___(ps.end_map_block());
+    ___(ps.add_sibling());
+    ___(ps.set_val_tag("!b2"));
+    ___(ps.begin_map_val_block());
+    ___(ps.set_key_anchor("a2"));
+    ___(ps.set_key_scalar_plain("foo2"));
+    ___(ps.set_val_scalar_plain("bar2"));
+    ___(ps.end_map_block());
+    ___(ps.add_sibling());
+    ___(ps.set_val_anchor("a3"));
+    ___(ps.set_val_tag("!b3"));
+    ___(ps.begin_map_val_block());
+    ___(ps.set_key_scalar_plain("foo3"));
+    ___(ps.set_val_scalar_plain("bar3"));
+    ___(ps.end_map_block());
+    ___(ps.add_sibling());
+    ___(ps.set_val_anchor("a4"));
+    ___(ps.set_val_tag("!b4"));
+    ___(ps.begin_map_val_block());
+    ___(ps.set_key_scalar_plain("foo4"));
+    ___(ps.set_val_scalar_plain("bar4"));
+    ___(ps.end_map_block());
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -683,23 +780,23 @@ ENGINE_TEST(AnchorMapMapSuckerPunch,
             "bru:   &wtf\n"
             "  foo\n"
             ,
-            "!mymap &mymap\n"
-            "!footag &fooanch foo: &seq\n"
+            "&mymap !mymap\n"
+            "&fooanch !footag foo: &seq\n"
             "  &key1 key1: &val1 val1\n"
             "  &key2 key2: &val2 val2\n"
-            "!bartag &baranch bar: !a &map2\n"
-            "  !b &key10 key10: !c &val10 val10\n"
-            "  !b &key20 key20: !c &val20 val20\n"
+            "&baranch !bartag bar: &map2 !a\n"
+            "  &key10 !b key10: &val10 !c val10\n"
+            "  &key20 !b key20: &val20 !c val20\n"
             "  key10: 20\n"
-            "!baztag &bazanch baz: !a &map2\n"
-            "  !b &key10 key10: !c &val10 val10\n"
-            "  !b &key20 key20: !c &val20 val20\n"
+            "&bazanch !baztag baz: &map2 !a\n"
+            "  &key10 !b key10: &val10 !c val10\n"
+            "  &key20 !b key20: &val20 !c val20\n"
             "  key10: 20\n"
             "brr: &map2\n"
             "  !a foo: bar\n"
             "bra: &map2\n"
             "  !a foo: bar\n"
-            "bre: !a &map2\n"
+            "bre: &map2 !a\n"
             "  foo: bar\n"
             "bru: &wtf foo\n"
             ,
@@ -771,7 +868,7 @@ ENGINE_TEST(AnchorMapMapSuckerPunch,
         ___(ps.set_key_scalar_plain("key2"));
         ___(ps.set_val_anchor("val2"));
         ___(ps.set_val_scalar_plain("val2"));
-      ___(ps.end_map());
+      ___(ps.end_map_block());
       ___(ps.add_sibling());
       ___(ps.set_key_tag("!bartag"));
       ___(ps.set_key_anchor("baranch"));
@@ -795,7 +892,7 @@ ENGINE_TEST(AnchorMapMapSuckerPunch,
         ___(ps.add_sibling());
         ___(ps.set_key_scalar_plain("key10"));
         ___(ps.set_val_scalar_plain("20"));
-      ___(ps.end_map());
+      ___(ps.end_map_block());
       ___(ps.add_sibling());
       ___(ps.set_key_tag("!baztag"));
       ___(ps.set_key_anchor("bazanch"));
@@ -819,7 +916,7 @@ ENGINE_TEST(AnchorMapMapSuckerPunch,
         ___(ps.add_sibling());
         ___(ps.set_key_scalar_plain("key10"));
         ___(ps.set_val_scalar_plain("20"));
-      ___(ps.end_map());
+      ___(ps.end_map_block());
       ___(ps.add_sibling());
       ___(ps.set_key_scalar_plain("brr"));
       ___(ps.set_val_anchor("map2"));
@@ -827,7 +924,7 @@ ENGINE_TEST(AnchorMapMapSuckerPunch,
         ___(ps.set_key_tag("!a"));
         ___(ps.set_key_scalar_plain("foo"));
         ___(ps.set_val_scalar_plain("bar"));
-      ___(ps.end_map());
+      ___(ps.end_map_block());
       ___(ps.add_sibling());
       ___(ps.set_key_scalar_plain("bra"));
       ___(ps.set_val_anchor("map2"));
@@ -835,7 +932,7 @@ ENGINE_TEST(AnchorMapMapSuckerPunch,
         ___(ps.set_key_tag("!a"));
         ___(ps.set_key_scalar_plain("foo"));
         ___(ps.set_val_scalar_plain("bar"));
-      ___(ps.end_map());
+      ___(ps.end_map_block());
       ___(ps.add_sibling());
       ___(ps.set_key_scalar_plain("bre"));
       ___(ps.set_val_anchor("map2"));
@@ -843,12 +940,12 @@ ENGINE_TEST(AnchorMapMapSuckerPunch,
       ___(ps.begin_map_val_block());
         ___(ps.set_key_scalar_plain("foo"));
         ___(ps.set_val_scalar_plain("bar"));
-      ___(ps.end_map());
+      ___(ps.end_map_block());
       ___(ps.add_sibling());
       ___(ps.set_key_scalar_plain("bru"));
       ___(ps.set_val_anchor("wtf"));
       ___(ps.set_val_scalar_plain("foo"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -879,23 +976,24 @@ ENGINE_TEST(AnchorSeqMapSuckerPunch,
             "  foo: bar\n"
             "-   &wtf\n"
             "  foo\n"
-            "  ",
+            "  "
+            ,
             "&seq\n"
             "- &key1 key1: &val1 val1\n"
             "  &key2 key2: &val2 val2\n"
-            "- !a &map2a\n"
-            "  !b &key10 key10: &val10 val10\n"
+            "- &map2a !a\n"
+            "  &key10 !b key10: &val10 val10\n"
             "  &key20 key20: &val20 val20\n"
             "  key10: 20\n"
-            "- !a &map2x\n"
-            "  !b &key10 key10: &val10 val10\n"
+            "- &map2x !a\n"
+            "  &key10 !b key10: &val10 val10\n"
             "  &key20 key20: &val20 val20\n"
             "  key10: 20\n"
             "- &map2y\n"
             "  !a foo: bar\n"
             "- &map2z\n"
             "  !a foo: bar\n"
-            "- !a &map2u\n"
+            "- &map2u !a\n"
             "  foo: bar\n"
             "- &wtf foo\n"
             ,
@@ -955,7 +1053,7 @@ ENGINE_TEST(AnchorSeqMapSuckerPunch,
             ___(ps.set_key_scalar_plain("key2"));
             ___(ps.set_val_anchor("val2"));
             ___(ps.set_val_scalar_plain("val2"));
-        ___(ps.end_map());
+        ___(ps.end_map_block());
         ___(ps.add_sibling());
         ___(ps.set_val_anchor("map2a"));
         ___(ps.set_val_tag("!a"));
@@ -973,7 +1071,7 @@ ENGINE_TEST(AnchorSeqMapSuckerPunch,
             ___(ps.add_sibling());
             ___(ps.set_key_scalar_plain("key10"));
             ___(ps.set_val_scalar_plain("20"));
-        ___(ps.end_map());
+        ___(ps.end_map_block());
         ___(ps.add_sibling());
         ___(ps.set_val_anchor("map2x"));
         ___(ps.set_val_tag("!a"));
@@ -991,32 +1089,32 @@ ENGINE_TEST(AnchorSeqMapSuckerPunch,
             ___(ps.add_sibling());
             ___(ps.set_key_scalar_plain("key10"));
             ___(ps.set_val_scalar_plain("20"));
-        ___(ps.end_map());
+        ___(ps.end_map_block());
         ___(ps.add_sibling());
         ___(ps.set_val_anchor("map2y"));
         ___(ps.begin_map_val_block());
             ___(ps.set_key_tag("!a"));
             ___(ps.set_key_scalar_plain("foo"));
             ___(ps.set_val_scalar_plain("bar"));
-        ___(ps.end_map());
+        ___(ps.end_map_block());
         ___(ps.add_sibling());
         ___(ps.set_val_anchor("map2z"));
         ___(ps.begin_map_val_block());
             ___(ps.set_key_tag("!a"));
             ___(ps.set_key_scalar_plain("foo"));
             ___(ps.set_val_scalar_plain("bar"));
-        ___(ps.end_map());
+        ___(ps.end_map_block());
         ___(ps.add_sibling());
         ___(ps.set_val_anchor("map2u"));
         ___(ps.set_val_tag("!a"));
         ___(ps.begin_map_val_block());
             ___(ps.set_key_scalar_plain("foo"));
             ___(ps.set_val_scalar_plain("bar"));
-        ___(ps.end_map());
+        ___(ps.end_map_block());
         ___(ps.add_sibling());
         ___(ps.set_val_anchor("wtf"));
         ___(ps.set_val_scalar_plain("foo"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1048,9 +1146,9 @@ ENGINE_TEST(DocDoubleAnchorSeqMap,
     ___(ps.begin_seq_key_flow());
     ___(ps.set_val_scalar_plain("seq"));
     ___(ps.set_val_scalar_plain("yeah"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(false));
     ___(ps.set_val_scalar_plain("foo"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1080,9 +1178,9 @@ ENGINE_TEST(DoubleAnchorSeqMap,
     ___(ps.begin_seq_key_flow());
     ___(ps.set_val_scalar_plain("seq"));
     ___(ps.set_val_scalar_plain("yeah"));
-    ___(ps.end_seq());
+    ___(ps.end_seq_flow(false));
     ___(ps.set_val_scalar_plain("foo"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1112,9 +1210,9 @@ ENGINE_TEST(DocDoubleAnchorKeyMap,
     ___(ps.begin_map_key_flow());
     ___(ps.set_val_scalar_plain("key"));
     ___(ps.set_val_scalar_plain("val"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(false));
     ___(ps.set_val_scalar_plain("foo"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
@@ -1144,9 +1242,9 @@ ENGINE_TEST(DoubleAnchorKeyMap,
     ___(ps.begin_map_key_flow());
     ___(ps.set_val_scalar_plain("key"));
     ___(ps.set_val_scalar_plain("val"));
-    ___(ps.end_map());
+    ___(ps.end_map_flow(false));
     ___(ps.set_val_scalar_plain("foo"));
-    ___(ps.end_map());
+    ___(ps.end_map_block());
     ___(ps.end_doc());
     ___(ps.end_stream());
 }

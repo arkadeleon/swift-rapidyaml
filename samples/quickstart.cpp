@@ -1,5 +1,74 @@
 // ryml: quickstart
 
+/** @addtogroup doc_quickstart
+ *
+ * This file does a quick tour of ryml. It has multiple self-contained
+ * and well-commented samples that illustrate how to use ryml, and how
+ * it works.
+ *
+ * Although this is not a unit test, the samples are written as a
+ * sequence of actions and predicate checks to better convey what is
+ * the expected result at any stage. And to ensure the code here is
+ * correct and up to date, it's also run as part of the CI tests.
+ *
+ * If something is unclear, please open an issue or send a pull
+ * request at https://github.com/biojppm/rapidyaml . If you have an
+ * issue while using ryml, it is also encouraged to try to reproduce
+ * the issue here, or look first through the relevant section.
+ *
+ * Happy ryml'ing!
+ *
+ * ### Some guidance on building
+ *
+ * The directories that exist side-by-side with this file contain
+ * several examples on how to build this with cmake, such that you can
+ * hit the ground running. See [the relevant section of the main
+ * README](https://github.com/biojppm/rapidyaml/tree/v0.10.0?tab=readme-ov-file#quickstart-samples)
+ * for an overview of the different choices. I suggest starting first
+ * with the `add_subdirectory` example, treating it just like any
+ * other self-contained cmake project.
+ *
+ * Or very quickly, to build and run this sample on your PC, start by
+ * creating this `CMakeLists.txt`:
+ * ```cmake
+ * cmake_minimum_required(VERSION 3.13)
+ * project(ryml-quickstart LANGUAGES CXX)
+ * include(FetchContent)
+ * FetchContent_Declare(ryml
+ *     GIT_REPOSITORY https://github.com/biojppm/rapidyaml.git
+ *     GIT_TAG v0.11.1
+ *     GIT_SHALLOW FALSE  # ensure submodules are checked out
+ * )
+ * FetchContent_MakeAvailable(ryml)
+ * add_executable(ryml-quickstart ${ryml_SOURCE_DIR}/samples/quickstart.cpp)
+ * target_link_libraries(ryml-quickstart ryml::ryml)
+ * add_custom_target(run ryml-quickstart
+ *     COMMAND $<TARGET_FILE:ryml-quickstart>
+ *     DEPENDS ryml-quickstart
+ *     COMMENT "running: $<TARGET_FILE:ryml-quickstart>")
+ * ```
+ * Now run the following commands in the same folder:
+ * ```bash
+ * # configure the project
+ * cmake -S . -B build
+ * # build and run
+ * cmake --build build --target ryml-quickstart -j
+ * # optionally, open in your IDE
+ * cmake --open build
+ * ```
+ *
+ * @{ */
+
+/** @cond dev */
+int report_checks();
+void ensure_callbacks();
+/** @endcond */
+
+
+/** @defgroup doc_sample_helpers Sample helpers
+ *
+ * Helper utilities used in the sample.
+ */
 
 //-----------------------------------------------------------------------------
 
@@ -16,6 +85,9 @@
     // For this sample, we will be using std interop, so...
     #include <ryml_std.hpp> // optional header, provided for std:: interop
     #include <c4/format.hpp> // needed for the examples below
+    // optional header, definitions for error utilities to implement
+    // error callbacks:
+    #include <c4/yml/error.def.hpp>
 #endif
 
 // these are needed for the examples below
@@ -37,7 +109,6 @@
 //
 // (Each function addresses a topic and is fully self-contained. Jump
 // to the function to find out about its topic.)
-namespace sample {
 void sample_lightning_overview();   ///< lightning overview of most common features
 void sample_quick_overview();       ///< quick overview of most common features
 void sample_substr();               ///< about ryml's string views (from c4core)
@@ -62,60 +133,70 @@ void sample_emit_to_container();    ///< emit to memory, eg a string or vector-l
 void sample_emit_to_stream();       ///< emit to a stream, eg std::ostream
 void sample_emit_to_file();         ///< emit to a FILE*
 void sample_emit_nested_node();     ///< pick a nested node as the root when emitting
-void sample_style();                ///< set node styles [experimental]
+void sample_style();                ///< query/set node styles
+void sample_style_flow_ml_indent(); ///< control indentation of FLOW_ML containers
+void sample_style_flow_ml_filter(); ///< set the parser to pick FLOW_SL even if the container is multiline
 void sample_json();                 ///< JSON parsing and emitting
 void sample_anchors_and_aliases();  ///< deal with YAML anchors and aliases
 void sample_anchors_and_aliases_create(); ///< how to create YAML anchors and aliases
 void sample_tags();                 ///< deal with YAML type tags
 void sample_tag_directives();       ///< deal with YAML tag namespace directives
 void sample_docs();                 ///< deal with YAML docs
-void sample_error_handler();        ///< set a custom error handler
+void sample_error_handler();        ///< set custom error handlers
+void sample_error_basic();          ///< handler for basic errors, and obtain a full error message with basic context
+void sample_error_parse();          ///< handler for parse errors, and obtain a full error message with parse context
+void sample_error_visit();          ///< handler for visit errors, and obtain a full error message with visit context
+void sample_error_visit_location(); ///< obtaining the YAML location from a visit error
 void sample_global_allocator();     ///< set a global allocator for ryml
 void sample_per_tree_allocator();   ///< set per-tree allocators
 void sample_static_trees();         ///< how to use static trees in ryml
-void sample_location_tracking();    ///< track node locations in the parsed source tree
-int  report_checks();
-} /* namespace sample */
+void sample_location_tracking();    ///< track node YAML source locations in the parsed tree
 
 int main()
 {
-    sample::sample_lightning_overview();
-    sample::sample_quick_overview();
-    sample::sample_substr();
-    sample::sample_parse_file();
-    sample::sample_parse_in_place();
-    sample::sample_parse_in_arena();
-    sample::sample_parse_reuse_tree();
-    sample::sample_parse_reuse_parser();
-    sample::sample_parse_reuse_tree_and_parser();
-    sample::sample_iterate_trees();
-    sample::sample_create_trees();
-    sample::sample_tree_arena();
-    sample::sample_fundamental_types();
-    sample::sample_empty_null_values();
-    sample::sample_formatting();
-    sample::sample_base64();
-    sample::sample_user_scalar_types();
-    sample::sample_user_container_types();
-    sample::sample_float_precision();
-    sample::sample_std_types();
-    sample::sample_emit_to_container();
-    sample::sample_emit_to_stream();
-    sample::sample_emit_to_file();
-    sample::sample_emit_nested_node();
-    sample::sample_style();
-    sample::sample_json();
-    sample::sample_anchors_and_aliases();
-    sample::sample_anchors_and_aliases_create();
-    sample::sample_tags();
-    sample::sample_tag_directives();
-    sample::sample_docs();
-    sample::sample_error_handler();
-    sample::sample_global_allocator();
-    sample::sample_per_tree_allocator();
-    sample::sample_static_trees();
-    sample::sample_location_tracking();
-    return sample::report_checks();
+    ensure_callbacks();
+    sample_lightning_overview();
+    sample_quick_overview();
+    sample_substr();
+    sample_parse_file();
+    sample_parse_in_place();
+    sample_parse_in_arena();
+    sample_parse_reuse_tree();
+    sample_parse_reuse_parser();
+    sample_parse_reuse_tree_and_parser();
+    sample_iterate_trees();
+    sample_create_trees();
+    sample_tree_arena();
+    sample_fundamental_types();
+    sample_empty_null_values();
+    sample_formatting();
+    sample_base64();
+    sample_user_scalar_types();
+    sample_user_container_types();
+    sample_float_precision();
+    sample_std_types();
+    sample_emit_to_container();
+    sample_emit_to_stream();
+    sample_emit_to_file();
+    sample_emit_nested_node();
+    sample_style();
+    sample_style_flow_ml_indent();
+    sample_style_flow_ml_filter();
+    sample_json();
+    sample_anchors_and_aliases();
+    sample_tags();
+    sample_tag_directives();
+    sample_docs();
+    sample_error_handler();
+    sample_error_basic();
+    sample_error_parse();
+    sample_error_visit();
+    sample_error_visit_location();
+    sample_global_allocator();
+    sample_per_tree_allocator();
+    sample_static_trees();
+    sample_location_tracking();
+    return report_checks();
 }
 
 /** @endcond */
@@ -129,110 +210,73 @@ C4_SUPPRESS_WARNING_GCC_CLANG_PUSH
 C4_SUPPRESS_WARNING_GCC_CLANG("-Wcast-qual")
 C4_SUPPRESS_WARNING_GCC_CLANG("-Wold-style-cast")
 C4_SUPPRESS_WARNING_GCC("-Wuseless-cast")
-#if __GNUC__ >= 6
-C4_SUPPRESS_WARNING_GCC_WITH_PUSH("-Wnull-dereference")
-#endif
-
-namespace sample {
-
-/** @addtogroup doc_quickstart
- *
- * This file does a quick tour of ryml. It has multiple self-contained
- * and well-commented samples that illustrate how to use ryml, and how
- * it works.
- *
- * Although this is not a unit test, the samples are written as a
- * sequence of actions and predicate checks to better convey what is
- * the expected result at any stage. And to ensure the code here is
- * correct and up to date, it's also run as part of the CI tests.
- *
- * If something is unclear, please open an issue or send a pull
- * request at https://github.com/biojppm/rapidyaml . If you have an
- * issue while using ryml, it is also encouraged to try to reproduce
- * the issue here, or look first through the relevant section.
- *
- * Happy ryml'ing!
- *
- * ### Some guidance on building
- *
- * The directories that exist side-by-side with this file contain
- * several examples on how to build this with cmake, such that you can
- * hit the ground running. See [the relevant section of the main
- * README](https://github.com/biojppm/rapidyaml/tree/v0.5.0?tab=readme-ov-file#quickstart-samples)
- * for an overview of the different choices. I suggest starting first
- * with the `add_subdirectory` example, treating it just like any
- * other self-contained cmake project.
- *
- * Or very quickly, to build and run this sample on your PC, start by
- * creating this `CMakeLists.txt`:
- * ```cmake
- * cmake_minimum_required(VERSION 3.13)
- * project(ryml-quickstart LANGUAGES CXX)
- * include(FetchContent)
- * FetchContent_Declare(ryml
- *     GIT_REPOSITORY https://github.com/biojppm/rapidyaml.git
- *     GIT_TAG v0.10.0
- *     GIT_SHALLOW FALSE  # ensure submodules are checked out
- * )
- * FetchContent_MakeAvailable(ryml)
- * add_executable(ryml-quickstart ${ryml_SOURCE_DIR}/samples/quickstart.cpp)
- * target_link_libraries(ryml-quickstart ryml::ryml)
- * add_custom_target(run ryml-quickstart
- *     COMMAND $<TARGET_FILE:ryml-quickstart>
- *     DEPENDS ryml-quickstart
- *     COMMENT "running: $<TARGET_FILE:ryml-quickstart>")
- * ```
- * Now run the following commands in the same folder:
- * ```bash
- * # configure the project
- * cmake -S . -B build
- * # build and run
- * cmake --build build --target ryml-quickstart -j
- * # optionally, open in your IDE
- * cmake --open build
- * ```
- *
- * @{ */
 
 //-----------------------------------------------------------------------------
 // first, some helpers used in this quickstart
 
-/** @defgroup doc_sample_helpers Sample helpers
- * @brief Functions and classes used in the examples of this sample.
- * @addtogroup doc_sample_helpers
+/** @addtogroup doc_sample_helpers
+ *
  * @{ */
 
 
-bool report_check(int line, const char *predicate, bool result);
-
-
-// GCC 4.8 has a problem with the CHECK() macro
-#ifndef _DOXYGEN_
-#if (defined(__GNUC__) && (__GNUC__ == 4 && __GNUC_MINOR__ >= 8))
-/// a quick'n'dirty assertion to verify a predicate
-#define CHECK CheckPredicate{__FILE__, __LINE__}
-struct CheckPredicate
+/** an example error handler, required for some of the quickstart
+ * examples.
+ * @ingroup doc_sample_helpers */
+struct ErrorHandlerExample
 {
-    const char *file;
-    const int line;
-    void operator() (bool predicate) const
+    ErrorHandlerExample() : original_callbacks(ryml::get_callbacks()) {}
+    ryml::Callbacks original_callbacks; // saves the original callbacks
+public:
+    // utilities used below
+    template<class Fn> bool check_error_occurs(Fn &&fn);
+    template<class Fn> bool check_assertion_occurs(Fn &&fn);
+    void check_enabled() const;
+    void check_disabled() const;
+    ryml::Callbacks callbacks();
+public:
+    // these are the functions that we want to execute on error
+    [[noreturn]] void on_error_basic(ryml::csubstr msg, ryml::ErrorDataBasic const& errdata);
+    [[noreturn]] void on_error_parse(ryml::csubstr msg, ryml::ErrorDataParse const& errdata);
+    [[noreturn]] void on_error_visit(ryml::csubstr msg, ryml::ErrorDataVisit const& errdata);
+public:
+    // these are the trampoline functions that we set ryml to call
+    [[noreturn]] static void s_error_basic(ryml::csubstr msg, ryml::ErrorDataBasic const& errdata, void *this_);
+    [[noreturn]] static void s_error_parse(ryml::csubstr msg, ryml::ErrorDataParse const& errdata, void *this_);
+    [[noreturn]] static void s_error_visit(ryml::csubstr msg, ryml::ErrorDataVisit const& errdata, void *this_);
+public:
+    // the handlers save these fields to be able to check on them
+    // after the error is triggered. They are only valid after an
+    // error, and before the next error.
+    std::string       saved_msg_short;
+    std::string       saved_msg_full;
+    std::string       saved_msg_full_with_context;
+    ryml::Location    saved_basic_loc;
+    ryml::Location    saved_parse_loc;
+    ryml::Tree const* saved_visit_tree;
+    ryml::id_type     saved_visit_id;
+};
+
+
+/** Shows how to create a scoped error handler.
+ * @ingroup doc_sample_helpers */
+struct ScopedErrorHandlerExample : public ErrorHandlerExample
+{
+    ScopedErrorHandlerExample() : ErrorHandlerExample()
     {
-        if (!report_check(line, nullptr, predicate))
-        {
-#ifdef RYML_DBG
-            RYML_DEBUG_BREAK();
-#endif
-        }
+        ryml::set_callbacks(this->callbacks());
+        check_enabled();
+    }
+    ~ScopedErrorHandlerExample()
+    {
+        ryml::set_callbacks(this->original_callbacks);
+        check_disabled();
     }
 };
-#else
-/** a quick'n'dirty assertion to verify a predicate */
-#define CHECK(predicate) do { if(!report_check(__LINE__, #predicate, (predicate))) { RYML_DEBUG_BREAK(); } } while(0)
-#endif
-#else
-// enable doxygen to link to the functions called inside CHECK()
-#define CHECK(predicate) assert(predicate)
-#endif
+
+
+// needed to setup the callbacks when ryml does not provide them
+void ensure_callbacks();
+ryml::Callbacks default_callbacks();
 
 
 // helper functions for sample_parse_file()
@@ -242,25 +286,33 @@ template<class CharContainer> void          file_put_contents(const char *filena
 void                                        file_put_contents(const char *filename, const char *buf, size_t sz, const char* access);
 
 
-/** this is an example error handler, required for some of the
- * quickstart examples. */
-struct ErrorHandlerExample
-{
-    ryml::Callbacks callbacks();
-    C4_NORETURN void on_error(const char* msg, size_t len, ryml::Location loc);
-    C4_NORETURN static void s_error(const char* msg, size_t len, ryml::Location loc, void *this_);
-    template<class Fn> C4_NODISCARD bool check_error_occurs(Fn &&fn) const;
-    template<class Fn> C4_NODISCARD bool check_assertion_occurs(Fn &&fn) const;
-    void check_effect(bool committed) const;
-    ErrorHandlerExample() : defaults(ryml::get_callbacks()) {}
-    ryml::Callbacks defaults;
-};
-/** Shows how to easily create a scoped error handler. */
-struct ScopedErrorHandlerExample : public ErrorHandlerExample
-{
-    ScopedErrorHandlerExample() : ErrorHandlerExample() { ryml::set_callbacks(callbacks()); check_effect(true); }
-    ~ScopedErrorHandlerExample() { ryml::set_callbacks(defaults); check_effect(false); }
-};
+bool report_check(int line, const char *predicate, bool result);
+
+
+#if defined(__DOXYGEN__) || defined(_DOXYGEN_)
+/// a quick'n'dirty assertion to verify a predicate
+#   define CHECK(predicate) assert(predicate)  // enable doxygen to link to the functions called inside CHECK()
+#else
+#   if !(defined(__GNUC__) && (__GNUC__ == 4 && __GNUC_MINOR__ >= 8))
+    /// a quick'n'dirty assertion to verify a predicate
+#       define CHECK(predicate) do { if(!report_check(__LINE__, #predicate, (predicate))) { RYML_DEBUG_BREAK(); } } while(0)
+#   else // GCC 4.8 has a problem with the CHECK() macro
+/// a quick'n'dirty assertion to verify a predicate
+#       define CHECK CheckPredicate{__FILE__, __LINE__}
+        struct CheckPredicate
+        {
+            const char *file;
+            const int line;
+            void operator() (bool result) const
+            {
+                if (!report_check(line, nullptr, result))
+                {
+                    RYML_DEBUG_BREAK();
+                }
+            }
+        };
+#   endif // GCC 4.8
+#endif // doxygen
 
 /** @} */ // doc_sample_helpers
 
@@ -330,7 +382,7 @@ john: doe)";
 
     // The resulting tree contains only views to the parsed string. If
     // the string was parsed in place, then the string must outlive
-    // the tree! This works in this case because `yml_buf` and `tree`
+    // the tree! This works in this case because both `yml_buf` and `tree`
     // live on the same scope, so have the same lifetime.
 
     // It is also possible to:
@@ -544,18 +596,23 @@ john: doe)";
     // you are sure that your intent is correct, why would you need to
     // pay the runtime cost for the assertions?
     //
-    // The downside, of course, is that when you are not sure, release
-    // builds may be doing something crazy.
+    // The downside, of course, is that you may be unsure, or your
+    // code may be wrong; and then release builds may end up doing
+    // something wrong.
     //
-    // So in that case, you can either use the appropriate ryml
-    // predicates to check your intent (as in the examples above), or
-    // you can override this behavior and enable/disable assertions,
-    // by defining the macro RYML_USE_ASSERT to a proper value (see
-    // c4/yml/common.hpp).
+    // So in that case, you can use the appropriate ryml predicates to
+    // check your intent (as in the examples above), or you can
+    // explicitly enable/disable assertions, by defining the macro
+    // RYML_USE_ASSERT to a proper value (see c4/yml/common.hpp). This
+    // will make problematic code trigger a call to the appropriate
+    // error callback.
     //
     // Also, to be clear, this does not apply to parse errors
-    // occurring when the YAML is parsed. Checking for these errors is
-    // always enabled and cannot be switched off.
+    // occurring when the YAML is parsed. Parse errors are always
+    // detected by the parser: this is not done through assertions,
+    // but through the appropriate error checking mechanism. So
+    // checking for these errors is always enabled and cannot be
+    // switched off.
 
 
     //------------------------------------------------------------------
@@ -630,9 +687,9 @@ john: doe)";
         // root["john"] = ryml::to_csubstr(ok); // don't, will dangle
         wroot["john"] << ryml::to_csubstr(ok); // OK, copy to the tree's arena
     }
-    CHECK(root["john"].val() == "in_scope"); // OK!
+    CHECK(root["john"].val() == "in_scope"); // OK! val is now in the tree's arena
     // serializing floating points:
-    wroot["float"] << 2.4;
+    wroot["float"] << 2.4f;
     // to force a particular precision or float format:
     // (see sample_float_precision() and sample_formatting())
     wroot["digits"] << ryml::fmt::real(2.4, /*num_digits*/6, ryml::FTOA_FLOAT);
@@ -767,7 +824,7 @@ john: doe)";
     //------------------------------------------------------------------
     // .operator[]() vs .at()
 
-    // (Const)NodeRef::operator[]() is an analogue to std::vector::operator[].
+    // (Const)NodeRef::operator[] is an analogue to std::vector::operator[].
     // (Const)NodeRef::at() is an analogue to std::vector::at()
     //
     // at() will always check the subject node is .readable().
@@ -777,7 +834,7 @@ john: doe)";
     {
         // in this example we will be checking errors, so set up a
         // temporary error handler to catch them:
-        ScopedErrorHandlerExample errh;
+        ScopedErrorHandlerExample errh; // calls ryml::set_callbacks()
         // instantiate the tree after errh
         ryml::Tree err_tree = ryml::parse_in_arena("{foo: bar}");
         // ... so that the tree uses the current callbacks:
@@ -1752,7 +1809,12 @@ void sample_parse_file()
     // because this is a minimal sample, it assumes nothing on the
     // environment/OS (other than that it can read/write files). So we
     // create the file on the fly:
-    file_put_contents(filename, ryml::csubstr("foo: 1\nbar:\n  - 2\n  - 3\n"));
+    file_put_contents(filename, ryml::csubstr(R"(
+foo: 1
+bar:
+- 2
+- 3
+)"));
 
     // now we can load it into a std::string (for example):
     {
@@ -3297,17 +3359,19 @@ QWxsIHRoYXQgZ2xpdHRlcnMgaXMgbm90IGdvbGQu: All that glitters is not gold.
 //-----------------------------------------------------------------------------
 // Serialization info
 
-} // namespace sample  // because we want the doxygen document above to show up in the proper place
+/** @} */ // doc_quickstart
 /** @addtogroup doc_serialization
+ *
+ * @{
  *
  * ## Fundamental types
  *
  * ryml provides serialization/deserialization utilities for all
  * fundamental data types in @ref doc_charconv .
  *
- *  - See @ref sample::sample_fundamental_types() for basic examples
+ *  - See @ref sample_fundamental_types() for basic examples
  *    of serialization of fundamental types.
- *  - See @ref sample::sample_empty_null_values() for different ways
+ *  - See @ref sample_empty_null_values() for different ways
  *    to serialize and deserialize empty and null values/
  *  - When serializing floating point values in C++ earlier than
  *    17, be aware that there may be a truncation of the precision
@@ -3317,9 +3381,9 @@ QWxsIHRoYXQgZ2xpdHRlcnMgaXMgbm90IGdvbGQu: All that glitters is not gold.
  *    @ref c4::dtoa(), or any other method (remember that ryml only
  *    stores the final string in the tree, so nothing prevents you from
  *    creating it in whatever way is most suitable). See the relevant
- *    sample: @ref sample::sample_float_precision().
+ *    sample: @ref sample_float_precision().
  *  - You can also serialize and deserialize base64: see @ref
- *    doc_base64 and @ref sample::sample_base64
+ *    doc_base64 and @ref sample_base64
  *
  * To serialize/deserialize any non-fundamental type will require
  * that you instruct ryml on how to achieve this. That will differ
@@ -3334,14 +3398,14 @@ QWxsIHRoYXQgZ2xpdHRlcnMgaXMgbm90IGdvbGQu: All that glitters is not gold.
  *
  *  - See examples on how to @ref doc_sample_to_chars_scalar
  *  - See examples on how to @ref doc_sample_from_chars_scalar
- *  - See the sample @ref sample::sample_user_scalar_types
- *  - See the sample @ref sample::sample_formatting for examples
+ *  - See the sample @ref sample_user_scalar_types
+ *  - See the sample @ref sample_formatting for examples
  *    of functions from @ref doc_format_utils that will be very
  *    helpful in implementing custom `to_chars()`/`from_chars()`
  *    functions.
  *  - See @ref doc_charconv for the implementations of
  *    `to_chars()`/`from_chars()` for the fundamental types.
- *  - See @ref doc_substr and @ref sample::sample_substr() for the
+ *  - See @ref doc_substr and @ref sample_substr() for the
  *    many useful utilities in the substring class.
  *
  *
@@ -3351,16 +3415,16 @@ QWxsIHRoYXQgZ2xpdHRlcnMgaXMgbm90IGdvbGQu: All that glitters is not gold.
  *   container (ie, a node which has children, which may themselves be
  *   containers).
  *
- *   - See the sample @ref sample::sample_user_container_types
+ *   - See the sample @ref sample_user_container_types
  *
- *   - See the sample @ref sample::sample_std_types, and also...
+ *   - See the sample @ref sample_std_types, and also...
  *
  *
  * ## STL types
  *
  * ryml does not use any STL containers internally, but it can be
  * used to serialize and deserialize these containers. See @ref
- * sample::sample_std_types() for an example. See the header @ref
+ * sample_std_types() for an example. See the header @ref
  * ryml_std.hpp and also the headers it includes:
  *
  *  - scalar types:
@@ -3371,8 +3435,10 @@ QWxsIHRoYXQgZ2xpdHRlcnMgaXMgbm90IGdvbGQu: All that glitters is not gold.
  *    - for `std::vector<T>`: @ref src/c4/yml/std/vector.hpp
  *    - for `std::map<K,V>`: @ref src/c4/yml/std/map.hpp
  *
- */
-namespace sample { // because we want the doxygen document above to show up in the proper place
+ * @}
+ *
+ * @addtogroup doc_quickstart
+ * @{ */
 
 
 //-----------------------------------------------------------------------------
@@ -3606,8 +3672,8 @@ v4: '(40,41,42,43)'
  * directed to provide forward declarations to alleviate this problem,
  * but it may still occur.
  *
- * @see sample::sample_container_types
- * @see sample::sample_std_types
+ * @see sample_container_types
+ * @see sample_std_types
  *
  * @{ */
 
@@ -3911,7 +3977,7 @@ void sample_float_precision()
     // have to build the container.
     //
     // First a function to check the result:
-    auto check_precision = [&](ryml::Tree serialized){
+    auto check_precision = [&](ryml::Tree const& serialized){
         std::cout << serialized;
         // now it works!
         CHECK((ryml::emitrs_yaml<std::string>(serialized) == R"(- 1.23234412342131239
@@ -3986,8 +4052,8 @@ void sample_emit_to_container()
 - baz
 - bat
 )";
-    auto treea = ryml::parse_in_arena(ymla);
-    auto treeb = ryml::parse_in_arena(ymlb);
+    const ryml::Tree treea = ryml::parse_in_arena(ymla);
+    const ryml::Tree treeb = ryml::parse_in_arena(ymlb);
 
     // eg, std::vector<char>
     {
@@ -4104,7 +4170,7 @@ void sample_emit_to_stream()
 - baz
 - bat
 )";
-    auto tree = ryml::parse_in_arena(ymlb);
+    const ryml::Tree tree = ryml::parse_in_arena(ymlb);
 
     std::string s;
 
@@ -4121,7 +4187,32 @@ void sample_emit_to_stream()
         std::stringstream ss;
         ss << ryml::as_json(tree); // works with any stream having .operator<<() and .write()
         s = ss.str();
-        CHECK(ryml::to_csubstr(s) == R"(["a","b",{"x0": 1,"x1": 2},{"champagne": "Dom Perignon","coffee": "Arabica","more": {"vinho verde": "Soalheiro","vinho tinto": "Redoma 2017"},"beer": ["Rochefort 10","Busch","Leffe Rituel"]},"foo","bar","baz","bat"])");
+        CHECK(ryml::to_csubstr(s) == R"([
+  "a",
+  "b",
+  {
+    "x0": 1,
+    "x1": 2
+  },
+  {
+    "champagne": "Dom Perignon",
+    "coffee": "Arabica",
+    "more": {
+      "vinho verde": "Soalheiro",
+      "vinho tinto": "Redoma 2017"
+    },
+    "beer": [
+      "Rochefort 10",
+      "Busch",
+      "Leffe Rituel"
+    ]
+  },
+  "foo",
+  "bar",
+  "baz",
+  "bat"
+]
+)");
     }
 
     // emit a nested node
@@ -4140,7 +4231,11 @@ void sample_emit_to_stream()
         std::stringstream ss;
         ss << ryml::as_json(tree[3][2]); // works with any stream having .operator<<() and .write()
         s = ss.str();
-        CHECK(ryml::to_csubstr(s) == R"("more": {"vinho verde": "Soalheiro","vinho tinto": "Redoma 2017"})");
+        CHECK(ryml::to_csubstr(s) == R"("more": {
+  "vinho verde": "Soalheiro",
+  "vinho tinto": "Redoma 2017"
+}
+)");
     }
 }
 
@@ -4168,7 +4263,7 @@ void sample_emit_to_file()
 - baz
 - bat
 )";
-    auto tree = ryml::parse_in_arena(yml);
+    const ryml::Tree tree = ryml::parse_in_arena(yml);
     // this is emitting to stdout, but of course you can pass in any
     // FILE* obtained from fopen()
     size_t len = ryml::emit_yaml(tree, tree.root_id(), stdout);
@@ -4212,7 +4307,7 @@ void sample_emit_nested_node()
     - many other
     - wonderful beers
 )");
-    CHECK(ryml::emitrs_yaml<std::string>(tree[3]["beer"][0]) == "Rochefort 10\n");
+    CHECK(ryml::emitrs_yaml<std::string>(tree[3]["beer"][0]) == "Rochefort 10");
     CHECK(ryml::emitrs_yaml<std::string>(tree[3]["beer"][3]) == R"(- and so
 - many other
 - wonderful beers
@@ -4222,169 +4317,414 @@ void sample_emit_nested_node()
 
 //-----------------------------------------------------------------------------
 
-/** [experimental] how to query/set/modify node style. */
+/** [experimental] query/set/modify node style to control
+ * formatting of emitted YAML code. */
 void sample_style()
 {
-    ryml::Tree tree = ryml::parse_in_arena(R"(
-block map:
+    // we will be using this helper throughout this function
+    auto tostr = [](ryml::ConstNodeRef n) { return ryml::emitrs_yaml<std::string>(n); };
+    // let's parse this yaml:
+    ryml::csubstr yaml = R"(block map:
   block key: block val
 block seq:
   - block val 1
   - block val 2
   - 'quoted'
-flow map: {flow key: flow val}
-flow seq: [flow val, flow val]
-)");
+flow map, singleline: {flow key: flow val}
+flow seq, singleline: [flow val,flow val]
+flow map, multiline: {
+    flow key: flow val
+  }
+flow seq, multiline: [
+    flow val,
+    flow val
+  ]
+)";
+    ryml::Tree tree = ryml::parse_in_arena(yaml);
     // while parsing, ryml marks parsed nodes with their original style:
     CHECK(tree.rootref().is_block());
-    CHECK(tree["block map"].key_style() & ryml::KEY_PLAIN);
-    CHECK(tree["block seq"].key_style() & ryml::KEY_PLAIN);
-    CHECK(tree["flow map"].key_style() & ryml::KEY_PLAIN);
-    CHECK(tree["flow seq"].key_style() & ryml::KEY_PLAIN);
+    CHECK(tree["block map"].is_key_plain());
+    CHECK(tree["block seq"].is_key_plain());
+    CHECK(tree["flow map, singleline"].is_key_plain());
+    CHECK(tree["flow seq, singleline"].is_key_plain());
+    CHECK(tree["flow map, multiline"].is_key_plain());
+    CHECK(tree["flow seq, multiline"].is_key_plain());
     CHECK(tree["block map"].is_block());
     CHECK(tree["block seq"].is_block());
-    CHECK(tree["flow map"].is_flow());
-    CHECK(tree["flow seq"].is_flow());
-    // which means that if you emit a tree, its style will be
-    // preserved:
-    CHECK(ryml::emitrs_yaml<std::string>(tree) ==
-R"(block map:
-  block key: block val
-block seq:
-  - block val 1
-  - block val 2
-  - 'quoted'
-flow map: {flow key: flow val}
-flow seq: [flow val,flow val]
-)");
-    // you can set the style programatically:
-    tree["block map"].set_container_style(ryml::FLOW_SL); // container style: to flow
-    tree["block seq"].set_container_style(ryml::FLOW_SL);
-    tree["flow map"].set_container_style(ryml::BLOCK);    // container style: to block
-    tree["flow seq"].set_container_style(ryml::BLOCK);
-    tree["block map"].set_key_style(ryml::KEY_SQUO);      // scalar style: to single-quoted scalar
-    tree["block seq"].set_key_style(ryml::KEY_DQUO);      // scalar style: to double-quoted scalar
-    tree["flow map"].set_key_style(ryml::KEY_LITERAL);    // scalar style: to literal scalar
-    tree["flow seq"].set_key_style(ryml::KEY_FOLDED);     // scalar style: to folded scalar
-    tree["block seq"][2].set_val_style(ryml::VAL_PLAIN);  // scalar style: to plain
-    tree["flow seq"][0].set_val_style(ryml::VAL_SQUO);
-    tree["flow seq"][1].set_val_style(ryml::VAL_DQUO);
-    // note the difference now:
-    CHECK(ryml::emitrs_yaml<std::string>(tree) ==
-R"('block map': {block key: block val}
-"block seq": [block val 1,block val 2,quoted]
-? |-
-  flow map
-:
-  flow key: flow val
+    // flow is either singleline (FLOW_SL) or multiline (FLOW_ML)
+    CHECK(tree["flow map, singleline"].is_flow_sl());
+    CHECK(tree["flow seq, singleline"].is_flow_sl());
+    CHECK(tree["flow map, multiline"].is_flow_ml());
+    CHECK(tree["flow seq, multiline"].is_flow_ml());
+    // is_flow() is equivalent to (is_flow_sl() || is_flow_ml())
+    CHECK(tree["flow map, singleline"].is_flow());
+    CHECK(tree["flow seq, singleline"].is_flow());
+    CHECK(tree["flow map, multiline"].is_flow());
+    CHECK(tree["flow seq, multiline"].is_flow());
+    //
+    // since the tree nodes are marked with their original parsed
+    // style, emitting the parsed tree will preserve the original
+    // style (minus whitespace):
+    //
+    CHECK(tostr(tree) == yaml); // same as before!
+    //
+    // you can set/modify the style programatically!
+    //
+    // here are more examples.
+    //
+    {
+        ryml::NodeRef n = tree["block map"]; // Let's look at one node
+        // It looks like this originally:
+        CHECK(tostr(n) == "block map:\n  block key: block val\n");
+        // let's modify its style:
+        n.set_key_style(ryml::KEY_SQUO);      // scalar style: to single-quoted scalar
+        n.set_container_style(ryml::FLOW_SL); // container style: to flow singleline
+        // now it looks like this:
+        CHECK(tostr(n) == "'block map': {block key: block val}\n");
+    }
+    // next example
+    {
+        ryml::NodeRef n = tree["block seq"];
+        CHECK(tostr(n) == "block seq:\n  - block val 1\n  - block val 2\n  - 'quoted'\n");
+        n.set_key_style(ryml::KEY_DQUO);       // scalar style: to double-quoted scalar
+        n.set_container_style(ryml::FLOW_ML);  // container style: to flow multiline
+        n[2].set_val_style(ryml::VAL_PLAIN);   // scalar style: to plain
+        CHECK(tostr(n) == "\"block seq\": [\n    block val 1,\n    block val 2,\n    quoted\n  ]\n");
+    }
+    // next example
+    {
+        ryml::NodeRef n = tree["flow map, singleline"];
+        CHECK(tostr(n) == "flow map, singleline: {flow key: flow val}\n");
+        n.set_container_style(ryml::BLOCK);
+        n["flow key"].set_val_style(ryml::VAL_LITERAL);
+        CHECK(tostr(n) == "flow map, singleline:\n  flow key: |-\n    flow val\n");
+    }
+    // next example
+    {
+        ryml::NodeRef n = tree["flow map, multiline"];
+        CHECK(tostr(n) == "flow map, multiline: {\n    flow key: flow val\n  }\n");
+        n.set_container_style(ryml::BLOCK);
+        CHECK(tostr(n) == "flow map, multiline:\n  flow key: flow val\n");
+    }
+    // next example
+    {
+        ryml::NodeRef n = tree["flow seq, singleline"];
+        CHECK(tostr(n) == "flow seq, singleline: [flow val,flow val]\n");
+        n.set_key_style(ryml::KEY_FOLDED);
+        n.set_container_style(ryml::BLOCK);
+        n[0].set_val_style(ryml::VAL_SQUO);
+        n[1].set_val_style(ryml::VAL_DQUO);
+        CHECK(tostr(n) == "? >-\n  flow seq, singleline\n:\n  - 'flow val'\n  - \"flow val\"\n");
+    }
+    // next example
+    {
+        ryml::NodeRef n = tree["flow seq, multiline"];
+        CHECK(tostr(n) == "flow seq, multiline: [\n    flow val,\n    flow val\n  ]\n");
+        n.set_container_style(ryml::FLOW_SL);
+        CHECK(tostr(n) == "flow seq, multiline: [flow val,flow val]\n");
+    }
+    // note the full tree now:
+    CHECK(tostr(tree) != yaml);
+    CHECK(tostr(tree) ==
+          R"('block map': {block key: block val}
+"block seq": [
+    block val 1,
+    block val 2,
+    quoted
+  ]
+flow map, singleline:
+  flow key: |-
+    flow val
 ? >-
-  flow seq
+  flow seq, singleline
 :
   - 'flow val'
   - "flow val"
+flow map, multiline:
+  flow key: flow val
+flow seq, multiline: [flow val,flow val]
 )");
     // you can clear the style of single nodes:
     tree["block map"].clear_style();
-std::cout << tree;
-    CHECK(ryml::emitrs_yaml<std::string>(tree) ==
-R"(block map:
+    tree["block seq"].clear_style();
+    CHECK(tostr(tree) ==
+          R"(block map:
   block key: block val
-"block seq": [block val 1,block val 2,quoted]
-? |-
-  flow map
-:
-  flow key: flow val
+block seq:
+  - block val 1
+  - block val 2
+  - quoted
+flow map, singleline:
+  flow key: |-
+    flow val
 ? >-
-  flow seq
+  flow seq, singleline
 :
   - 'flow val'
   - "flow val"
+flow map, multiline:
+  flow key: flow val
+flow seq, multiline: [flow val,flow val]
 )");
     // you can clear the style recursively:
     tree.rootref().clear_style(/*recurse*/true);
-    CHECK(ryml::emitrs_yaml<std::string>(tree) ==
-R"(block map:
+    // when emitting nodes which have no style set, ryml will default
+    // to block format for containers, and call
+    // ryml::scalar_style_choose() to pick the style for each scalar
+    // (at the cost of a scan over each scalar). Note that ryml picks
+    // single-quoted for scalars containing commas:
+    CHECK(tostr(tree) ==
+          R"(block map:
   block key: block val
 block seq:
   - block val 1
   - block val 2
   - quoted
-flow map:
+'flow map, singleline':
   flow key: flow val
-flow seq:
+'flow seq, singleline':
+  - flow val
+  - flow val
+'flow map, multiline':
+  flow key: flow val
+'flow seq, multiline':
   - flow val
   - flow val
 )");
-    // you can also set the style based on type conditions:
-    {
-        // set a single key to single-quoted
-        tree["block map"].set_style_conditionally(ryml::KEY,
-                                                  /*remflags*/ryml::KEY_STYLE,
-                                                  /*addflags*/ryml::KEY_SQUO,
-                                                  /*recurse*/false);
-        CHECK(ryml::emitrs_yaml<std::string>(tree) ==
-R"('block map':
+    // you can set the style based on type conditions:
+    //
+    // eg, set a single key to single-quoted
+    tree["block map"].set_style_conditionally(/*type_mask*/ryml::KEY,
+                                              /*remflags*/ryml::KEY_STYLE,
+                                              /*addflags*/ryml::KEY_SQUO,
+                                              /*recurse*/false);
+    CHECK(tostr(tree) ==
+          R"('block map':
   block key: block val
 block seq:
   - block val 1
   - block val 2
   - quoted
-flow map:
+'flow map, singleline':
   flow key: flow val
-flow seq:
+'flow seq, singleline':
+  - flow val
+  - flow val
+'flow map, multiline':
+  flow key: flow val
+'flow seq, multiline':
   - flow val
   - flow val
 )");
-        // set all keys to single-quoted:
-        tree.rootref().set_style_conditionally(/*type_mask*/ryml::KEY,
-                                               /*remflags*/ryml::KEY_STYLE,
-                                               /*addflags*/ryml::KEY_SQUO,
-                                               /*recurse*/true);
-        // set all vals to double-quoted
-        tree.rootref().set_style_conditionally(/*type_mask*/ryml::VAL,
-                                               /*remflags*/ryml::VAL_STYLE,
-                                               /*addflags*/ryml::VAL_DQUO,
-                                               /*recurse*/true);
-        // set all seqs to flow
-        tree.rootref().set_style_conditionally(/*type_mask*/ryml::SEQ,
-                                               /*remflags*/ryml::CONTAINER_STYLE,
-                                               /*addflags*/ryml::FLOW_SL,
-                                               /*recurse*/true);
-        // set all maps to flow
-        tree.rootref().set_style_conditionally(/*type_mask*/ryml::MAP,
-                                               /*remflags*/ryml::CONTAINER_STYLE,
-                                               /*addflags*/ryml::BLOCK,
-                                               /*recurse*/true);
-        // done!
-        CHECK(ryml::emitrs_yaml<std::string>(tree) ==
-R"('block map':
+    // change all keys to single-quoted:
+    tree.rootref().set_style_conditionally(/*type_mask*/ryml::KEY,
+                                           /*remflags*/ryml::KEY_STYLE,
+                                           /*addflags*/ryml::KEY_SQUO,
+                                           /*recurse*/true);
+    // change all vals to double-quoted
+    tree.rootref().set_style_conditionally(/*type_mask*/ryml::VAL,
+                                           /*remflags*/ryml::VAL_STYLE,
+                                           /*addflags*/ryml::VAL_DQUO,
+                                           /*recurse*/true);
+    // change all seqs to flow
+    tree.rootref().set_style_conditionally(/*type_mask*/ryml::SEQ,
+                                           /*remflags*/ryml::CONTAINER_STYLE,
+                                           /*addflags*/ryml::FLOW_SL,
+                                           /*recurse*/true);
+    // change all maps to flow
+    tree.rootref().set_style_conditionally(/*type_mask*/ryml::MAP,
+                                           /*remflags*/ryml::CONTAINER_STYLE,
+                                           /*addflags*/ryml::BLOCK,
+                                           /*recurse*/true);
+    // done!
+    CHECK(tostr(tree) ==
+          R"('block map':
   'block key': "block val"
 'block seq': ["block val 1","block val 2","quoted"]
-'flow map':
+'flow map, singleline':
   'flow key': "flow val"
-'flow seq': ["flow val","flow val"]
+'flow seq, singleline': ["flow val","flow val"]
+'flow map, multiline':
+  'flow key': "flow val"
+'flow seq, multiline': ["flow val","flow val"]
 )");
-        // you can also set a conditional style in a single node:
-        tree["flow seq"].set_style_conditionally(/*type_mask*/ryml::SEQ,
-                                                 /*remflags*/ryml::CONTAINER_STYLE,
-                                                 /*addflags*/ryml::BLOCK,
-                                                 /*recurse*/false);
-        CHECK(ryml::emitrs_yaml<std::string>(tree) ==
-R"('block map':
+    // you can also set a conditional style in a single node (or its branch if recurse is true):
+    tree["flow seq, singleline"].set_style_conditionally(/*type_mask*/ryml::SEQ,
+                                                         /*remflags*/ryml::CONTAINER_STYLE,
+                                                         /*addflags*/ryml::BLOCK,
+                                                         /*recurse*/false);
+    CHECK(tostr(tree) ==
+          R"('block map':
   'block key': "block val"
 'block seq': ["block val 1","block val 2","quoted"]
-'flow map':
+'flow map, singleline':
   'flow key': "flow val"
-'flow seq':
+'flow seq, singleline':
   - "flow val"
   - "flow val"
+'flow map, multiline':
+  'flow key': "flow val"
+'flow seq, multiline': ["flow val","flow val"]
 )");
-    }
     // see also:
     //  - ryml::scalar_style_choose()
     //  - ryml::scalar_style_json_choose()
     //  - ryml::scalar_style_query_squo()
     //  - ryml::scalar_style_query_plain()
+}
+
+
+//-----------------------------------------------------------------------------
+
+/** [experimental] control the indentation of emitted FLOW_ML containers */
+void sample_style_flow_ml_indent()
+{
+    // we will be using this helper throughout this function
+    auto tostr = [](ryml::ConstNodeRef n, ryml::EmitOptions opts) {
+        return ryml::emitrs_yaml<std::string>(n, opts);
+    };
+    ryml::csubstr yaml = "{map: {seq: [0, 1, 2, 3, [40, 41]]}}";
+    ryml::Tree tree = ryml::parse_in_arena(yaml);
+    ryml::EmitOptions defaults = {};
+    ryml::EmitOptions noindent = ryml::EmitOptions{}.indent_flow_ml(false);
+    CHECK(tostr(tree, defaults) == "{map: {seq: [0,1,2,3,[40,41]]}}");
+    // let's now set the style to FLOW_ML (it was FLOW_SL)
+    tree.rootref().set_container_style(ryml::FLOW_ML);
+    tree["map"].set_container_style(ryml::FLOW_ML);
+    tree["map"]["seq"].set_container_style(ryml::FLOW_ML);
+    tree["map"]["seq"][4].set_container_style(ryml::FLOW_ML);
+    // by default FLOW_ML prints one value per line, indented:
+    CHECK(tostr(tree, defaults) ==
+          R"({
+  map: {
+    seq: [
+      0,
+      1,
+      2,
+      3,
+      [
+        40,
+        41
+      ]
+    ]
+  }
+}
+)");
+    // if we use the noindent options, then each value is put at the
+    // beginning of the line
+    CHECK(tostr(tree, noindent) ==
+          R"({
+map: {
+seq: [
+0,
+1,
+2,
+3,
+[
+40,
+41
+]
+]
+}
+}
+)");
+    // Note that the noindent option will safely respect any prior
+    // indent level from enclosing block containers! For example:
+    tree.rootref().set_container_style(ryml::BLOCK);
+    CHECK(tostr(tree, noindent) == // notice it is indented at the map level
+          R"(map: {
+  seq: [
+  0,
+  1,
+  2,
+  3,
+  [
+  40,
+  41
+  ]
+  ]
+  }
+)");
+    // Let's set it one BLOCK level further:
+    tree["map"].set_container_style(ryml::BLOCK);
+    CHECK(tostr(tree, noindent) == // notice it is indented one more level
+          R"(map:
+  seq: [
+    0,
+    1,
+    2,
+    3,
+    [
+    40,
+    41
+    ]
+    ]
+)");
+}
+
+
+//-----------------------------------------------------------------------------
+
+/** [experimental] set the parser to pick FLOW_SL even if the
+ * container being parsed is FLOW_ML */
+void sample_style_flow_ml_filter()
+{
+    ryml::csubstr yaml = R"({
+  map: {
+    seq: [
+      0,
+      1,
+      2,
+      3,
+      [
+        40,
+        41
+      ]
+    ]
+  }
+}
+)";
+    ryml::csubstr yaml_not_indented = R"({
+map: {
+seq: [
+0,
+1,
+2,
+3,
+[
+40,
+41
+]
+]
+}
+}
+)";
+    // note that the parser defaults to detect multiline flow
+    // (FLOW_ML) containers:
+    {
+        const ryml::Tree tree = ryml::parse_in_arena(yaml);
+        CHECK(tree["map"].is_flow_ml()); // etc
+        // emitted yaml is exactly equal to parsed yaml:
+        CHECK(ryml::emitrs_yaml<std::string>(tree) == yaml);
+    }
+    // if you prefer to shorten the emitted yaml, you can set the
+    // parser to set singleline flow (FLOW_SL) on all flow containers:
+    {
+        const ryml::ParserOptions opts = ryml::ParserOptions{}.detect_flow_ml(false);
+        const ryml::Tree tree = ryml::parse_in_arena(yaml, opts);
+        CHECK(tree["map"].is_flow_sl()); // etc
+        // notice how this is smaller now:
+        CHECK(ryml::emitrs_yaml<std::string>(tree) ==
+              R"({map: {seq: [0,1,2,3,[40,41]]}})");
+    }
+    // you can also keep FLOW_ML, but control its indentation:
+    // (see more details in @ref sample_style_flow_ml_indent())
+    {
+        const ryml::EmitOptions noindent = ryml::EmitOptions{}.indent_flow_ml(false);
+        const ryml::Tree tree = ryml::parse_in_arena(yaml);
+        CHECK(tree["map"].is_flow_ml()); // etc
+        CHECK(ryml::emitrs_yaml<std::string>(tree, noindent) == yaml_not_indented);
+    }
 }
 
 
@@ -4397,11 +4737,12 @@ R"('block map':
 void sample_json()
 {
     ryml::csubstr json = R"({
-  "doe":"a deer, a female deer",
-  "ray":"a drop of golden sun",
-  "me":"a name, I call myself",
-  "far":"a long long way to go"
-})";
+  "doe": "a deer, a female deer",
+  "ray": "a drop of golden sun",
+  "me": "a name, I call myself",
+  "far": "a long long way to go"
+}
+)";
     // Since JSON is a subset of YAML, parsing JSON is just the
     // same as YAML:
     ryml::Tree tree = ryml::parse_in_arena(json);
@@ -4409,13 +4750,13 @@ void sample_json()
     // appropriate parse_json overload, which is faster because json
     // has a smaller grammar:
     ryml::Tree json_tree = ryml::parse_json_in_arena(json);
-    // to emit JSON, use the proper overload:
-    CHECK(ryml::emitrs_json<std::string>(tree) == R"({"doe": "a deer, a female deer","ray": "a drop of golden sun","me": "a name, I call myself","far": "a long long way to go"})");
-    CHECK(ryml::emitrs_json<std::string>(json_tree) == R"({"doe": "a deer, a female deer","ray": "a drop of golden sun","me": "a name, I call myself","far": "a long long way to go"})");
+    // to emit JSON:
+    CHECK(ryml::emitrs_json<std::string>(tree) == json);
+    CHECK(ryml::emitrs_json<std::string>(json_tree) == json);
     // to emit JSON to a stream:
     std::stringstream ss;
     ss << ryml::as_json(tree);  // <- mark it like this
-    CHECK(ss.str() == R"({"doe": "a deer, a female deer","ray": "a drop of golden sun","me": "a name, I call myself","far": "a long long way to go"})");
+    CHECK(ss.str() == json);
     // Note the following limitations:
     //
     // - YAML streams cannot be emitted as json, and are not
@@ -4432,11 +4773,12 @@ void sample_json()
     // Note that when parsing JSON, ryml will the style of each node
     // in the JSON. This means that if you emit as YAML it will look
     // mostly the same as the JSON:
-    CHECK(ryml::emitrs_yaml<std::string>(json_tree) == R"({"doe": "a deer, a female deer","ray": "a drop of golden sun","me": "a name, I call myself","far": "a long long way to go"})");
+    std::cout << ryml::emitrs_yaml<std::string>(json_tree);
+    CHECK(ryml::emitrs_yaml<std::string>(json_tree) == json);
     // If you want to avoid this, you will need to clear the style.
     json_tree.rootref().clear_style(); // clear the style of the map, but do not recurse
     // note that this is now block mode. That is because when no
-    // style is set, the emit function will default to block mode.
+    // style is set, the YAML emit function will default to block mode.
     CHECK(ryml::emitrs_yaml<std::string>(json_tree) ==
           R"("doe": "a deer, a female deer"
 "ray": "a drop of golden sun"
@@ -4446,8 +4788,8 @@ void sample_json()
     // if you don't want the double quotes in the scalar, you can
     // recurse:
     json_tree.rootref().clear_style(/*recurse*/true);
-    // so now you when emittingwill get this:
-    // (the scalars with a comma are single-qu)
+    // so now when emitting you will get this:
+    // (the scalars with a comma are single-quote)
     CHECK(ryml::emitrs_yaml<std::string>(json_tree) ==
           R"(doe: 'a deer, a female deer'
 ray: a drop of golden sun
@@ -4911,14 +5253,14 @@ d: 3
     // tree as json when you start from the root:
     //CHECK(ryml::emitrs_json<std::string>(tree) == yml); // RUNTIME ERROR!
 
-    // emitting streams as json is not possible, but
+    // but, althouth emitting streams as json is not possible,
     // you can iterate through individual documents and emit
     // them separately:
     {
         const std::string expected_json[] = {
-            R"({"a": 0,"b": 1})",
-            R"({"c": 2,"d": 3})",
-            R"([4,5,6,7])",
+            "{\n  \"a\": 0,\n  \"b\": 1\n}\n",
+            "{\n  \"c\": 2,\n  \"d\": 3\n}\n",
+            "[\n  4,\n  5,\n  6,\n  7\n]\n",
         };
         // using the node API
         {
@@ -4926,7 +5268,9 @@ d: 3
             const ryml::ConstNodeRef stream = tree.rootref();
             CHECK(stream.num_children() == (ryml::id_type)C4_COUNTOF(expected_json));
             for(ryml::ConstNodeRef doc : stream.children())
+            {
                 CHECK(ryml::emitrs_json<std::string>(doc) == expected_json[count++]);
+            }
         }
         // equivalent: using the index API
         {
@@ -4934,7 +5278,9 @@ d: 3
             const ryml::id_type stream_id = tree.root_id();
             CHECK(tree.num_children(stream_id) == (ryml::id_type)C4_COUNTOF(expected_json));
             for(ryml::id_type doc_id = tree.first_child(stream_id); doc_id != ryml::NONE; doc_id = tree.next_sibling(doc_id))
+            {
                 CHECK(ryml::emitrs_json<std::string>(tree, doc_id) == expected_json[count++]);
+            }
         }
     }
 }
@@ -4942,11 +5288,11 @@ d: 3
 
 //-----------------------------------------------------------------------------
 
-// To avoid imposing a particular type of error handling, ryml uses an
-// error handler callback. This enables users to use exceptions, or
+// To avoid imposing a particular type of error handling, ryml uses
+// error handler callbacks. This enables users to use exceptions, or
 // setjmp()/longjmp(), or plain calls to abort(), as they see fit.
 //
-// However, it is important to note that the error callback must never
+// However, it is important to note that the error callbacks must never
 // return to the caller! Otherwise, an infinite loop or program crash
 // will likely occur.
 //
@@ -4954,7 +5300,7 @@ d: 3
 // then a non-local jump must be performed using setjmp()/longjmp().
 // The code below demonstrates both flows.
 //
-// ryml provides a default error handler, which calls
+// ryml provides default error handlers, which call
 // std::abort(). You can use the cmake option and the macro
 // RYML_DEFAULT_CALLBACK_USES_EXCEPTIONS to have the default error
 // handler throw an exception instead.
@@ -4962,19 +5308,377 @@ d: 3
 /** demonstrates how to set a custom error handler for ryml */
 void sample_error_handler()
 {
-    ErrorHandlerExample errh;
-
-    // set a global error handler. Note the error callback must never
-    // return: it must either throw an exception, use setjmp() and
-    // longjmp(), or abort. Otherwise, the parser will enter into an
-    // infinite loop, or the program may crash.
+    ErrorHandlerExample errh; // browse the implementation of this
+                              // class to understand more details
+    errh.check_disabled();
+    // set the global error handlers. Note the error callbacks must
+    // never return: they must either throw an exception, use setjmp()
+    // and longjmp(), or abort. Otherwise, the parser will enter into
+    // an infinite loop, or the program may crash.
     ryml::set_callbacks(errh.callbacks());
-    errh.check_effect(/*committed*/true);
+    errh.check_enabled();
     CHECK(errh.check_error_occurs([&]{
         ryml::Tree tree = ryml::parse_in_arena("errorhandler.yml", "[a: b\n}");
     }));
-    ryml::set_callbacks(errh.defaults); // restore defaults.
-    errh.check_effect(/*committed*/false);
+    ryml::set_callbacks(errh.original_callbacks); // restore defaults.
+    errh.check_disabled();
+}
+
+
+//-----------------------------------------------------------------------------
+
+void sample_error_basic()
+{
+    auto cause_basic_error = []{
+        ryml::TagDirective tag = {};
+        return tag.create_from_str("%%%TAG abc");
+    };
+    {
+        ScopedErrorHandlerExample errh; // set the example callbacks (scoped)
+        CHECK(errh.check_error_occurs(cause_basic_error));
+    }
+#ifdef _RYML_WITH_EXCEPTIONS
+    bool gotit = false;
+    try
+    {
+        cause_basic_error();
+    }
+    catch(ryml::ExceptionBasic const& exc)
+    {
+        gotit = true;
+        ryml::csubstr msg = ryml::to_csubstr(exc.what());
+        CHECK(!exc.errdata_basic.location.name.empty());
+        CHECK(!msg.empty());
+    }
+    CHECK(gotit);
+#endif
+}
+
+void sample_error_parse()
+{
+    ryml::csubstr ymlsrc = R"({
+  a: b
+   [
+)";
+    ryml::csubstr ymlfile = "file.yml";
+    auto cause_parse_error = [&]{
+        return ryml::parse_in_arena(ymlfile, ymlsrc);
+    };
+    // the YAML in ymlsrc must cause a parse error while it is being
+    // parsed. We use our error handler to catch that error, and save
+    // the error info:
+    ErrorHandlerExample errh;
+    {
+        ryml::set_callbacks(errh.callbacks());
+        CHECK(errh.check_error_occurs(cause_parse_error));
+        // the handler in errh saves the error info in itself. Let's
+        // use that to see the messages we get.
+        //
+        // this message is the short message passed into the parse
+        // error handler:
+        CHECK(errh.saved_msg_short == "invalid character: '['");
+        // this message was created inside the handler, by calling
+        // ryml::err_parse_format():
+        CHECK(ryml::to_csubstr(errh.saved_msg_full).begins_with("file.yml:3: col=4 (12B): ERROR: [parse] invalid character: '['"));
+        // If you keep the YAML source buffer around, you can also use
+        // it to create/print a larger error message showing the
+        // YAML source code context which causes the error:
+        std::string msg_ctx = errh.saved_msg_full + "\n";
+        ryml::location_format_with_context([&msg_ctx](ryml::csubstr s){
+            msg_ctx.append(s.str, s.len);
+        }, errh.saved_parse_loc, ymlsrc, "err");
+        CHECK(ryml::to_csubstr(msg_ctx).begins_with("file.yml:3: col=4 (12B): ERROR: [parse] invalid character: '['"));
+        CHECK(ryml::to_csubstr(msg_ctx).ends_with(R"(file.yml:3: col=4 (12B): err:
+err:
+err:        [
+err:         |
+err:         (here)
+err:
+err: see region:
+err:
+err:     {
+err:       a: b
+err:        [
+err:         |
+err:         (here)
+)"));
+        //
+        // Let's now check the location (see the message above):
+        CHECK(errh.saved_parse_loc.name == ymlfile);
+        CHECK(errh.saved_parse_loc.line == 3);
+        CHECK(errh.saved_parse_loc.col == 4);
+        CHECK(errh.saved_parse_loc.offset == 12);
+        CHECK(errh.saved_parse_loc.offset <= ymlsrc.len);
+        // ... and this is the location in the ryml source code file where
+        // this error was found:
+        CHECK(!errh.saved_basic_loc.name.empty());
+        CHECK(errh.saved_basic_loc.line > 0);
+        CHECK(errh.saved_basic_loc.col > 0);
+        CHECK(errh.saved_basic_loc.offset > 0);
+        ryml::set_callbacks(errh.original_callbacks);
+    }
+    // A parse error is also a basic error. If no parse error handler
+    // is set, then ryml falls back to a basic error:
+    {
+        ryml::Callbacks cb = errh.callbacks();
+        cb.m_error_parse = nullptr;
+        ryml::set_callbacks(cb);
+        CHECK(ryml::get_callbacks().m_error_parse == nullptr);
+        CHECK(errh.check_error_occurs(cause_parse_error));
+        // we got a basic error instead of a parse error:
+        CHECK(errh.saved_msg_short == "invalid character: '['");
+        // notice that the full message now displays this as a basic
+        // error:
+        CHECK(errh.saved_msg_full == "file.yml:3: col=4 (12B): ERROR: [basic] invalid character: '['");
+        // the yml location is now in the location saved from the basic error
+        CHECK(errh.saved_basic_loc.name == ymlfile);
+        CHECK(errh.saved_basic_loc.line == 3);
+        CHECK(errh.saved_basic_loc.col == 4);
+        CHECK(errh.saved_basic_loc.offset == 12);
+        CHECK(errh.saved_basic_loc.offset <= ymlsrc.len);
+        CHECK(errh.saved_parse_loc.name == ryml::csubstr{});
+        CHECK(errh.saved_parse_loc.line == ryml::csubstr::npos);
+        CHECK(errh.saved_parse_loc.col == ryml::csubstr::npos);
+        CHECK(errh.saved_parse_loc.offset == ryml::csubstr::npos);
+        ryml::set_callbacks(errh.original_callbacks);
+    }
+#ifdef _RYML_WITH_EXCEPTIONS
+    bool gotit = false;
+    try
+    {
+        cause_parse_error();
+    }
+    catch(ryml::ExceptionParse const& exc)
+    {
+        gotit = true;
+        ryml::csubstr msg = ryml::to_csubstr(exc.what());
+        CHECK(exc.errdata_parse.ymlloc.name == ymlfile);
+        CHECK(exc.errdata_parse.ymlloc.line == 3);
+        CHECK(exc.errdata_parse.ymlloc.col == 4);
+        CHECK(exc.errdata_parse.ymlloc.offset == 12);
+        CHECK(exc.errdata_parse.ymlloc.offset <= ymlsrc.len);
+        // the message saved in the exception is just the concrete error description:
+        CHECK(msg == "invalid character: '['");
+        // to print richer error messages, ryml provides helpers to
+        // format that description into a complete error message,
+        // containing location and source context indication:
+        std::string full;
+        auto dumpfn = [&full](ryml::csubstr s) { full.append(s.str, s.len); };
+        ryml::err_parse_format(dumpfn, msg, exc.errdata_parse);
+        full += '\n';
+        ryml::location_format_with_context(dumpfn, exc.errdata_parse.ymlloc, ymlsrc, "err", 3);
+        CHECK(ryml::to_csubstr(full).begins_with("file.yml:3: col=4 (12B): ERROR: [parse] invalid character: '['"));
+        CHECK(ryml::to_csubstr(full).ends_with(R"(file.yml:3: col=4 (12B): err:
+err:
+err:        [
+err:         |
+err:         (here)
+err:
+err: see region:
+err:
+err:     {
+err:       a: b
+err:        [
+err:         |
+err:         (here)
+)"));
+    }
+    CHECK(gotit);
+    gotit = false;
+    try
+    {
+        cause_parse_error();
+    }
+    catch(ryml::ExceptionBasic const& exc) // use references! don't slice the exception
+    {
+        gotit = true;
+        ryml::csubstr msg = ryml::to_csubstr(exc.what());
+        CHECK(!exc.errdata_basic.location.name.empty());
+        CHECK(!msg.empty());
+    }
+    CHECK(gotit);
+#endif
+}
+
+
+/** Visit errors happen when an error is triggered while reading from
+ * a node. */
+void sample_error_visit()
+{
+    ryml::csubstr ymlfile = "file.yml";
+    ryml::csubstr ymlsrc = "float: 123.456";
+    ErrorHandlerExample errh;
+    {
+        ryml::set_callbacks(errh.callbacks());
+        ryml::Tree tree = ryml::parse_in_arena(ymlfile, ymlsrc);
+        CHECK(errh.check_error_occurs([&]{
+            int intval = 0;
+            tree["float"] >> intval; // cannot deserialize 123.456 to int
+        }));
+        // the handler in errh saves the error info in itself. Let's
+        // use that to see the messages we get.
+        //
+        // this message is the short message passed into the visit error
+        CHECK(errh.saved_msg_short == "could not deserialize value");
+        // this message was created inside the handler, by calling
+        // ryml::err_visit_format():
+        CHECK(ryml::csubstr::npos != ryml::to_csubstr(errh.saved_msg_full).find("ERROR: [visit] could not deserialize value"));
+        // The location of the visit error is of the C++ source file where
+        // the error was detected -- NOT of the YAML source file:
+        CHECK(errh.saved_basic_loc.name != ymlfile);
+        // However, note that the tree and node id are available:
+        CHECK(errh.saved_visit_tree == &tree);
+        CHECK(errh.saved_visit_id == tree["float"].id());
+        // see sample_error_visit_location() for an example on how
+        // to extract the location.
+    }
+    // visit errors also fall back to basic errors when the visit
+    // handler is not set (similar to the behavior of ExceptionVisit):
+    {
+        ryml::Callbacks cb = errh.callbacks();
+        cb.m_error_visit = nullptr;
+        ryml::set_callbacks(cb);
+        CHECK(ryml::get_callbacks().m_error_visit == nullptr);
+        ryml::Tree tree = ryml::parse_in_arena(ymlfile, ymlsrc);
+        CHECK(errh.check_error_occurs([&]{
+            int intval = 0;
+            tree["float"] >> intval; // cannot deserialize 123.456 to int
+        }));
+        // we got a basic error instead of a visit error:
+        CHECK(errh.saved_msg_short == "could not deserialize value");
+        // notice that the full message now displays this as a basic
+        // error:
+        CHECK(ryml::csubstr::npos != ryml::to_csubstr(errh.saved_msg_full).find("ERROR: [basic] could not deserialize value"));
+        // the tree and id are not set, because this was called as a basic error
+        CHECK(errh.saved_visit_tree == nullptr);
+        CHECK(errh.saved_visit_id == ryml::NONE);
+        ryml::set_callbacks(errh.original_callbacks);
+    }
+#ifdef _RYML_WITH_EXCEPTIONS
+    // when using the default ryml callbacks (see
+    // RYML_NO_DEFAULT_CALLBACKS), and
+    // RYML_DEFAULT_CALLBACK_USES_EXCEPTIONS is defined, the ryml
+    // parse handler throws an exception of type ryml::ExceptionVisit,
+    // which is derived from ryml::ExceptionBasic.
+    {
+        const ryml::Tree tree = ryml::parse_in_arena(ymlfile, ymlsrc);
+        bool gotit = false;
+        try
+        {
+            int intval = 0;
+            tree["float"] >> intval; // cannot deserialize 123.456 to int
+        }
+        catch(ryml::ExceptionVisit const& exc)
+        {
+            gotit = true;
+            ryml::csubstr msg = ryml::to_csubstr(exc.what());
+            CHECK(!exc.errdata_visit.cpploc.name.empty());
+            CHECK(exc.errdata_visit.tree == &tree);
+            CHECK(exc.errdata_visit.node == tree["float"].id());
+            CHECK(!msg.empty());
+        }
+        CHECK(gotit);
+    }
+    // you can also catch the exception as its base,
+    // ryml::ExceptionBasic:
+    {
+        const ryml::Tree tree = ryml::parse_in_arena(ymlfile, ymlsrc);
+        bool gotit = false;
+        try
+        {
+            int intval = 0;
+            tree["float"] >> intval; // cannot deserialize 123.456 to int
+        }
+        catch(ryml::ExceptionBasic const& exc) // use references! don't slice the exception
+        {
+            gotit = true;
+            ryml::csubstr msg = ryml::to_csubstr(exc.what());
+            CHECK(!exc.errdata_basic.location.name.empty());
+            CHECK(!msg.empty());
+        }
+        CHECK(gotit);
+    }
+#endif
+}
+
+
+/** It is possible to obtain the YAML location from a visit
+ * error: when the tree is obtained from parsing YAML, the messages
+ * may be enriched by using a parser set to track the locations. See
+ * @ref sample_location_tracking() for more details on how to use
+ * locations. */
+void sample_error_visit_location()
+{
+    ScopedErrorHandlerExample errh;
+    // we will use locations to show the YAML source context of the
+    // node where the visit error was triggered. This is a very
+    // convenient feature to show detailed messages when deserializing
+    // data read from a file (but do note this is opt-in, and it is
+    // not mandatory). See sample_location_tracking() for more details
+    // on location tracking.
+    ryml::ParserOptions opts = ryml::ParserOptions{}.locations(true);
+    ryml::EventHandlerTree evt_handler{};
+    ryml::Parser parser(&evt_handler, opts);
+    ryml::csubstr ymlfile = "file.yml";
+    ryml::csubstr ymlsrc = R"(foo: bar
+char: a
+int: a
+float: 123.456
+)";
+    const ryml::Tree tree = ryml::parse_in_arena(&parser, ymlfile, ymlsrc);
+    // This function will cause a visit error when being called:
+    auto cause_visit_error = [&]{
+        int intval = 0;
+        tree["float"] >> intval; // cannot deserialize 123.456 to int
+    };
+    // Like with the parse error, we will use our error handler to
+    // catch that visit error, and save the error info:
+    CHECK(evt_handler.callbacks() == errh.callbacks());
+    CHECK(parser.callbacks() == errh.callbacks());
+    CHECK(tree.callbacks() == errh.callbacks());
+    {
+        CHECK(errh.check_error_occurs(cause_visit_error));
+        // the handler in errh saves the error info in itself. Let's
+        // use that to see the messages we get.
+        //
+        // this message is the short message passed into the visit error
+        CHECK(errh.saved_msg_short == "could not deserialize value");
+        // this message was created inside the handler, by calling
+        // ryml::err_visit_format():
+        CHECK(ryml::csubstr::npos != ryml::to_csubstr(errh.saved_msg_full).find("ERROR: [visit] could not deserialize value"));
+        // The location of the visit error is of the C++ source file where
+        // the error was detected -- NOT of the YAML source file:
+        CHECK(errh.saved_basic_loc.name != ymlfile);
+        // However, note that the tree and node id are available:
+        CHECK(errh.saved_visit_tree == &tree);
+        CHECK(errh.saved_visit_id == tree["float"].id());
+        // ... which we can use to get the location in the YAML source
+        // from the parser (but see @ref sample_location_tracking()):
+        ryml::Location ymlloc = errh.saved_visit_tree->location(parser, errh.saved_visit_id);
+        CHECK(ymlloc.name == ymlfile);
+        // In turn, we can use format_location_context() to
+        // print/create an error message pointing at the YAML source
+        // code:
+        std::string msg = errh.saved_msg_full;
+        ryml::location_format_with_context([&msg](ryml::csubstr s){
+            msg.append(s.str, s.len);
+        }, ymlloc, ymlsrc, "err", /*number of lines to show before the error*/3);
+        CHECK(ryml::to_csubstr(msg).ends_with(R"(file.yml:3: col=0 (24B): err:
+err:
+err:     float: 123.456
+err:     |
+err:     (here)
+err:
+err: see region:
+err:
+err:     foo: bar
+err:     char: a
+err:     int: a
+err:     float: 123.456
+err:     |
+err:     (here)
+)"));
+    }
 }
 
 
@@ -5039,7 +5743,10 @@ struct GlobalAllocatorExample
     // bridge
     ryml::Callbacks callbacks()
     {
-        return ryml::Callbacks(this, &GlobalAllocatorExample::s_allocate, &GlobalAllocatorExample::s_free, nullptr);
+        ryml::Callbacks cb = {};
+        return cb.set_user_data(this)
+            .set_allocate(&GlobalAllocatorExample::s_allocate)
+            .set_free(&GlobalAllocatorExample::s_free);
     }
     static void* s_allocate(size_t len, void* /*hint*/, void *this_)
     {
@@ -5047,7 +5754,7 @@ struct GlobalAllocatorExample
     }
     static void s_free(void *mem, size_t len, void *this_)
     {
-        return ((GlobalAllocatorExample*)this_)->free(mem, len);
+        ((GlobalAllocatorExample*)this_)->free(mem, len);
     }
 
     // checking
@@ -5231,17 +5938,18 @@ void sample_per_tree_allocator()
  * @see https://en.cppreference.com/w/cpp/language/siof */
 void sample_static_trees()
 {
-    // Using static trees incurs may incur a static initialization
-    // order problem. This happens because a default-constructed tree will
+    // Static trees may incur a static initialization order
+    // problem. This happens because a default-constructed tree will
     // obtain the callbacks from the current global setting, which may
-    // not have been initialized due to undefined static initialization
-    // order:
+    // not have been initialized due to undefined static
+    // initialization order:
     //
-    //static ryml::Tree tree;  // ERROR! depends on ryml::get_callbacks() which may not have been initialized.
+    // ERROR! depends on ryml::get_callbacks() which may not have been initialized.
+    //static ryml::Tree tree;
     //
     // To work around the issue, declare static callbacks
     // to explicitly initialize the static tree:
-    static ryml::Callbacks callbacks = {}; // use default callback members
+    static ryml::Callbacks callbacks = default_callbacks(); // use default callback members
     static ryml::Tree tree(callbacks); // OK
     // now you can use the tree as normal:
     ryml::parse_in_arena(R"(doe: "a deer, a female deer")", &tree);
@@ -5448,7 +6156,7 @@ bool report_check(int line, const char *predicate, bool result)
     if(!result)
     {
         ++num_failed_checks;
-        msg = predicate ?  "ERROR: " : "ERROR";
+        msg = predicate ?  "FAIL: " : "FAIL";
     }
     std::cout << __FILE__ << ':' << line << ": " << msg << (predicate ? predicate : "") << std::endl;
     return result;
@@ -5465,105 +6173,286 @@ int report_checks()
     return num_failed_checks;
 }
 
-// methods for the example error handler
 
-// this macro selects code for when exceptions are enabled/disabled
-C4_IF_EXCEPTIONS_( /*nothing for exceptions*/ ,
-                   /*environment for setjmp*/
-                   static std::jmp_buf s_jmp_env;
-                   static std::string s_jmp_msg;
-                   )
+//-----------------------------------------------------------------------------
+// methods to provide default callbacks (needed when
+// RYML_NO_DEFAULT_CALLBACKS is defined)
 
-// checking
-template<class Fn>
-C4_NODISCARD bool ErrorHandlerExample::check_error_occurs(Fn &&fn) const
+namespace {
+// LCOV_EXCL_START
+/** dump (part of an) error message to terminal
+ * @ingroup doc_sample_helpers */
+void errdump(ryml::csubstr s)
 {
-    bool expected_error_occurred = false;
-    C4_IF_EXCEPTIONS_(try, if(setjmp(s_jmp_env) == 0)) // selectively picks based on availability of exceptions
-    {
-        fn();
-    }
-    C4_IF_EXCEPTIONS_(catch(...), else)
-    {
-        expected_error_occurred = true;
-    }
-    return expected_error_occurred;
+    if(s.len)
+        fwrite(s.str, 1, s.len, stderr); // NOLINT
 }
-template<class Fn>
-C4_NODISCARD bool ErrorHandlerExample::check_assertion_occurs(Fn &&fn) const
+/** finish printing an error message, and flush
+ * @ingroup doc_sample_helpers */
+void errend()
 {
-#if RYML_USE_ASSERT
-    return check_error_occurs(fn);
-#else
-    (void)fn; // do nothing otherwise, as there would be undefined behavior
-    return true;
+    fputc('\n', stderr); // NOLINT
+    fflush(NULL); // NOLINT
+}
+// LCOV_EXCL_STOP
+} // namespace
+
+
+/** a bare-bones implementation of the callbacks
+ * @ingroup doc_sample_helpers */
+ryml::Callbacks default_callbacks()
+{
+    return ryml::Callbacks{}
+        .set_allocate([](size_t len, void* , void *){
+            return malloc(len); // NOLINT
+        })
+        .set_free([](void* mem, size_t, void *){
+            free(mem); // NOLINT
+        })
+        //
+        // The error callbacks won't be called in this quickstart,
+        // because no errors are expected. But we implement them here
+        // to show how a bare-bones implementation looks like.
+        //
+        // For a different (more involved) implementation of the error
+        // callbacks, see the implementation of ErrorHandlerExample
+        // below.
+        //
+        // LCOV_EXCL_START
+        .set_error_basic([](ryml::csubstr msg, ryml::ErrorDataBasic const& errdata, void *){
+            ryml::err_basic_format(errdump, msg, errdata); // format the message, printing to stderr
+            errend(); // print newline and flush
+            abort(); // abort (must never return: abort, or exception or setjmp)
+        })
+        .set_error_parse([](ryml::csubstr msg, ryml::ErrorDataParse const& errdata, void *){
+            ryml::err_parse_format(errdump, msg, errdata); // format the message, printing to out
+            errend(); // print newline and flush
+            abort(); // abort (must never return: abort, or exception or setjmp)
+        })
+        .set_error_visit([](ryml::csubstr msg, ryml::ErrorDataVisit const& errdata, void *){
+            ryml::err_visit_format(errdump, msg, errdata); // format the message, printing to out
+            errend(); // print newline and flush
+            abort(); // abort (must never return: abort, or exception or setjmp)
+        });
+        // LCOV_EXCL_STOP
+}
+
+/** set up default callbacks when ryml does not provide them
+ * (ie when @ref RYML_NO_DEFAULT_CALLBACKS is defined)
+ * @ingroup doc_sample_helpers */
+void ensure_callbacks()
+{
+#ifdef RYML_NO_DEFAULT_CALLBACKS
+    ryml::set_callbacks(default_callbacks());
 #endif
 }
 
-/** this C-style callback is the one stored and used by ryml. It is a
- * trampoline function calling on_error() */
-C4_NORETURN void ErrorHandlerExample::s_error(const char* msg, size_t len, ryml::Location loc, void *this_)
-{
-    ((ErrorHandlerExample*)this_)->on_error(msg, len, loc);
-}
-/** this is the where the callback implementation goes. Remember that it must not return. */
-C4_NORETURN void ErrorHandlerExample::on_error(const char* msg, size_t len, ryml::Location loc)
-{
-    std::string full_msg = ryml::formatrs<std::string>(
-        "{}:{}:{} ({}B): ERROR: {}",
-        loc.name, loc.line, loc.col, loc.offset, ryml::csubstr(msg, len));
-    C4_IF_EXCEPTIONS(
-        // this will execute if exceptions are enabled.
-        throw std::runtime_error(full_msg);
-        ,
-        // this will execute if exceptions are disabled. It will
-        // jump to the function calling the corresponding setjmp().
-        s_jmp_msg = full_msg;
-        std::longjmp(s_jmp_env, 1);
-    );
-}
 
-/** a helper to create the Callbacks object with the custom error handler */
-ryml::Callbacks ErrorHandlerExample::callbacks()
-{
-    return ryml::Callbacks(this, nullptr, nullptr, ErrorHandlerExample::s_error);
-}
+//-----------------------------------------------------------------------------
+// methods for the example error handler
 
-void ErrorHandlerExample::check_effect(bool committed) const
+#ifndef C4_EXCEPTIONS
+/*environment for setjmp*/
+static std::jmp_buf s_jmp_env;
+static std::string s_jmp_msg;
+#endif
+
+/** checking that an assertion occurs while calling fn. assertions are
+ * enabled if @ref RYML_USE_ASSERT is defined.
+ * @ingroup doc_sample_helpers */
+template<class Fn>
+bool ErrorHandlerExample::check_assertion_occurs(Fn &&fn)
 {
-    ryml::Callbacks const& current = ryml::get_callbacks();
-    if(committed)
+    #if RYML_USE_ASSERT
+    return check_error_occurs(std::forward<Fn>(fn));
+    #else
+    (void)fn; // do nothing otherwise, as there would be undefined behavior
+    return true;
+    #endif
+}
+/** checking that an error occurs while calling fn
+ * @ingroup doc_sample_helpers */
+template<class Fn>
+bool ErrorHandlerExample::check_error_occurs(Fn &&fn)
+{
+    saved_msg_short.clear();
+    saved_msg_full.clear();
+    saved_msg_full_with_context.clear();
+    saved_basic_loc = {};
+    saved_parse_loc = {};
+    saved_visit_tree = {};
+    saved_visit_id = ryml::NONE;
+    bool got_error = false;
+    #ifdef C4_EXCEPTIONS
+    try
     {
-        CHECK((ryml::pfn_error)current.m_error == &s_error);
+        std::forward<Fn>(fn)();
+    }
+    catch(std::exception const&)
+    {
+        got_error = true;
+    }
+    #else
+    if(setjmp(s_jmp_env) == 0)
+    {
+        std::forward<Fn>(fn)();
     }
     else
     {
-        CHECK((ryml::pfn_error)current.m_error != &s_error);
+        got_error = true;
     }
-    CHECK(current.m_allocate == defaults.m_allocate);
-    CHECK(current.m_free == defaults.m_free);
+    #endif
+    return got_error;
+}
+
+namespace {
+/** interrupt execution
+ * @ingroup doc_sample_helpers */
+[[noreturn]] void stopexec(std::string const& s)
+{
+    #ifdef C4_EXCEPTIONS
+    throw std::runtime_error(s);
+    #else
+    s_jmp_msg = s;
+    std::longjmp(s_jmp_env, 1);  // jump to the corresponding call to setjmp().
+    #endif
+}
+} // namespace
+/** this is where the callback implementation goes. Remember that it must not return.
+ * @ingroup doc_sample_helpers
+ * */
+[[noreturn]] void ErrorHandlerExample::on_error_basic(ryml::csubstr msg, ryml::ErrorDataBasic const& errdata)
+{
+    saved_msg_short.assign(msg.str, msg.len);
+    // build a full error message with location
+    ryml::err_basic_format([this](ryml::csubstr s){
+        saved_msg_full.append(s.str, s.len);
+    }, msg, errdata);
+    // Save the error params for subsequent testing in the quickstart.
+    saved_msg_full_with_context = saved_msg_full;
+    saved_basic_loc = errdata.location;
+    stopexec(saved_msg_short);
+}
+/** this is where the callback implementation goes. Remember that it must not return.
+ * @ingroup doc_sample_helpers
+ * @see ryml::format_location_context
+ * */
+[[noreturn]] void ErrorHandlerExample::on_error_parse(ryml::csubstr msg, ryml::ErrorDataParse const& errdata)
+{
+    saved_msg_short.assign(msg.str, msg.len);
+    // build a full error message with location
+    ryml::err_parse_format([this](ryml::csubstr s){
+        saved_msg_full.append(s.str, s.len);
+    }, msg, errdata);
+    // Save the error params for subsequent testing in the quickstart.
+    //
+    // To add the source context, the source buffer is required. If
+    // the caller is interested in enriching the full message with the
+    // source buffer context, he can ensure that the source buffer is
+    // kept, and then arrange the handler to access it.
+    // For now, we assign the full message without context:
+    saved_msg_full_with_context = saved_msg_full;
+    saved_basic_loc = errdata.cpploc;
+    saved_parse_loc = errdata.ymlloc;
+    stopexec(saved_msg_full);
+}
+/** this is where the callback implementation goes. Remember that it must not return.
+ * @ingroup doc_sample_helpers
+ * */
+[[noreturn]] void ErrorHandlerExample::on_error_visit(ryml::csubstr msg, ryml::ErrorDataVisit const& errdata)
+{
+    saved_msg_short.assign(msg.str, msg.len);
+    // build a full error message with location
+    ryml::err_visit_format([this](ryml::csubstr s){
+        saved_msg_full.append(s.str, s.len);
+    }, msg, errdata);
+    // Save the error params for subsequent testing in the quickstart.
+    //
+    // To add the source context, the source buffer is required. If
+    // the caller is interested in enriching the full message with the
+    // source buffer context, he can ensure that the source buffer is
+    // kept, and then arrange the handler to access it.
+    // For now, we assign the full message without context:
+    saved_msg_full_with_context = saved_msg_full;
+    saved_basic_loc = errdata.cpploc;
+    saved_visit_tree = errdata.tree;
+    saved_visit_id = errdata.node;
+    stopexec(saved_msg_full);
+}
+
+/** trampoline function to call the object's method */
+[[noreturn]] void ErrorHandlerExample::s_error_basic(ryml::csubstr msg, ryml::ErrorDataBasic const& errdata, void *this_)
+{
+    static_cast<ErrorHandlerExample*>(this_)->on_error_basic(msg, errdata);
+}
+/** trampoline function to call the object's method */
+[[noreturn]] void ErrorHandlerExample::s_error_parse(ryml::csubstr msg, ryml::ErrorDataParse const& errdata, void *this_)
+{
+    static_cast<ErrorHandlerExample*>(this_)->on_error_parse(msg, errdata);
+}
+/** trampoline function to call the object's method */
+[[noreturn]] void ErrorHandlerExample::s_error_visit(ryml::csubstr msg, ryml::ErrorDataVisit const& errdata, void *this_)
+{
+    static_cast<ErrorHandlerExample*>(this_)->on_error_visit(msg, errdata);
 }
 
 
+/** a helper to create the Callbacks object for the custom error handler
+ * @ingroup doc_sample_helpers
+ * */
+ryml::Callbacks ErrorHandlerExample::callbacks()
+{
+    ryml::Callbacks copy = original_callbacks;
+    copy.set_user_data(this)
+        .set_error_basic(&ErrorHandlerExample::s_error_basic)
+        .set_error_parse(&ErrorHandlerExample::s_error_parse)
+        .set_error_visit(&ErrorHandlerExample::s_error_visit);
+    return copy;
+}
+
+/** test that this handler is currently set */
+void ErrorHandlerExample::check_enabled() const
+{
+    ryml::Callbacks const& current = ryml::get_callbacks();
+    CHECK(current.m_error_basic == &s_error_basic);
+    CHECK(current.m_error_parse == &s_error_parse);
+    CHECK(current.m_error_visit == &s_error_visit);
+    CHECK(current.m_allocate == original_callbacks.m_allocate);
+    CHECK(current.m_free == original_callbacks.m_free);
+}
+/** test that this handler is currently not set */
+void ErrorHandlerExample::check_disabled() const
+{
+    ryml::Callbacks const& current = ryml::get_callbacks();
+    CHECK(current.m_error_basic != &s_error_basic);
+    CHECK(current.m_error_parse != &s_error_parse);
+    CHECK(current.m_error_visit != &s_error_visit);
+    CHECK(current.m_allocate == original_callbacks.m_allocate);
+    CHECK(current.m_free == original_callbacks.m_free);
+}
+
+
+//-----------------------------------------------------------------------------
 // helper functions for sample_parse_file()
 
 C4_SUPPRESS_WARNING_MSVC_WITH_PUSH(4996) // fopen: this function may be unsafe
+C4_SUPPRESS_WARNING_CLANG_WITH_PUSH("-Wdeprecated-declarations") // fopen is deprecated
 /** load a file from disk into an existing CharContainer */
 template<class CharContainer>
 size_t file_get_contents(const char *filename, CharContainer *v)
 {
-    std::FILE *fp = std::fopen(filename, "rb");
-    RYML_CHECK_MSG(fp != nullptr, "could not open file");
-    std::fseek(fp, 0, SEEK_END);
-    long sz = std::ftell(fp);
+    std::FILE *fp = std::fopen(filename, "rb"); // NOLINT
+    if(fp == nullptr) _RYML_ERR_BASIC("{}: could not open file", filename);
+    std::fseek(fp, 0, SEEK_END); // NOLINT
+    long sz = std::ftell(fp); // NOLINT
     v->resize(static_cast<typename CharContainer::size_type>(sz));
     if(sz)
     {
-        std::rewind(fp);
+        std::rewind(fp); // NOLINT
         size_t ret = std::fread(&(*v)[0], 1, v->size(), fp);
-        RYML_CHECK(ret == (size_t)sz);
+        if(ret != (size_t)sz) _RYML_ERR_BASIC("{}: failed to read: expect {}B, got {}B", filename, sz, ret);
     }
-    std::fclose(fp);
+    std::fclose(fp); // NOLINT
     return v->size();
 }
 
@@ -5587,16 +6476,15 @@ void file_put_contents(const char *filename, CharContainer const& v, const char*
 void file_put_contents(const char *filename, const char *buf, size_t sz, const char* access)
 {
     std::FILE *fp = std::fopen(filename, access);
-    RYML_CHECK_MSG(fp != nullptr, "could not open file");
-    std::fwrite(buf, 1, sz, fp);
-    std::fclose(fp);
+    if(fp == nullptr) _RYML_ERR_BASIC("{}: could not open file", filename);
+    std::fwrite(buf, 1, sz, fp); // NOLINT
+    std::fclose(fp); // NOLINT
 }
+C4_SUPPRESS_WARNING_CLANG_POP
 C4_SUPPRESS_WARNING_MSVC_POP
 
 /** @} */ // doc_sample_helpers
 
 /** @} */ // doc_quickstart
-
-} // namespace sample
 
 C4_SUPPRESS_WARNING_GCC_CLANG_POP

@@ -1,4 +1,4 @@
-# DO NOT EDIT - GENERATED FROM .github/workflows-in/clang.ys
+# DO NOT EDIT - GENERATED FROM .github/workflows/clang.ys
 
 name: clang
 defaults:
@@ -11,7 +11,7 @@ defaults:
     - master
   pull_request:
     branches:
-    - master
+    - '*'
 env:
   PROJ_PKG_NAME: rapidyaml-
   PROJ_PFX_TARGET: ryml-
@@ -94,6 +94,7 @@ jobs:
     name: tabtokens/${{matrix.cxx}}/c++${{matrix.std}}/${{matrix.bt}}
     runs-on: ubuntu-24.04
     container: ghcr.io/biojppm/c4core/ubuntu22.04:latest
+    needs: canary
     strategy:
       fail-fast: false
       matrix:
@@ -164,6 +165,7 @@ jobs:
     name: noexceptions/${{matrix.cxx}}/c++${{matrix.std}}/${{matrix.bt}}
     runs-on: ubuntu-24.04
     container: ghcr.io/biojppm/c4core/ubuntu22.04:latest
+    needs: canary
     strategy:
       fail-fast: false
       matrix:
@@ -228,12 +230,84 @@ jobs:
       run: source .github/setenv.sh && c4_run_test shared32
     - name: shared32-pack
       run: source .github/setenv.sh && c4_package shared32
+  nocallbacks:
+    if: always()
+    continue-on-error: false
+    name: nocallbacks/${{matrix.cxx}}/c++${{matrix.std}}/${{matrix.bt}}
+    runs-on: ubuntu-24.04
+    container: ghcr.io/biojppm/c4core/ubuntu22.04:latest
+    needs: canary
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - std: 20
+          cxx: clang++-18
+          bt: Debug
+          bitlinks: shared64 static32
+        - std: 20
+          cxx: clang++-18
+          bt: Release
+          bitlinks: shared64 static32
+    env:
+      STD: ${{matrix.std}}
+      CXX_: ${{matrix.cxx}}
+      BT: ${{matrix.bt}}
+      BITLINKS: ${{matrix.bitlinks}}
+      VG: ${{matrix.vg}}
+      SAN: ${{matrix.san}}
+      LINT: ${{matrix.lint}}
+      OS: ${{matrix.os}}
+      CMAKE_FLAGS: -DRYML_DEFAULT_CALLBACKS=OFF
+    steps:
+    - name: checkout (action + docker)
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+    - run: git config --system --add safe.directory '*'
+    - run: c4core-install ${{matrix.cxx}}
+    - name: show info
+      run: source .github/setenv.sh && c4_show_info
+    - name: shared64-configure---------------------------------------------------
+      run: source .github/setenv.sh && c4_cfg_test shared64
+    - name: shared64-build
+      run: source .github/setenv.sh && c4_build_test shared64
+    - name: shared64-run
+      run: source .github/setenv.sh && c4_run_test shared64
+    - name: shared64-pack
+      run: source .github/setenv.sh && c4_package shared64
+    - name: static64-configure---------------------------------------------------
+      run: source .github/setenv.sh && c4_cfg_test static64
+    - name: static64-build
+      run: source .github/setenv.sh && c4_build_test static64
+    - name: static64-run
+      run: source .github/setenv.sh && c4_run_test static64
+    - name: static64-pack
+      run: source .github/setenv.sh && c4_package static64
+    - name: static32-configure---------------------------------------------------
+      run: source .github/setenv.sh && c4_cfg_test static32
+    - name: static32-build
+      run: source .github/setenv.sh && c4_build_test static32
+    - name: static32-run
+      run: source .github/setenv.sh && c4_run_test static32
+    - name: static32-pack
+      run: source .github/setenv.sh && c4_package static32
+    - name: shared32-configure---------------------------------------------------
+      run: source .github/setenv.sh && c4_cfg_test shared32
+    - name: shared32-build
+      run: source .github/setenv.sh && c4_build_test shared32
+    - name: shared32-run
+      run: source .github/setenv.sh && c4_run_test shared32
+    - name: shared32-pack
+      run: source .github/setenv.sh && c4_package shared32
   extended:
     if: always()
     continue-on-error: false
     name: extended/${{matrix.cxx}}/${{matrix.bits}}bit/c++${{matrix.std}}/vg${{matrix.vg}}
     runs-on: ubuntu-24.04
     container: ghcr.io/biojppm/c4core/ubuntu${{matrix.img}}:latest
+    needs: canary
     strategy:
       fail-fast: false
       matrix:
@@ -508,6 +582,8 @@ jobs:
         cmake --build build/Debug --target ryml-test-build --parallel --verbose
     - name: 'run Debug ::: -m${{matrix.bits}}'
       run: |
+        source .github/setenv.sh
+        export CTEST_PARALLEL_LEVEL=`_c4getnumcores`
         cmake --build build/Debug --target ryml-test-run
     - name: '---------------------------------------------------------'
       run: |
@@ -534,6 +610,8 @@ jobs:
         cmake --build build/Release --target ryml-test-build --parallel --verbose
     - name: 'run Release ::: -O1 -DNDEBUG -m${{matrix.bits}}'
       run: |
+        source .github/setenv.sh
+        export CTEST_PARALLEL_LEVEL=`_c4getnumcores`
         cmake --build build/Release --target ryml-test-run
     - name: '---------------------------------------------------------'
       run: |
@@ -560,6 +638,8 @@ jobs:
         cmake --build build/Release --target ryml-test-build --parallel --verbose
     - name: 'run Release ::: -O2 -DNDEBUG -m${{matrix.bits}}'
       run: |
+        source .github/setenv.sh
+        export CTEST_PARALLEL_LEVEL=`_c4getnumcores`
         cmake --build build/Release --target ryml-test-run
     - name: '---------------------------------------------------------'
       run: |
@@ -586,6 +666,8 @@ jobs:
         cmake --build build/Release --target ryml-test-build --parallel --verbose
     - name: 'run Release ::: -O3 -DNDEBUG -m${{matrix.bits}}'
       run: |
+        source .github/setenv.sh
+        export CTEST_PARALLEL_LEVEL=`_c4getnumcores`
         cmake --build build/Release --target ryml-test-run
     - name: '---------------------------------------------------------'
       run: |
@@ -612,6 +694,8 @@ jobs:
         cmake --build build/Release --target ryml-test-build --parallel --verbose
     - name: 'run Release ::: -Os -DNDEBUG -m${{matrix.bits}}'
       run: |
+        source .github/setenv.sh
+        export CTEST_PARALLEL_LEVEL=`_c4getnumcores`
         cmake --build build/Release --target ryml-test-run
   clangsan:
     if: always()
@@ -619,72 +703,73 @@ jobs:
     name: san/${{matrix.bt}}/c++${{matrix.std}}
     runs-on: ubuntu-24.04
     container: ghcr.io/biojppm/c4core/ubuntu22.04:latest
+    needs: canary
     strategy:
       fail-fast: false
       matrix:
         include:
         - std: 11
-          cxx: clang++-17
+          cxx: clang++-18
           bt: asan
           bitlinks: static64
         - std: 14
-          cxx: clang++-17
+          cxx: clang++-18
           bt: asan
           bitlinks: static64
         - std: 17
-          cxx: clang++-17
+          cxx: clang++-18
           bt: asan
           bitlinks: static64
         - std: 20
-          cxx: clang++-17
+          cxx: clang++-18
           bt: asan
           bitlinks: static64
         - std: 11
-          cxx: clang++-17
+          cxx: clang++-18
           bt: lsan
           bitlinks: static64
         - std: 14
-          cxx: clang++-17
+          cxx: clang++-18
           bt: lsan
           bitlinks: static64
         - std: 17
-          cxx: clang++-17
+          cxx: clang++-18
           bt: lsan
           bitlinks: static64
         - std: 20
-          cxx: clang++-17
+          cxx: clang++-18
           bt: lsan
           bitlinks: static64
         - std: 11
-          cxx: clang++-17
+          cxx: clang++-18
           bt: tsan
           bitlinks: static64
         - std: 14
-          cxx: clang++-17
+          cxx: clang++-18
           bt: tsan
           bitlinks: static64
         - std: 17
-          cxx: clang++-17
+          cxx: clang++-18
           bt: tsan
           bitlinks: static64
         - std: 20
-          cxx: clang++-17
+          cxx: clang++-18
           bt: tsan
           bitlinks: static64
         - std: 11
-          cxx: clang++-17
+          cxx: clang++-18
           bt: ubsan
           bitlinks: static64
         - std: 14
-          cxx: clang++-17
+          cxx: clang++-18
           bt: ubsan
           bitlinks: static64
         - std: 17
-          cxx: clang++-17
+          cxx: clang++-18
           bt: ubsan
           bitlinks: static64
         - std: 20
-          cxx: clang++-17
+          cxx: clang++-18
           bt: ubsan
           bitlinks: static64
     env:

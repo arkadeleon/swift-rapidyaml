@@ -11,6 +11,8 @@
 
 #include <gtest/gtest.h>
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -749,7 +751,9 @@ TEST(keymap, flow_sl)
     EXPECT_EQ(emit2str(tree), R"({foo: {1: 10,2: {2: 10,3: 10},4: 10,5: {5: 10,6: 10}}})");
     tree._rem_flags(tree.root_id(), CONTAINER_STYLE);
     tree._add_flags(tree.root_id(), BLOCK);
+    tree._rem_flags(tree["foo"][1].id(), BLOCK);
     tree._add_flags(tree["foo"][1].id(), FLOW_SL);
+    tree._rem_flags(tree["foo"][3].id(), BLOCK);
     tree._add_flags(tree["foo"][3].id(), FLOW_SL);
     EXPECT_EQ(emit2str(tree), R"(foo:
   1: 10

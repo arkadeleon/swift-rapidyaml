@@ -1,6 +1,8 @@
 #include "./test_lib/test_group.hpp"
 #include "./test_lib/test_group.def.hpp"
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -275,7 +277,7 @@ TEST(simple_map, test_suite_UT92_0)
 TEST(simple_map, test_suite_UT92_1)
 {
     Tree tree;
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_parse(&tree, [&]{
         csubstr yaml = R"(
 - { matches
 % : 20 }
@@ -294,7 +296,7 @@ TEST(simple_map, test_suite_UT92_1)
 TEST(simple_map, two_nested_flow_maps_not_accepted_because_of_container_key)
 {
     Tree tree;
-    ExpectError::check_error(&tree, [&]{
+    ExpectError::check_error_parse(&tree, [&]{
         parse_in_arena("{{}}", &tree);
     });
 }
@@ -309,7 +311,7 @@ TEST(simple_map, many_unmatched_brackets)
         for(size_t i = src.size(); i < num_brackets; ++i)
             src += '{';
         Tree tree;
-        ExpectError::check_error(&tree, [&]{
+        ExpectError::check_error_parse(&tree, [&]{
             parse_in_place(to_substr(src), &tree);
         });
     }
@@ -405,7 +407,7 @@ x6:
     });
 }
 
-void verify_error_is_reported(csubstr case_name, csubstr yaml, LineCol lc={})
+void verify_error_is_reported(csubstr case_name, csubstr yaml, Location lc={})
 {
     SCOPED_TRACE(case_name);
     SCOPED_TRACE(yaml);
@@ -413,14 +415,14 @@ void verify_error_is_reported(csubstr case_name, csubstr yaml, LineCol lc={})
     Location loc = {};
     loc.line = lc.line;
     loc.col = lc.col;
-    ExpectError::check_error(&tree, [&](){
+    ExpectError::check_error_parse(&tree, [&](){
         parse_in_arena(yaml, &tree);
     }, loc);
 }
 
 TEST(simple_map, no_map_key_flow)
 {
-    verify_error_is_reported("map key", R"({ first: Sammy, last: Sosa }: foo)", LineCol{1,29});
+    verify_error_is_reported("map key", R"({ first: Sammy, last: Sosa }: foo)", Location{1,30});
 }
 
 TEST(simple_map, no_map_key_block)
@@ -430,12 +432,12 @@ TEST(simple_map, no_map_key_block)
   last: Sosa
 :
   foo
-)", LineCol{2,9});
+)", Location{2,9});
 }
 
 TEST(simple_map, no_seq_key_flow)
 {
-    verify_error_is_reported("seq key", R"([Sammy, Sosa]: foo)", LineCol{1, 14});
+    verify_error_is_reported("seq key", R"([Sammy, Sosa]: foo)", Location{1, 15});
 }
 
 TEST(simple_map, no_seq_key_block)
@@ -445,7 +447,7 @@ TEST(simple_map, no_seq_key_block)
   - Sosa
 :
   foo
-)", LineCol{2, 3});
+)", Location{2, 3});
 }
 
 #ifdef RYML_WITH_TAB_TOKENS
@@ -581,112 +583,112 @@ TEST(simple_map, flow_tab_tokens__5_everywhere)
 
 TEST(simple_map, tokens_after_flow_0_0)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }foo", LineCol{1,32});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }foo", Location{1,32});
 }
 
 TEST(simple_map, tokens_after_flow_0_1)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\nfoo", LineCol{2,4});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\nfoo", Location{2,4});
 }
 
 TEST(simple_map, tokens_after_flow_2_0)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }- foo", LineCol{1,29});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }- foo", Location{1,29});
 }
 
 TEST(simple_map, tokens_after_flow_2_1)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n- foo", LineCol{2,1});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n- foo", Location{2,1});
 }
 
 TEST(simple_map, tokens_after_flow_3_0)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }[foo,bar]", LineCol{1,29});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }[foo,bar]", Location{1,29});
 }
 
 TEST(simple_map, tokens_after_flow_3_1)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n[foo,bar]", LineCol{2,1});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n[foo,bar]", Location{2,1});
 }
 
 TEST(simple_map, tokens_after_flow_4_0)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }{foo: bar}", LineCol{1,29});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }{foo: bar}", Location{1,29});
 }
 
 TEST(simple_map, tokens_after_flow_4_1)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n{foo: bar}", LineCol{2,1});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n{foo: bar}", Location{2,1});
 }
 
 TEST(simple_map, tokens_after_flow_5_0)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }'foo'", LineCol{1,29});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }'foo'", Location{1,29});
 }
 
 TEST(simple_map, tokens_after_flow_5_1)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n'foo'", LineCol{2,1});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n'foo'", Location{2,1});
 }
 
 TEST(simple_map, tokens_after_flow_6_0)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }|\nfoo", LineCol{1,29});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }|\nfoo", Location{1,29});
 }
 
 TEST(simple_map, tokens_after_flow_6_1)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n|\nfoo", LineCol{2,1});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n|\nfoo", Location{2,1});
 }
 
 TEST(simple_map, tokens_after_flow_7_0)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }>\nfoo", LineCol{1,29});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }>\nfoo", Location{1,29});
 }
 
 TEST(simple_map, tokens_after_flow_7_1)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n>\nfoo", LineCol{2,1});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n>\nfoo", Location{2,1});
 }
 
 TEST(simple_map, tokens_after_flow_8_0)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }?foo", LineCol{1,33});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }?foo", Location{1,33});
 }
 
 TEST(simple_map, tokens_after_flow_8_1)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n?\nfoo", LineCol{2,1});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n?\nfoo", Location{2,1});
 }
 
 TEST(simple_map, tokens_after_flow_9_0)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }:foo", LineCol{1,33});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }:foo", Location{1,33});
 }
 
 TEST(simple_map, tokens_after_flow_9_1)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n:\nfoo", LineCol{2,1});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n:\nfoo", Location{2,1});
 }
 
 TEST(simple_map, tokens_after_flow_10_0)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }: foo", LineCol{1,29});// fixme
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }: foo", Location{1,30});// fixme
 }
 
 TEST(simple_map, tokens_after_flow_10_1)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n: \nfoo", LineCol{2,1});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n: \nfoo", Location{2,1});
 }
 
 TEST(simple_map, tokens_after_flow_11_0)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa } &foo", LineCol{1,34});// fixme
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa } &foo", Location{1,34});// fixme
 }
 
 TEST(simple_map, tokens_after_flow_11_1)
 {
-    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n&foo", LineCol{2,5});
+    verify_error_is_reported("", "{ first: Sammy, last: Sosa }\n&foo", Location{2,5});
 }
 
 
@@ -706,7 +708,7 @@ ADD_CASE_TO_GROUP("empty map, multiline",
 R"({
 }
 )",
-    MFS
+    MFM
 );
 
 ADD_CASE_TO_GROUP("empty map, multilines",
@@ -714,7 +716,7 @@ R"({
 # foo bar baz akjasdkj
 }
 )",
-    MFS
+    MFM
 );
 
 ADD_CASE_TO_GROUP("simple map, explicit, single line",
@@ -729,7 +731,7 @@ bar: 1,
 baz: 2,
 bat: 3
 })",
-N(MFS, L{N{KP|VP, "foo", "0"}, N{KP|VP, "bar", "1"}, N{KP|VP, "baz", "2"}, N{KP|VP, "bat", "3"}})
+N(MFM, L{N{KP|VP, "foo", "0"}, N{KP|VP, "bar", "1"}, N{KP|VP, "baz", "2"}, N{KP|VP, "bat", "3"}})
 );
 
 ADD_CASE_TO_GROUP("simple map, explicit, multiline, indented",
@@ -739,7 +741,7 @@ R"({
   baz: 2,
   bat: 3
 })",
-N(MFS, L{N{KP|VP, "foo", "0"}, N{KP|VP, "bar", "1"}, N{KP|VP, "baz", "2"}, N{KP|VP, "bat", "3"}})
+N(MFM, L{N{KP|VP, "foo", "0"}, N{KP|VP, "bar", "1"}, N{KP|VP, "baz", "2"}, N{KP|VP, "bat", "3"}})
 );
 
 ADD_CASE_TO_GROUP("simple map",
@@ -1121,7 +1123,7 @@ c3 ,d3: val3, 0003
 e3 ,f3: val3 , 0003
 h3 ,i3: val3 ,0003
 })",
-N(MFS, L{ // this is crazy...
+N(MFM, L{ // this is crazy...
         N(KP|VN, "a0", {}),
         N(KP|VP, "b0", "val0"), N(KP|VN, "0000 c0", {}),
         N(KP|VP, "d0", "val0"), N(KP|VN, "0000 e0", {}),
@@ -1221,12 +1223,12 @@ must be ok   : {
     c2       : d,
 }
 })",
-N(MFS, L{
+N(MFM, L{
     N(KP|MFS, "oka", L{N(KP|VP, "a", "b")}),
     N(KP|VP, "is it ok", "let's see"),
     N(KP|MFS, "okb", L{N(KP|VP, "a", "b")}),
     N(KP|MFS, "ok", L{N(KP|VP, "a", "b")}),
-    N(KP|MFS, "must be ok", L{N(KP|VP, "c0", "d"), N(KP|VP, "c1", "d"), N(KP|VP, "c2", "d")}),
+    N(KP|MFM, "must be ok", L{N(KP|VP, "c0", "d"), N(KP|VP, "c1", "d"), N(KP|VP, "c2", "d")}),
 })
 );
 
@@ -1257,7 +1259,7 @@ R"({
 : a,
 : b,
 })",
-N(MFS, L{
+N(MFM, L{
     N(KN|VP, "", "a"),
     N(KN|VP, "", "b"),
 }));
@@ -1269,7 +1271,7 @@ R"({
 :
   b,
 })",
-N(MFS, L{
+N(MFM, L{
     N(KN|VP, "", "a"),
     N(KN|VP, "", "b"),
 }));
@@ -1281,7 +1283,7 @@ R"({-k
 :
   b,
 })",
-N(MFS, L{
+N(MFM, L{
     N(KP|VP, "-k", "a"),
     N(KP|VP, "-z", "b"),
 }));
@@ -1293,7 +1295,7 @@ R"({:k
 :
   b,
 })",
-N(MFS, L{
+N(MFM, L{
     N(KP|VP, ":k", "a"),
     N(KP|VP, ":z", "b"),
 }));
@@ -1304,7 +1306,7 @@ R"({foo
 baz
 : bat
 })",
-N(MFS, L{
+N(MFM, L{
     N(KP|VP, "foo", "bar"),
     N(KP|VP, "baz", "bat"),
 }));
@@ -1317,7 +1319,7 @@ baz
 :
   bat
 })",
-N(MFS, L{
+N(MFM, L{
     N(KP|VP, "foo", "bar"),
     N(KP|VP, "baz", "bat"),
 }));
@@ -1329,7 +1331,7 @@ R"(foo
 baz
 : bat
 )",
-  LineCol(2, 1)
+  Location(2, 1)
 );
 
 ADD_CASE_TO_GROUP("simple map, values on next line 4MUZ, v4", EXPECT_PARSE_ERROR,
@@ -1342,7 +1344,7 @@ baz
 :
   bat
 )",
-  LineCol(4, 1)
+  Location(4, 1)
 );
 
 ADD_CASE_TO_GROUP("json compact",
@@ -1357,7 +1359,7 @@ R"(---
 )",
 N(STREAM,
   L{
-      N(DOC|MFS, L{
+      N(DOC|MFM, L{
               N(KD|VD,"foo0","bar"),
               N(KD|VP,"foo1","bar"),
               N(KD|MFS,"foo3", L{N(KD|VP,"a","map")}),

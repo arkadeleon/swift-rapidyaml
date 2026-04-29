@@ -2,6 +2,8 @@
 #include "./test_lib/test_group.hpp"
 #include "./test_lib/test_group.def.hpp"
 
+RYML_DEFINE_TEST_MAIN()
+
 namespace c4 {
 namespace yml {
 
@@ -278,7 +280,7 @@ void verify_error_is_reported(csubstr case_name, csubstr yaml, Location loc={})
     SCOPED_TRACE(case_name);
     SCOPED_TRACE(yaml);
     Tree tree;
-    ExpectError::check_error(&tree, [&](){
+    ExpectError::check_error_parse(&tree, [&](){
         parse_in_arena(yaml, &tree);
     }, loc);
 }
@@ -289,7 +291,7 @@ void verify_filter_error_is_reported(csubstr case_name, csubstr scalar_, Locatio
     SCOPED_TRACE(scalar_);
     {
         Tree t;
-        ExpectError::check_error(&t, [&](){
+        ExpectError::check_error_parse(&t, [&](){
             Parser::handler_type evt_handler = {};
             Parser parser(&evt_handler);
             evt_handler.reset(&t, t.root_id());
@@ -303,7 +305,7 @@ void verify_filter_error_is_reported(csubstr case_name, csubstr scalar_, Locatio
     }
     {
         Tree t;
-        ExpectError::check_error(&t, [&](){
+        ExpectError::check_error_parse(&t, [&](){
             Parser::handler_type evt_handler = {};
             Parser parser(&evt_handler);
             evt_handler.reset(&t, t.root_id());
@@ -538,7 +540,7 @@ R"(- ' 1st non-empty
  2nd non-empty
 	3rd non-empty '
 )",
-LineCol(1,1)
+Location(1,1)
 );
 */
 

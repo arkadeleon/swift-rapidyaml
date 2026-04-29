@@ -66,11 +66,35 @@ public:
     bool m_has_yaml_directive;
     extra::string m_arena;
     bool m_has_docs;
+    csubstr m_src;
 
     // undefined at the end
     #define _enable_(bits) _enable__<bits>()
     #define _disable_(bits) _disable__<bits>()
     #define _has_any_(bits) _has_any__<bits>()
+
+    void _dbg_print() const
+    {
+        #ifdef RYML_DBG
+        auto indent = [](id_type n){
+            for(id_type level = 0; level < n; ++level)
+            {
+                _dbg_printf("  ");
+            }
+        };
+        for(id_type i = 0; i < m_stack.size(); ++i)
+        {
+            csubstr const& str = _buf_(i);
+            indent(i);
+            _dbg_printf("[{}]\n", i);
+            for(csubstr ln : str.split('\n'))
+            {
+                indent(i);
+                _dbg_printf("{}\n", ln);
+            }
+        }
+        #endif
+    }
     /** @endcond */
 
 public:
@@ -78,9 +102,9 @@ public:
     /** @name construction and resetting
      * @{ */
 
-    EventHandlerTestSuite() : EventHandlerStack(), m_sink(), m_val_buffers(), m_key_tag_buf(), m_val_tag_buf(), m_tag_directives(), m_has_yaml_directive(), m_arena(), m_has_docs() {}
-    EventHandlerTestSuite(Callbacks const& cb) : EventHandlerStack(cb), m_sink(), m_val_buffers(), m_key_tag_buf(), m_val_tag_buf(), m_tag_directives(), m_has_yaml_directive(), m_arena(), m_has_docs()  {}
-    EventHandlerTestSuite(EventSink *sink, Callbacks const& cb) : EventHandlerStack(cb), m_sink(sink), m_val_buffers(), m_key_tag_buf(), m_val_tag_buf(), m_tag_directives(), m_has_yaml_directive(), m_arena(), m_has_docs()
+    EventHandlerTestSuite() : EventHandlerStack(), m_sink(), m_val_buffers(), m_key_tag_buf(), m_val_tag_buf(), m_tag_directives(), m_has_yaml_directive(), m_arena(), m_has_docs(), m_src() {}
+    EventHandlerTestSuite(Callbacks const& cb) : EventHandlerStack(cb), m_sink(), m_val_buffers(), m_key_tag_buf(), m_val_tag_buf(), m_tag_directives(), m_has_yaml_directive(), m_arena(), m_has_docs(), m_src()  {}
+    EventHandlerTestSuite(EventSink *sink, Callbacks const& cb) : EventHandlerStack(cb), m_sink(sink), m_val_buffers(), m_key_tag_buf(), m_val_tag_buf(), m_tag_directives(), m_has_yaml_directive(), m_arena(), m_has_docs(), m_src()
     {
         reset();
     }
@@ -100,6 +124,7 @@ public:
         m_key_tag_buf.resize(256);
         m_val_tag_buf.resize(256);
         m_has_docs = false;
+        m_src = {};
     }
 
     /** @} */
@@ -109,15 +134,15 @@ public:
     /** @name parse events
      * @{ */
 
-    void start_parse(const char* filename, detail::pfn_relocate_arena relocate_arena, void *relocate_arena_data)
+    void start_parse(const char* filename, csubstr src, detail::pfn_relocate_arena relocate_arena, void *relocate_arena_data)
     {
-        this->_stack_start_parse(filename, relocate_arena, relocate_arena_data);
+        this->_stack_start_parse(filename, src, relocate_arena, relocate_arena_data);
     }
 
     void finish_parse()
     {
         if((_num_tag_directives() || m_has_yaml_directive) && !m_has_docs)
-            _RYML_CB_ERR_(m_stack.m_callbacks, "directives cannot be used without a document", {});
+            _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "directives cannot be used without a document");
         this->_stack_finish_parse();
     }
 
@@ -213,7 +238,7 @@ public:
 
     void begin_map_key_flow()
     {
-        _RYML_CB_CHECK(m_stack.m_callbacks, !_has_any_(VAL));
+        _RYML_CHECK_BASIC_(m_stack.m_callbacks, !_has_any_(VAL));
         _send_("+MAP {}");
         _send_key_props_();
         _send_('\n');
@@ -223,7 +248,7 @@ public:
     }
     void begin_map_key_block()
     {
-        _RYML_CB_CHECK(m_stack.m_callbacks, !_has_any_(VAL));
+        _RYML_CHECK_BASIC_(m_stack.m_callbacks, !_has_any_(VAL));
         _send_("+MAP");
         _send_key_props_();
         _send_('\n');
@@ -234,7 +259,7 @@ public:
 
     void begin_map_val_flow()
     {
-        _RYML_CB_CHECK(m_stack.m_callbacks, !_has_any_(VAL));
+        _RYML_CHECK_BASIC_(m_stack.m_callbacks, !_has_any_(VAL));
         _send_("+MAP {}");
         _send_val_props_();
         _send_('\n');
@@ -244,7 +269,7 @@ public:
     }
     void begin_map_val_block()
     {
-        _RYML_CB_CHECK(m_stack.m_callbacks, !_has_any_(VAL));
+        _RYML_CHECK_BASIC_(m_stack.m_callbacks, !_has_any_(VAL));
         _send_("+MAP");
         _send_val_props_();
         _send_('\n');
@@ -253,7 +278,13 @@ public:
         _push();
     }
 
-    void end_map()
+    void end_map_block()
+    {
+        _pop();
+        _send_("-MAP\n");
+    }
+
+    void end_map_flow(bool /*multiline*/)
     {
         _pop();
         _send_("-MAP\n");
@@ -268,7 +299,7 @@ public:
 
     void begin_seq_key_flow()
     {
-        _RYML_CB_CHECK(m_stack.m_callbacks, !_has_any_(VAL));
+        _RYML_CHECK_BASIC_(m_stack.m_callbacks, !_has_any_(VAL));
         _send_("+SEQ []");
         _send_key_props_();
         _send_('\n');
@@ -278,7 +309,7 @@ public:
     }
     void begin_seq_key_block()
     {
-        _RYML_CB_CHECK(m_stack.m_callbacks, !_has_any_(VAL));
+        _RYML_CHECK_BASIC_(m_stack.m_callbacks, !_has_any_(VAL));
         _send_("+SEQ");
         _send_key_props_();
         _send_('\n');
@@ -289,7 +320,7 @@ public:
 
     void begin_seq_val_flow()
     {
-        _RYML_CB_CHECK(m_stack.m_callbacks, !_has_any_(VAL));
+        _RYML_CHECK_BASIC_(m_stack.m_callbacks, !_has_any_(VAL));
         _send_("+SEQ []");
         _send_val_props_();
         _send_('\n');
@@ -299,7 +330,7 @@ public:
     }
     void begin_seq_val_block()
     {
-        _RYML_CB_CHECK(m_stack.m_callbacks, !_has_any_(VAL));
+        _RYML_CHECK_BASIC_(m_stack.m_callbacks, !_has_any_(VAL));
         _send_("+SEQ");
         _send_val_props_();
         _send_('\n');
@@ -308,10 +339,16 @@ public:
         _push();
     }
 
-    void end_seq()
+    void end_seq_block()
     {
         _pop();
-        _send_("-SEQ\n"); // before popping
+        _send_("-SEQ\n");
+    }
+
+    void end_seq_flow(bool /*multiline*/)
+    {
+        _pop();
+        _send_("-SEQ\n");
     }
 
     /** @} */
@@ -323,7 +360,7 @@ public:
 
     void add_sibling()
     {
-        _RYML_CB_ASSERT(m_stack.m_callbacks, m_parent);
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, m_parent);
         _buf_flush_to_(m_curr->level, m_parent->level);
         m_curr->ev_data = {};
     }
@@ -335,6 +372,7 @@ public:
      */
     void actually_val_is_first_key_of_new_map_flow()
     {
+        _c4dbgpf("node[{}]: actually_val_is_first_key_of_new_map_flow", m_curr->node_id);
         // ensure we have a temporary buffer to save the current val
         const id_type tmp = m_curr->level + id_type(2);
         _buf_ensure_(tmp + id_type(2));
@@ -344,7 +382,7 @@ public:
         // create the map.
         // this will push a new level, and tmp is one further
         begin_map_val_flow();
-        _RYML_CB_ASSERT(m_stack.m_callbacks, tmp != m_curr->level);
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, tmp != m_curr->level);
         // now move the saved val as the first key
         _buf_flush_to_(tmp, m_curr->level);
     }
@@ -357,26 +395,33 @@ public:
      */
     void actually_val_is_first_key_of_new_map_block()
     {
+        _c4dbgpf("node[{}]: actually_val_is_first_key_of_new_map_block", m_curr->node_id);
         EventSink &sink = _buf_();
-        substr full = sink;(void)full;
+        csubstr full = sink;(void)full;
         // interpolate +MAP\n after the last +DOC\n
-        _RYML_CB_ASSERT(m_stack.m_callbacks, full.len);
-        _RYML_CB_ASSERT(m_stack.m_callbacks, !full.count('\r'));
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, full.len);
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, !full.count('\r'));
         size_t docpos = sink.find_last("+DOC\n");
         if(docpos != npos)
         {
-            _RYML_CB_ASSERT(m_stack.m_callbacks, (m_stack.size() == 1u) ? (docpos >= 5u) : (docpos == 0u));
-            _RYML_CB_ASSERT(m_stack.m_callbacks, docpos + 5u < full.len);
+            _RYML_ASSERT_BASIC_(m_stack.m_callbacks, (m_stack.size() == 1u) ? (docpos >= 5u) : (docpos == 0u));
+            _RYML_ASSERT_BASIC_(m_stack.m_callbacks, docpos + 5u < full.len);
             sink.insert("+MAP\n", docpos + 5u);
         }
         else
         {
             // ... or interpolate +MAP\n after the last +DOC ---\n
             docpos = sink.find_last("+DOC ---\n");
-            _RYML_CB_ASSERT(m_stack.m_callbacks, docpos != npos);
-            _RYML_CB_ASSERT(m_stack.m_callbacks, (m_stack.size() == 1u) ? (docpos >= 5u) : (docpos == 0u));
-            _RYML_CB_ASSERT(m_stack.m_callbacks, docpos + 9u < full.len);
-            sink.insert("+MAP\n", docpos + 9u);
+            if(docpos != npos)
+            {
+                _RYML_ASSERT_BASIC_(m_stack.m_callbacks, (m_stack.size() == 1u) ? (docpos >= 5u) : (docpos == 0u));
+                _RYML_ASSERT_BASIC_(m_stack.m_callbacks, docpos + 9u < full.len);
+                sink.insert("+MAP\n", docpos + 9u);
+            }
+            else
+            {
+                sink.insert("+MAP\n", 0u);
+            }
         }
         _push();
     }
@@ -491,16 +536,16 @@ public:
     void set_key_anchor(csubstr anchor)
     {
         _c4dbgpf("node[{}]: set key anchor: [{}]~~~{}~~~", m_curr->node_id, anchor.len, anchor);
-        _RYML_CB_ASSERT(m_stack.m_callbacks, !_has_any_(KEYREF));
-        _RYML_CB_ASSERT(m_stack.m_callbacks, !anchor.begins_with('&'));
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, !_has_any_(KEYREF));
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, !anchor.begins_with('&'));
         _enable_(KEYANCH);
         m_curr->ev_data.m_key.anchor = anchor;
     }
     void set_val_anchor(csubstr anchor)
     {
         _c4dbgpf("node[{}]: set val anchor: [{}]~~~{}~~~", m_curr->node_id, anchor.len, anchor);
-        _RYML_CB_ASSERT(m_stack.m_callbacks, !_has_any_(VALREF));
-        _RYML_CB_ASSERT(m_stack.m_callbacks, !anchor.begins_with('&'));
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, !_has_any_(VALREF));
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, !anchor.begins_with('&'));
         _enable_(VALANCH);
         m_curr->ev_data.m_val.anchor = anchor;
     }
@@ -509,8 +554,8 @@ public:
     {
         _c4dbgpf("node[{}]: set key ref: [{}]~~~{}~~~", m_curr->node_id, ref.len, ref);
         if(C4_UNLIKELY(_has_any_(KEYANCH)))
-            _RYML_CB_ERR_(m_stack.m_callbacks, "key cannot have both anchor and ref", m_curr->pos);
-        _RYML_CB_ASSERT(m_stack.m_callbacks, ref.begins_with('*'));
+            _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "key cannot have both anchor and ref");
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, ref.begins_with('*'));
         _enable_(KEY|KEYREF);
         _send_("=ALI ");
         _send_(ref);
@@ -520,8 +565,8 @@ public:
     {
         _c4dbgpf("node[{}]: set val ref: [{}]~~~{}~~~", m_curr->node_id, ref.len, ref);
         if(C4_UNLIKELY(_has_any_(VALANCH)))
-            _RYML_CB_ERR_(m_stack.m_callbacks, "val cannot have both anchor and ref", m_curr->pos);
-        _RYML_CB_ASSERT(m_stack.m_callbacks, ref.begins_with('*'));
+            _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "val cannot have both anchor and ref");
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, ref.begins_with('*'));
         _enable_(VAL|VALREF);
         _send_("=ALI ");
         _send_(ref);
@@ -557,20 +602,20 @@ public:
 
     void add_directive(csubstr directive)
     {
-        _RYML_CB_ASSERT(m_stack.m_callbacks, directive.begins_with('%'));
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, directive.begins_with('%'));
         if(directive.begins_with("%TAG"))
         {
             const id_type pos = _num_tag_directives();
             if(C4_UNLIKELY(pos >= RYML_MAX_TAG_DIRECTIVES))
-                _RYML_CB_ERR_(m_stack.m_callbacks, "too many directives", m_curr->pos);
+                _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "too many directives");
             if(C4_UNLIKELY(!m_tag_directives[pos].create_from_str(directive)))
-                _RYML_CB_ERR_(m_stack.m_callbacks, "failed to add directive", m_curr->pos);
+                _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "failed to add directive");
         }
         else if(directive.begins_with("%YAML"))
         {
             _c4dbgpf("%YAML directive! ignoring...: {}", directive);
             if(C4_UNLIKELY(m_has_yaml_directive))
-                _RYML_CB_ERR_(m_stack.m_callbacks, "multiple yaml directives", m_curr->pos);
+                _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "multiple yaml directives");
             m_has_yaml_directive = true;
         }
         else
@@ -655,19 +700,19 @@ public:
 
     EventSink& _buf_() noexcept
     {
-        _RYML_CB_ASSERT(m_stack.m_callbacks, m_curr->level < m_val_buffers.size());
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, m_curr->level < m_val_buffers.size());
         return m_val_buffers[m_curr->level];
     }
 
     EventSink& _buf_(id_type level) noexcept
     {
-        _RYML_CB_ASSERT(m_stack.m_callbacks, level < m_val_buffers.size());
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, level < m_val_buffers.size());
         return m_val_buffers[level];
     }
 
     EventSink const& _buf_(id_type level) const noexcept
     {
-        _RYML_CB_ASSERT(m_stack.m_callbacks, level < m_val_buffers.size());
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, level < m_val_buffers.size());
         return m_val_buffers[level];
     }
 
@@ -747,7 +792,7 @@ public:
     }
     void _send_tag_(csubstr tag)
     {
-        _RYML_CB_ASSERT(m_stack.m_callbacks, !tag.empty());
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, !tag.empty());
         if(tag.str[0] == '<')
         {
             _send_(' ');
@@ -797,7 +842,7 @@ public:
                 }
                 if(len > output->size())
                 {
-                    _RYML_CB_CHECK(m_stack.m_callbacks, !retry);
+                    _RYML_CHECK_BASIC_(m_stack.m_callbacks, !retry);
                     retry = true;
                     output->resize(len);
                     output->resize(output->capacity());
@@ -810,7 +855,7 @@ public:
         {
             if(is_custom_tag(tag))
             {
-                _RYML_CB_ERR_(m_stack.m_callbacks, "tag not found", m_curr->pos);
+                _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "tag not found");
             }
         }
         bool retry = false;
@@ -818,7 +863,7 @@ public:
         csubstr result = normalize_tag_long(tag, *output);
         if(!result.str)
         {
-            _RYML_CB_CHECK(m_stack.m_callbacks, !retry);
+            _RYML_CHECK_BASIC_(m_stack.m_callbacks, !retry);
             retry = true;
             output->resize(result.len);
             output->resize(output->capacity());

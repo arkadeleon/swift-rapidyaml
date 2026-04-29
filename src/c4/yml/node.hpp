@@ -82,14 +82,14 @@ struct child_iterator
 
     child_iterator(tree_type * t, id_type id) : m_tree(t), m_child_id(id) {}
 
-    child_iterator& operator++ () { RYML_ASSERT(m_child_id != NONE); m_child_id = m_tree->next_sibling(m_child_id); return *this; }
-    child_iterator& operator-- () { RYML_ASSERT(m_child_id != NONE); m_child_id = m_tree->prev_sibling(m_child_id); return *this; }
+    child_iterator& operator++ () { _RYML_ASSERT_VISIT_(m_tree->m_callbacks, m_child_id != NONE, m_tree, NONE); m_child_id = m_tree->next_sibling(m_child_id); return *this; }
+    child_iterator& operator-- () { _RYML_ASSERT_VISIT_(m_tree->m_callbacks, m_child_id != NONE, m_tree, NONE); m_child_id = m_tree->prev_sibling(m_child_id); return *this; }
 
     NodeRefType operator*  () const { return NodeRefType(m_tree, m_child_id); }
     NodeRefType operator-> () const { return NodeRefType(m_tree, m_child_id); }
 
-    bool operator!= (child_iterator that) const { RYML_ASSERT(m_tree == that.m_tree); return m_child_id != that.m_child_id; }
-    bool operator== (child_iterator that) const { RYML_ASSERT(m_tree == that.m_tree); return m_child_id == that.m_child_id; }
+    bool operator!= (child_iterator that) const { _RYML_ASSERT_VISIT(m_tree == that.m_tree, m_tree, NONE); return m_child_id != that.m_child_id; }
+    bool operator== (child_iterator that) const { _RYML_ASSERT_VISIT(m_tree == that.m_tree, m_tree, NONE); return m_child_id == that.m_child_id; }
 };
 
 template<class NodeRefType>
@@ -182,9 +182,9 @@ struct RoNodeMethods
     // require readable: this is a precondition for reading from the
     // tree using this object.
     #define _C4RR()                                       \
-        RYML_ASSERT(tree_ != nullptr);                    \
-        _RYML_CB_ASSERT(tree_->m_callbacks, id_ != NONE); \
-        _RYML_CB_ASSERT(tree_->m_callbacks, (((Impl const* C4_RESTRICT)this)->readable()))
+        _RYML_ASSERT_BASIC(tree_ != nullptr);              \
+        _RYML_ASSERT_VISIT_(tree_->m_callbacks, id_ != NONE, tree_, id_); \
+        _RYML_ASSERT_VISIT_(tree_->m_callbacks, (((Impl const* C4_RESTRICT)this)->readable()), tree_, id_)
     // a SFINAE beautifier to enable a function only if the
     // implementation is mutable
     #define _C4_IF_MUTABLE(ty) typename std::enable_if<!std::is_same<U, ConstImpl>::value, ty>::type
@@ -197,11 +197,12 @@ public:
 
     /** returns the data or null when the id is NONE */
     C4_ALWAYS_INLINE NodeData const* get() const RYML_NOEXCEPT { return ((Impl const*)this)->readable() ? tree_->get(id_) : nullptr; }
+
     /** returns the data or null when the id is NONE */
     template<class U=Impl>
     C4_ALWAYS_INLINE auto get() RYML_NOEXCEPT -> _C4_IF_MUTABLE(NodeData*) { return ((Impl const*)this)->readable() ? tree__->get(id__) : nullptr; }
 
-    C4_ALWAYS_INLINE NodeType    type()     const RYML_NOEXCEPT { _C4RR(); return tree_->type(id_); }     /**< Forward to @ref Tree::type_str(). Node must be readable. */
+    C4_ALWAYS_INLINE NodeType    type()     const RYML_NOEXCEPT { _C4RR(); return tree_->type(id_); }     /**< Forward to @ref Tree::type(). Node must be readable. */
     C4_ALWAYS_INLINE const char* type_str() const RYML_NOEXCEPT { _C4RR(); return tree_->type_str(id_); } /**< Forward to @ref Tree::type_str(). Node must be readable. */
 
     C4_ALWAYS_INLINE csubstr key()        const RYML_NOEXCEPT { _C4RR(); return tree_->key(id_); }        /**< Forward to @ref Tree::key(). Node must be readable. */
@@ -310,12 +311,12 @@ public:
     C4_ALWAYS_INLINE bool has_child(ConstImpl const& n) const RYML_NOEXCEPT { _C4RR(); return n.readable() ? tree_->has_child(id_, n.m_id) : false; } /**< Forward to @ref Tree::has_child(). Node must be readable. */
     C4_ALWAYS_INLINE bool has_child(id_type node) const RYML_NOEXCEPT { _C4RR(); return tree_->has_child(id_, node); } /**< Forward to @ref Tree::has_child(). Node must be readable. */
     C4_ALWAYS_INLINE bool has_child(csubstr name) const RYML_NOEXCEPT { _C4RR(); return tree_->has_child(id_, name); } /**< Forward to @ref Tree::has_child(). Node must be readable. */
-    C4_ALWAYS_INLINE bool has_children() const RYML_NOEXCEPT { _C4RR(); return tree_->has_children(id_); } /**< Forward to @ref Tree::has_child(). Node must be readable. */
+    C4_ALWAYS_INLINE bool has_children() const RYML_NOEXCEPT { _C4RR(); return tree_->has_children(id_); } /**< Forward to @ref Tree::has_children(). Node must be readable. */
 
     C4_ALWAYS_INLINE bool has_sibling(ConstImpl const& n) const RYML_NOEXCEPT { _C4RR(); return n.readable() ? tree_->has_sibling(id_, n.m_id) : false; } /**< Forward to @ref Tree::has_sibling(). Node must be readable. */
     C4_ALWAYS_INLINE bool has_sibling(id_type node) const RYML_NOEXCEPT { _C4RR(); return tree_->has_sibling(id_, node); } /**< Forward to @ref Tree::has_sibling(). Node must be readable. */
     C4_ALWAYS_INLINE bool has_sibling(csubstr name) const RYML_NOEXCEPT { _C4RR(); return tree_->has_sibling(id_, name); } /**< Forward to @ref Tree::has_sibling(). Node must be readable. */
-    C4_ALWAYS_INLINE bool has_other_siblings() const RYML_NOEXCEPT { _C4RR(); return tree_->has_other_siblings(id_); }  /**< Forward to @ref Tree::has_sibling(). Node must be readable. */
+    C4_ALWAYS_INLINE bool has_other_siblings() const RYML_NOEXCEPT { _C4RR(); return tree_->has_other_siblings(id_); }  /**< Forward to @ref Tree::has_other_siblings(). Node must be readable. */
 
     RYML_DEPRECATED("use has_other_siblings()") bool has_siblings() const RYML_NOEXCEPT { _C4RR(); return tree_->has_siblings(id_); }
 
@@ -329,8 +330,8 @@ public:
     // documentation to the right -->
 
     template<class U=Impl>
-    C4_ALWAYS_INLINE auto doc(id_type i) RYML_NOEXCEPT -> _C4_IF_MUTABLE(Impl) { RYML_ASSERT(tree_); return {tree__, tree__->doc(i)}; } /**< Forward to @ref Tree::doc(). Node must be readable. */
-    C4_ALWAYS_INLINE ConstImpl doc(id_type i) const RYML_NOEXCEPT { RYML_ASSERT(tree_); return {tree_, tree_->doc(i)}; }                /**< Forward to @ref Tree::doc(). Node must be readable. succeeds even when the node may have invalid or seed id */
+    C4_ALWAYS_INLINE auto doc(id_type i) RYML_NOEXCEPT -> _C4_IF_MUTABLE(Impl) { _RYML_ASSERT_BASIC(tree_); return {tree__, tree__->doc(i)}; } /**< Forward to @ref Tree::doc(). Node must be readable. */
+    C4_ALWAYS_INLINE ConstImpl doc(id_type i) const RYML_NOEXCEPT { _RYML_ASSERT_BASIC(tree_); return {tree_, tree_->doc(i)}; }                /**< Forward to @ref Tree::doc(). Node must be readable. succeeds even when the node may have invalid or seed id */
 
     template<class U=Impl>
     C4_ALWAYS_INLINE auto parent() RYML_NOEXCEPT -> _C4_IF_MUTABLE(Impl) { _C4RR(); return {tree__, tree__->parent(id__)}; } /**< Forward to @ref Tree::parent(). Node must be readable. */
@@ -349,8 +350,8 @@ public:
     C4_ALWAYS_INLINE ConstImpl child(id_type pos) const RYML_NOEXCEPT { _C4RR(); return {tree_, tree_->child(id_, pos)}; }                  /**< Forward to @ref Tree::child(). Node must be readable. */
 
     template<class U=Impl>
-    C4_ALWAYS_INLINE auto find_child(csubstr name)  RYML_NOEXCEPT -> _C4_IF_MUTABLE(Impl) { _C4RR(); return {tree__, tree__->find_child(id__, name)}; }  /**< Forward to @ref Tree::first_child(). Node must be readable. */
-    C4_ALWAYS_INLINE ConstImpl find_child(csubstr name) const RYML_NOEXCEPT { _C4RR(); return {tree_, tree_->find_child(id_, name)}; }                   /**< Forward to @ref Tree::first_child(). Node must be readable. */
+    C4_ALWAYS_INLINE auto find_child(csubstr name)  RYML_NOEXCEPT -> _C4_IF_MUTABLE(Impl) { _C4RR(); return {tree__, tree__->find_child(id__, name)}; }  /**< Forward to @ref Tree::find_child(). Node must be readable. */
+    C4_ALWAYS_INLINE ConstImpl find_child(csubstr name) const RYML_NOEXCEPT { _C4RR(); return {tree_, tree_->find_child(id_, name)}; }                   /**< Forward to @ref Tree::find_child(). Node must be readable. */
 
     template<class U=Impl>
     C4_ALWAYS_INLINE auto prev_sibling() RYML_NOEXCEPT -> _C4_IF_MUTABLE(Impl) { _C4RR(); return {tree__, tree__->prev_sibling(id__)}; }  /**< Forward to @ref Tree::prev_sibling(). Node must be readable. */
@@ -379,8 +380,8 @@ public:
     C4_ALWAYS_INLINE id_type num_children() const RYML_NOEXCEPT { _C4RR(); return tree_->num_children(id_); } /**< O(num_children). Forward to @ref Tree::num_children(). */
     C4_ALWAYS_INLINE id_type num_siblings() const RYML_NOEXCEPT { _C4RR(); return tree_->num_siblings(id_); } /**< O(num_children). Forward to @ref Tree::num_siblings(). */
     C4_ALWAYS_INLINE id_type num_other_siblings() const RYML_NOEXCEPT { _C4RR(); return tree_->num_other_siblings(id_); } /**< O(num_siblings). Forward to @ref Tree::num_other_siblings(). */
-    C4_ALWAYS_INLINE id_type child_pos(ConstImpl const& n) const RYML_NOEXCEPT { _C4RR(); _RYML_CB_ASSERT(tree_->m_callbacks, n.readable()); return tree_->child_pos(id_, n.m_id); } /**< O(num_children). Forward to @ref Tree::child_pos(). */
-    C4_ALWAYS_INLINE id_type sibling_pos(ConstImpl const& n) const RYML_NOEXCEPT { _C4RR(); _RYML_CB_ASSERT(tree_->callbacks(), n.readable()); return tree_->child_pos(tree_->parent(id_), n.m_id); } /**< O(num_siblings). Forward to @ref Tree::sibling_pos(). */
+    C4_ALWAYS_INLINE id_type child_pos(ConstImpl const& n) const RYML_NOEXCEPT { _C4RR(); _RYML_ASSERT_VISIT_(tree_->m_callbacks, n.readable(), n.tree(), n.id()); return tree_->child_pos(id_, n.m_id); } /**< O(num_children). Forward to @ref Tree::child_pos(). */
+    C4_ALWAYS_INLINE id_type sibling_pos(ConstImpl const& n) const RYML_NOEXCEPT { _C4RR(); _RYML_ASSERT_VISIT_(tree_->callbacks(), n.readable(), n.tree(), n.id()); return tree_->child_pos(tree_->parent(id_), n.m_id); } /**< O(num_siblings). Forward to @ref Tree::sibling_pos(). */
 
     C4_ALWAYS_INLINE id_type depth_asc() const RYML_NOEXCEPT { _C4RR(); return tree_->depth_asc(id_); } /** O(log(num_nodes)). Forward to Tree::depth_asc(). Node must be readable. */
     C4_ALWAYS_INLINE id_type depth_desc() const RYML_NOEXCEPT { _C4RR(); return tree_->depth_desc(id_); } /** O(num_nodes). Forward to Tree::depth_desc(). Node must be readable. */
@@ -458,7 +459,7 @@ public:
     {
         _C4RR();
         id_type ch = tree_->find_child(id_, key);
-        _RYML_CB_ASSERT(tree_->m_callbacks, ch != NONE);
+        _RYML_ASSERT_VISIT_(tree_->m_callbacks, ch != NONE, tree_, id_);
         return {tree_, ch};
     }
 
@@ -475,7 +476,7 @@ public:
     {
         _C4RR();
         id_type ch = tree_->child(id_, pos);
-        _RYML_CB_ASSERT(tree_->m_callbacks, ch != NONE);
+        _RYML_ASSERT_VISIT_(tree_->m_callbacks, ch != NONE, tree_, id_);
         return {tree_, ch};
     }
 
@@ -521,10 +522,10 @@ public:
     template<class U=Impl>
     C4_ALWAYS_INLINE auto at(csubstr key) -> _C4_IF_MUTABLE(Impl)
     {
-        RYML_CHECK(tree_ != nullptr);
-        _RYML_CB_CHECK(tree_->m_callbacks, (id_ >= 0 && id_ < tree_->capacity()));
-        _RYML_CB_CHECK(tree_->m_callbacks, ((Impl const*)this)->readable());
-        _RYML_CB_CHECK(tree_->m_callbacks, tree_->is_map(id_));
+        _RYML_CHECK_BASIC(tree_ != nullptr);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, (id_ >= 0 && id_ < tree_->capacity()), tree_, id_);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, ((Impl const*)this)->readable(), tree_, id_);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, tree_->is_map(id_), tree_, id_);
         id_type ch = tree__->find_child(id__, key);
         return ch != NONE ? Impl(tree__, ch) : Impl(tree__, id__, key);
     }
@@ -557,12 +558,12 @@ public:
     template<class U=Impl>
     C4_ALWAYS_INLINE auto at(id_type pos) -> _C4_IF_MUTABLE(Impl)
     {
-        RYML_CHECK(tree_ != nullptr);
+        _RYML_CHECK_BASIC(tree_ != nullptr);
         const id_type cap = tree_->capacity();
-        _RYML_CB_CHECK(tree_->m_callbacks, (id_ >= 0 && id_ < cap));
-        _RYML_CB_CHECK(tree_->m_callbacks, (pos >= 0 && pos < cap));
-        _RYML_CB_CHECK(tree_->m_callbacks, ((Impl const*)this)->readable());
-        _RYML_CB_CHECK(tree_->m_callbacks, tree_->is_container(id_));
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, (id_ >= 0 && id_ < cap), tree_, id_);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, (pos >= 0 && pos < cap), tree_, id_);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, ((Impl const*)this)->readable(), tree_, id_);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, tree_->is_container(id_), tree_, id_);
         id_type ch = tree__->child(id__, pos);
         return ch != NONE ? Impl(tree__, ch) : Impl(tree__, id__, pos);
     }
@@ -578,12 +579,12 @@ public:
      * callback instead of directly raising an exception. */
     ConstImpl at(csubstr key) const
     {
-        RYML_CHECK(tree_ != nullptr);
-        _RYML_CB_CHECK(tree_->m_callbacks, (id_ >= 0 && id_ < tree_->capacity()));
-        _RYML_CB_CHECK(tree_->m_callbacks, ((Impl const*)this)->readable());
-        _RYML_CB_CHECK(tree_->m_callbacks, tree_->is_map(id_));
+        _RYML_CHECK_BASIC(tree_ != nullptr);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, (id_ >= 0 && id_ < tree_->capacity()), tree_, id_);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, ((Impl const*)this)->readable(), tree_, id_);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, tree_->is_map(id_), tree_, id_);
         id_type ch = tree_->find_child(id_, key);
-        _RYML_CB_CHECK(tree_->m_callbacks, ch != NONE);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, ch != NONE, tree_, id_);
         return {tree_, ch};
     }
 
@@ -598,14 +599,14 @@ public:
      * callback instead of directly raising an exception. */
     ConstImpl at(id_type pos) const
     {
-        RYML_CHECK(tree_ != nullptr);
+        _RYML_CHECK_BASIC(tree_ != nullptr);
         const id_type cap = tree_->capacity();
-        _RYML_CB_CHECK(tree_->m_callbacks, (id_ >= 0 && id_ < cap));
-        _RYML_CB_CHECK(tree_->m_callbacks, (pos >= 0 && pos < cap));
-        _RYML_CB_CHECK(tree_->m_callbacks, ((Impl const*)this)->readable());
-        _RYML_CB_CHECK(tree_->m_callbacks, tree_->is_container(id_));
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, (id_ >= 0 && id_ < cap), tree_, id_);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, (pos >= 0 && pos < cap), tree_, id_);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, ((Impl const*)this)->readable(), tree_, id_);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, tree_->is_container(id_), tree_, id_);
         const id_type ch = tree_->child(id_, pos);
-        _RYML_CB_CHECK(tree_->m_callbacks, ch != NONE);
+        _RYML_CHECK_VISIT_(tree_->m_callbacks, ch != NONE, tree_, id_);
         return {tree_, ch};
     }
 
@@ -636,7 +637,7 @@ public:
     {
         _C4RR();
         if( ! read((ConstImpl const&)*this, &v))
-            _RYML_CB_ERR(tree_->m_callbacks, "could not deserialize value");
+            _RYML_ERR_VISIT_(tree_->m_callbacks, tree_, id_, "could not deserialize value");
         return *((ConstImpl const*)this);
     }
 
@@ -648,7 +649,7 @@ public:
     {
         _C4RR();
         if( ! readkey((ConstImpl const&)*this, &v.k))
-            _RYML_CB_ERR(tree_->m_callbacks, "could not deserialize key");
+            _RYML_ERR_VISIT_(tree_->m_callbacks, tree_, id_, "could not deserialize key");
         return *((ConstImpl const*)this);
     }
 
@@ -743,29 +744,22 @@ public:
     using children_view = detail::children_view_<Impl>;
     using const_children_view = detail::children_view_<ConstImpl>;
 
-    /** get an iterator to the first child */
     template<class U=Impl>
-    C4_ALWAYS_INLINE auto begin() RYML_NOEXCEPT -> _C4_IF_MUTABLE(iterator) { _C4RR(); return iterator(tree__, tree__->first_child(id__)); }
-    /** get an iterator to the first child */
-    C4_ALWAYS_INLINE const_iterator begin() const RYML_NOEXCEPT { _C4RR(); return const_iterator(tree_, tree_->first_child(id_)); }
-    /** get an iterator to the first child */
-    C4_ALWAYS_INLINE const_iterator cbegin() const RYML_NOEXCEPT { _C4RR(); return const_iterator(tree_, tree_->first_child(id_)); }
+    C4_ALWAYS_INLINE auto begin() RYML_NOEXCEPT -> _C4_IF_MUTABLE(iterator) { _C4RR(); return iterator(tree__, tree__->first_child(id__)); }  /**< get a mutable iterator to the first child. NOT AVAILABLE for ConstNodeRef. */
+    C4_ALWAYS_INLINE const_iterator begin() const RYML_NOEXCEPT { _C4RR(); return const_iterator(tree_, tree_->first_child(id_)); } /**< get an iterator to the first child */
+    C4_ALWAYS_INLINE const_iterator cbegin() const RYML_NOEXCEPT { _C4RR(); return const_iterator(tree_, tree_->first_child(id_)); } /**< get an iterator to the first child */
 
-    /** get an iterator to after the last child */
     template<class U=Impl>
-    C4_ALWAYS_INLINE auto end() RYML_NOEXCEPT -> _C4_IF_MUTABLE(iterator) { _C4RR(); return iterator(tree__, NONE); }
+    C4_ALWAYS_INLINE auto end() RYML_NOEXCEPT -> _C4_IF_MUTABLE(iterator) { _C4RR(); return iterator(tree__, NONE); } /**< get an iterator to after the last child. NOT AVAILABLE for ConstNodeRef. */
     /** get an iterator to after the last child */
-    C4_ALWAYS_INLINE const_iterator end() const RYML_NOEXCEPT { _C4RR(); return const_iterator(tree_, NONE); }
+    C4_ALWAYS_INLINE const_iterator end() const RYML_NOEXCEPT { _C4RR(); return const_iterator(tree_, NONE); } /**< get an iterator to after the last child */
     /** get an iterator to after the last child */
-    C4_ALWAYS_INLINE const_iterator cend() const RYML_NOEXCEPT { _C4RR(); return const_iterator(tree_, tree_->first_child(id_)); }
+    C4_ALWAYS_INLINE const_iterator cend() const RYML_NOEXCEPT { _C4RR(); return const_iterator(tree_, NONE); } /**< get an iterator to after the last child */
 
-    /** get an iterable view over children */
     template<class U=Impl>
-    C4_ALWAYS_INLINE auto children() RYML_NOEXCEPT -> _C4_IF_MUTABLE(children_view) { _C4RR(); return children_view(begin(), end()); }
-    /** get an iterable view over children */
-    C4_ALWAYS_INLINE const_children_view children() const RYML_NOEXCEPT { _C4RR(); return const_children_view(begin(), end()); }
-    /** get an iterable view over children */
-    C4_ALWAYS_INLINE const_children_view cchildren() const RYML_NOEXCEPT { _C4RR(); return const_children_view(begin(), end()); }
+    C4_ALWAYS_INLINE auto children() RYML_NOEXCEPT -> _C4_IF_MUTABLE(children_view) { _C4RR(); return children_view(begin(), end()); } /**< get an iterable view over children. NOT AVAILABLE for ConstNodeRef. */
+    C4_ALWAYS_INLINE const_children_view children() const RYML_NOEXCEPT { _C4RR(); return const_children_view(begin(), end()); } /**< get an iterable view over children */
+    C4_ALWAYS_INLINE const_children_view cchildren() const RYML_NOEXCEPT { _C4RR(); return const_children_view(begin(), end()); } /**< get an iterable view over children */
 
     /** get an iterable view over all siblings (including the calling node) */
     template<class U=Impl>
@@ -940,8 +934,8 @@ public:
     RYML_DEPRECATED("use invalid()")  bool operator== (std::nullptr_t) const noexcept { return m_tree == nullptr || m_id == NONE; }
     RYML_DEPRECATED("use !invalid()") bool operator!= (std::nullptr_t) const noexcept { return !(m_tree == nullptr || m_id == NONE); }
 
-    RYML_DEPRECATED("use (this->val() == s)") bool operator== (csubstr s) const RYML_NOEXCEPT { RYML_ASSERT(m_tree); _RYML_CB_ASSERT(m_tree->m_callbacks, m_id != NONE); return m_tree->val(m_id) == s; }
-    RYML_DEPRECATED("use (this->val() != s)") bool operator!= (csubstr s) const RYML_NOEXCEPT { RYML_ASSERT(m_tree); _RYML_CB_ASSERT(m_tree->m_callbacks, m_id != NONE); return m_tree->val(m_id) != s; }
+    RYML_DEPRECATED("use (this->val() == s)") bool operator== (csubstr s) const RYML_NOEXCEPT { _RYML_ASSERT_BASIC(m_tree); _RYML_ASSERT_VISIT_(m_tree->m_callbacks, m_id != NONE, m_tree, NONE); return m_tree->val(m_id) == s; }
+    RYML_DEPRECATED("use (this->val() != s)") bool operator!= (csubstr s) const RYML_NOEXCEPT { _RYML_ASSERT_BASIC(m_tree); _RYML_ASSERT_VISIT_(m_tree->m_callbacks, m_id != NONE, m_tree, NONE); return m_tree->val(m_id) != s; }
     /** @endcond */
 
     /** @} */
@@ -1019,13 +1013,13 @@ private:
     friend struct detail::RoNodeMethods<NodeRef, ConstNodeRef>;
 
     // require valid: a helper macro, undefined at the end
-    #define _C4RR()                                                         \
-        RYML_ASSERT(m_tree != nullptr);                                     \
-        _RYML_CB_ASSERT(m_tree->m_callbacks, m_id != NONE && !is_seed())
+    #define _C4RR()                                                     \
+        _RYML_ASSERT_BASIC(m_tree != nullptr);                           \
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, m_id != NONE && !is_seed(), m_tree, m_id)
     // require id: a helper macro, undefined at the end
     #define _C4RID()                                                        \
-        RYML_ASSERT(m_tree != nullptr);                                     \
-        _RYML_CB_ASSERT(m_tree->m_callbacks, m_id != NONE)
+        _RYML_ASSERT_BASIC(m_tree != nullptr);                                     \
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, m_id != NONE, m_tree, m_id)
 
 public:
 
@@ -1105,8 +1099,8 @@ public:
     RYML_DEPRECATED("use !readable()") bool operator== (std::nullptr_t) const { return m_tree == nullptr || m_id == NONE || is_seed(); }
     RYML_DEPRECATED("use readable()")  bool operator!= (std::nullptr_t) const { return !(m_tree == nullptr || m_id == NONE || is_seed()); }
 
-    RYML_DEPRECATED("use `this->val() == s`") bool operator== (csubstr s) const { _C4RR(); _RYML_CB_ASSERT(m_tree->m_callbacks, has_val()); return m_tree->val(m_id) == s; }
-    RYML_DEPRECATED("use `this->val() != s`") bool operator!= (csubstr s) const { _C4RR(); _RYML_CB_ASSERT(m_tree->m_callbacks, has_val()); return m_tree->val(m_id) != s; }
+    RYML_DEPRECATED("use `this->val() == s`") bool operator== (csubstr s) const { _C4RR(); _RYML_ASSERT_VISIT_(m_tree->m_callbacks, has_val(), m_tree, m_id); return m_tree->val(m_id) == s; }
+    RYML_DEPRECATED("use `this->val() != s`") bool operator!= (csubstr s) const { _C4RR(); _RYML_ASSERT_VISIT_(m_tree->m_callbacks, has_val(), m_tree, m_id); return m_tree->val(m_id) != s; }
     /** @endcond */
 
 public:
@@ -1239,7 +1233,7 @@ public:
     template<class T>
     csubstr to_arena(T const& C4_RESTRICT s)
     {
-        RYML_ASSERT(m_tree); // no need for valid or readable
+        _RYML_ASSERT_BASIC(m_tree); // no need for valid or readable
         return m_tree->to_arena(s);
     }
 
@@ -1289,7 +1283,7 @@ public:
         // operator<< for writing a substr to a stream)
         _apply_seed();
         write(this, s);
-        _RYML_CB_ASSERT(m_tree->m_callbacks, val() == s);
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, val() == s, m_tree, m_id);
         return *this;
     }
 
@@ -1347,14 +1341,14 @@ private:
         }
         else if(m_seed.len != (size_t)NONE) // we have a seed index: create a child at that position
         {
-            _RYML_CB_ASSERT(m_tree->m_callbacks, (size_t)m_tree->num_children(m_id) == m_seed.len);
+            _RYML_ASSERT_VISIT_(m_tree->m_callbacks, (size_t)m_tree->num_children(m_id) == m_seed.len, m_tree, m_id);
             m_id = m_tree->append_child(m_id);
             m_seed.str = nullptr;
             m_seed.len = (size_t)NONE;
         }
         else
         {
-            _RYML_CB_ASSERT(m_tree->m_callbacks, readable());
+            _RYML_ASSERT_VISIT_(m_tree->m_callbacks, readable(), m_tree, m_id);
         }
     }
 
@@ -1381,7 +1375,7 @@ public:
     NodeRef insert_child(NodeRef after)
     {
         _C4RR();
-        _RYML_CB_ASSERT(m_tree->m_callbacks, after.m_tree == m_tree);
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, after.m_tree == m_tree, m_tree, m_id);
         NodeRef r(m_tree, m_tree->insert_child(m_id, after.m_id));
         return r;
     }
@@ -1389,7 +1383,7 @@ public:
     NodeRef insert_child(NodeInit const& i, NodeRef after)
     {
         _C4RR();
-        _RYML_CB_ASSERT(m_tree->m_callbacks, after.m_tree == m_tree);
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, after.m_tree == m_tree, m_tree, m_id);
         NodeRef r(m_tree, m_tree->insert_child(m_id, after.m_id));
         r._apply(i);
         return r;
@@ -1428,7 +1422,7 @@ public:
     NodeRef insert_sibling(ConstNodeRef const& after)
     {
         _C4RR();
-        _RYML_CB_ASSERT(m_tree->m_callbacks, after.m_tree == m_tree);
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, after.m_tree == m_tree, m_tree, m_id);
         NodeRef r(m_tree, m_tree->insert_sibling(m_id, after.m_id));
         return r;
     }
@@ -1436,7 +1430,7 @@ public:
     NodeRef insert_sibling(NodeInit const& i, ConstNodeRef const& after)
     {
         _C4RR();
-        _RYML_CB_ASSERT(m_tree->m_callbacks, after.m_tree == m_tree);
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, after.m_tree == m_tree, m_tree, m_id);
         NodeRef r(m_tree, m_tree->insert_sibling(m_id, after.m_id));
         r._apply(i);
         return r;
@@ -1477,8 +1471,8 @@ public:
     void remove_child(NodeRef & child)
     {
         _C4RR();
-        _RYML_CB_ASSERT(m_tree->m_callbacks, has_child(child));
-        _RYML_CB_ASSERT(m_tree->m_callbacks, child.parent().id() == id());
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, has_child(child), m_tree, m_id);
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, child.parent().id() == id(), m_tree, m_id);
         m_tree->remove(child.id());
         child.clear();
     }
@@ -1487,9 +1481,9 @@ public:
     void remove_child(id_type pos)
     {
         _C4RR();
-        _RYML_CB_ASSERT(m_tree->m_callbacks, pos >= 0 && pos < num_children());
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, pos >= 0 && pos < num_children(), m_tree, m_id);
         id_type child = m_tree->child(m_id, pos);
-        _RYML_CB_ASSERT(m_tree->m_callbacks, child != NONE);
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, child != NONE, m_tree, m_id);
         m_tree->remove(child);
     }
 
@@ -1498,7 +1492,7 @@ public:
     {
         _C4RR();
         id_type child = m_tree->find_child(m_id, key);
-        _RYML_CB_ASSERT(m_tree->m_callbacks, child != NONE);
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, child != NONE, m_tree, m_id);
         m_tree->remove(child);
     }
 
@@ -1539,7 +1533,7 @@ public:
     NodeRef duplicate(ConstNodeRef const& after) const
     {
         _C4RR();
-        _RYML_CB_ASSERT(m_tree->m_callbacks, m_tree == after.m_tree || after.m_id == NONE);
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, m_tree == after.m_tree || after.m_id == NONE, m_tree, m_id);
         id_type dup = m_tree->duplicate(m_id, m_tree->parent(m_id), after.m_id);
         NodeRef r(m_tree, dup);
         return r;
@@ -1553,7 +1547,7 @@ public:
     NodeRef duplicate(NodeRef const& parent, ConstNodeRef const& after) const
     {
         _C4RR();
-        _RYML_CB_ASSERT(m_tree->m_callbacks, parent.m_tree == after.m_tree || after.m_id == NONE);
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, parent.m_tree == after.m_tree || after.m_id == NONE, m_tree, m_id);
         if(parent.m_tree == m_tree)
         {
             id_type dup = m_tree->duplicate(m_id, parent.m_id, after.m_id);
@@ -1571,7 +1565,7 @@ public:
     void duplicate_children(NodeRef const& parent, ConstNodeRef const& after) const
     {
         _C4RR();
-        _RYML_CB_ASSERT(m_tree->m_callbacks, parent.m_tree == after.m_tree);
+        _RYML_ASSERT_VISIT_(m_tree->m_callbacks, parent.m_tree == after.m_tree, m_tree, m_id);
         if(parent.m_tree == m_tree)
         {
             m_tree->duplicate_children(m_id, parent.m_id, after.m_id);
