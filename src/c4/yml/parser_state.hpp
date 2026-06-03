@@ -14,18 +14,18 @@ namespace yml {
 using ParserFlag_t = int;
 
 /** Enumeration of the state flags for the parser */
-typedef enum : ParserFlag_t {
+typedef enum : ParserFlag_t { // NOLINT
     RTOP = 0x01 <<  0,   ///< reading at top level
     RUNK = 0x01 <<  1,   ///< reading unknown state (when starting): must determine whether scalar, map or seq
     RMAP = 0x01 <<  2,   ///< reading a map
     RSEQ = 0x01 <<  3,   ///< reading a seq
-    RFLOW = 0x01 <<  4,   ///< reading is inside explicit flow chars: [] or {}
-    RBLCK = 0x01 <<  5,   ///< reading in block mode
+    RFLOW = 0x01 <<  4,  ///< reading is inside explicit flow chars: [] or {}
+    RBLCK = 0x01 <<  5,  ///< reading in block mode
     QMRK = 0x01 <<  6,   ///< reading an explicit key (`? key`)
-    RKEY = 0x01 <<  7,   ///< reading a scalar as key
-    RVAL = 0x01 <<  9,   ///< reading a scalar as val
+    RKEY = 0x01 <<  7,   ///< reading a key
+    RVAL = 0x01 <<  9,   ///< reading a val
     RKCL = 0x01 <<  8,   ///< reading the key colon (ie the : after the key in the map)
-    RNXT = 0x01 << 10,   ///< read next val or keyval
+    RNXT = 0x01 << 10,   ///< read next sibling
     SSCL = 0x01 << 11,   ///< there's a stored scalar
     QSCL = 0x01 << 12,   ///< stored scalar was quoted
     RSET = 0x01 << 13,   ///< the (implicit) map being read is a !!set. @see https://yaml.org/type/set.html
@@ -33,7 +33,7 @@ typedef enum : ParserFlag_t {
     NDOC = 0x01 << 15,   ///< no document mode. a document has ended and another has not started yet.
     USTY = 0x01 << 16,   ///< reading in unknown style mode - must determine FLOW or BLCK
     //! reading an implicit map nested in an explicit seq.
-    //! eg, {key: [key2: value2, key3: value3]}
+    //! eg,          {key: [key2: value2, key3: value3]}
     //! is parsed as {key: [{key2: value2}, {key3: value3}]}
     RSEQIMAP = 0x01 << 17,
 } ParserState_e;
@@ -42,7 +42,7 @@ typedef enum : ParserFlag_t {
 /** @cond dev */
 #ifdef RYML_DBG
 namespace detail {
-csubstr _parser_flags_to_str(substr buf, ParserFlag_t flags);
+RYML_EXPORT csubstr _parser_flags_to_str(substr buf, ParserFlag_t flags);
 } // namespace detail
 #endif
 /** @endcond */
@@ -60,9 +60,6 @@ struct LineContents
     size_t  num_cols;    ///< number of columns in the line, excluding newline
                          ///< characters (ie the initial size of rem)
     size_t  indentation; ///< number of spaces on the beginning of the line.
-                         ///< TODO this should not be a member of this object.
-                         ///< We only care about indentation in block mode, so
-                         ///< this should be moved to the parser state.
 
     LineContents() RYML_NOEXCEPT = default;
 
@@ -161,25 +158,57 @@ public:
     {
         return line_contents.rem.str == line_contents.full.str;
     }
+    C4_ALWAYS_INLINE bool at_first_token() const noexcept
+    {
+        _RYML_ASSERT_BASIC(line_contents.indentation != npos);
+        return pos.col == line_contents.indentation + 1;
+    }
     C4_ALWAYS_INLINE bool indentation_eq() const noexcept
     {
         _RYML_ASSERT_BASIC(indref != npos);
-        return line_contents.indentation != npos && line_contents.indentation == indref;
+        return line_contents.indentation != npos
+            && line_contents.indentation == indref;
+    }
+    C4_ALWAYS_INLINE bool indentation_eq_extra() const noexcept
+    {
+        _RYML_ASSERT_BASIC(indref != npos);
+        return line_contents.indentation != npos
+            && line_contents.indentation == indref + 1u;
     }
     C4_ALWAYS_INLINE bool indentation_ge() const noexcept
     {
         _RYML_ASSERT_BASIC(indref != npos);
-        return line_contents.indentation != npos && line_contents.indentation >= indref;
+        return line_contents.indentation != npos
+            && line_contents.indentation >= indref;
+    }
+    C4_ALWAYS_INLINE bool indentation_ge_extra() const noexcept
+    {
+        _RYML_ASSERT_BASIC(indref != npos);
+        return line_contents.indentation != npos
+            && line_contents.indentation >= indref + 1u;
     }
     C4_ALWAYS_INLINE bool indentation_gt() const noexcept
     {
         _RYML_ASSERT_BASIC(indref != npos);
-        return line_contents.indentation != npos && line_contents.indentation > indref;
+        return line_contents.indentation != npos
+            && line_contents.indentation > indref;
+    }
+    C4_ALWAYS_INLINE bool indentation_gt_extra() const noexcept
+    {
+        _RYML_ASSERT_BASIC(indref != npos);
+        return line_contents.indentation != npos
+            && line_contents.indentation > indref + 1u;
     }
     C4_ALWAYS_INLINE bool indentation_lt() const noexcept
     {
         _RYML_ASSERT_BASIC(indref != npos);
         return line_contents.indentation != npos && line_contents.indentation < indref;
+    }
+    C4_ALWAYS_INLINE bool indentation_lt_extra() const noexcept
+    {
+        _RYML_ASSERT_BASIC(indref != npos);
+        return line_contents.indentation != npos
+            && line_contents.indentation < indref + 1u;
     }
 };
 static_assert(std::is_standard_layout<ParserState>::value, "ParserState not standard");

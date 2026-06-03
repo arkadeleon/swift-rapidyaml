@@ -7,6 +7,8 @@
 #include <c4/yml/common.hpp>
 #endif
 
+#include <cstdlib>
+
 /// @cond dev
 #if (defined(C4_EXCEPTIONS) && (!defined(RYML_NO_DEFAULT_CALLBACKS) && defined(RYML_DEFAULT_CALLBACK_USES_EXCEPTIONS))) || defined(__DOXYGEN__)
 #define _RYML_WITH_EXCEPTIONS
@@ -91,30 +93,50 @@ inline C4_NO_INLINE csubstr _maybe_add_ellipsis(substr buf, size_t len)
 }
 
 
-template<class T> struct dump_directly_ : public std::false_type {};
-template<> struct dump_directly_<csubstr> : public std::true_type {};
-template<> struct dump_directly_< substr> : public std::true_type {};
-template<> struct dump_directly_<const char*> : public std::true_type {};
-template<> struct dump_directly_<      char*> : public std::true_type {};
-template<size_t N> struct dump_directly_<const char (&)[N]> : public std::true_type {};
-template<size_t N> struct dump_directly_<      char (&)[N]> : public std::true_type {};
-template<size_t N> struct dump_directly_<const char[N]> : public std::true_type {};
-template<size_t N> struct dump_directly_<      char[N]> : public std::true_type {};
-template<class T> using dump_directly = dump_directly_<typename std::remove_cv<typename std::remove_reference<T>::type>::type>;
+// std::remove_cvref appeared in c++20
+template<class T>
+struct _remove_cvref
+{
+    using type = typename std::remove_cv<typename std::remove_reference<T>::type>::type;
+};
+template<class T>
+struct _dump_directly : public c4::is_string<typename _remove_cvref<T>::type>
+{
+};
 
+
+#if C4_CPP >= 17
+template<class T> using _remove_cvref_t = typename _remove_cvref<T>::type;
+template<class T> using _dump_directly_v = typename _dump_directly<T>::value;
+template<class T>
+C4_NO_INLINE csubstr _to_chars_limited(substr buf, T &&var)
+{
+    if constexpr (_dump_directly<T>::value)
+    {
+        (void)buf;
+        return to_csubstr(std::forward<T>(var)); // no need to convert to buf
+    }
+    else
+    {
+        size_t len = to_chars(buf, std::forward<T>(var));
+        return _maybe_add_ellipsis(buf, len);
+    }
+}
+#else
+template<class T>
+C4_NO_INLINE auto _to_chars_limited(substr, T &&var)
+    -> typename std::enable_if<_dump_directly<T>::value, csubstr>::type
+{
+    return to_csubstr(std::forward<T>(var)); // no need to convert to buf
+}
 template<class T>
 C4_NO_INLINE auto _to_chars_limited(substr buf, T &&var)
-    -> typename std::enable_if< ! detail::dump_directly<T>::value, csubstr>::type
+    -> typename std::enable_if< ! _dump_directly<T>::value, csubstr>::type
 {
     size_t len = to_chars(buf, std::forward<T>(var));
     return _maybe_add_ellipsis(buf, len);
 }
-template<class T>
-C4_NO_INLINE auto _to_chars_limited(substr, T &&var)
-    -> typename std::enable_if<detail::dump_directly<T>::value, csubstr>::type
-{
-    return to_csubstr(std::forward<T>(var)); // no need to convert to buf
-}
+#endif
 
 
 // dumpfn is a function abstracting prints to terminal (or to string).
@@ -128,10 +150,10 @@ C4_NO_INLINE void _dump(DumpFn &&dumpfn, substr argbuf, csubstr fmt, Arg const& 
 {
     size_t pos = fmt.find("{}");
     if(pos == csubstr::npos)
-        return std::forward<DumpFn>(dumpfn)(fmt);
-    std::forward<DumpFn>(dumpfn)(fmt.first(pos));
-    std::forward<DumpFn>(dumpfn)(_to_chars_limited(argbuf, arg));
-    _dump(std::forward<DumpFn>(dumpfn), argbuf, fmt.sub(pos + 2), more...);
+        return std::forward<DumpFn>(dumpfn)(fmt); // NOLINT // LCOV_EXCL_LINE
+    std::forward<DumpFn>(dumpfn)(fmt.first(pos)); // NOLINT
+    std::forward<DumpFn>(dumpfn)(_to_chars_limited(argbuf, arg)); // NOLINT
+    _dump(std::forward<DumpFn>(dumpfn), argbuf, fmt.sub(pos + 2), more...); // NOLINT
 }
 
 
@@ -308,7 +330,7 @@ C4_NORETURN C4_NO_INLINE void err_basic(Callbacks const& callbacks, ErrorDataBas
     char errbuf[RYML_ERRMSG_SIZE];
     csubstr msg = detail::_mk_err_msg(errbuf, to_csubstr(fmt), args...);
     callbacks.m_error_basic(msg, errdata, callbacks.m_user_data);
-    abort(); // the call above should not return, but force it here in case it does // LCOV_EXCL_LINE
+    std::abort(); // the call above should not return, but force it here in case it does // LCOV_EXCL_LINE
     C4_UNREACHABLE_AFTER_ERR();
 }
 /** trigger a basic error to its respective handler, with a formatted error message. Like (1), but use the current global callbacks. */
@@ -367,7 +389,7 @@ C4_NORETURN C4_NO_INLINE void err_parse(Callbacks const& callbacks, ErrorDataPar
     // fall to basic error if there is no parse handler set, but use errdata.ymlloc instead of errdata.cpploc
     else if(callbacks.m_error_basic)
         callbacks.m_error_basic(msg, errdata.ymlloc, callbacks.m_user_data);
-    abort(); // the call above should not return, so force it here in case it does // LCOV_EXCL_LINE
+    std::abort(); // the call above should not return, so force it here in case it does // LCOV_EXCL_LINE
     C4_UNREACHABLE_AFTER_ERR();
 }
 /** trigger a parse error to its respective handler, with a formatted error message. Like (1), but use the current global callbacks. */
@@ -429,7 +451,7 @@ C4_NORETURN C4_NO_INLINE void err_visit(Callbacks const& callbacks, ErrorDataVis
     // fall to basic error if there is no visit handler set
     else if(callbacks.m_error_basic)
         callbacks.m_error_basic(msg, errdata.cpploc, callbacks.m_user_data);
-    abort(); // the call above should not return, so force it here in case it does // LCOV_EXCL_LINE
+    std::abort(); // the call above should not return, so force it here in case it does // LCOV_EXCL_LINE
     C4_UNREACHABLE_AFTER_ERR();
 }
 /** trigger a visit error to its respective handler, with a formatted error message. Like (1), but use the current global callbacks. */

@@ -29,7 +29,7 @@ jobs:
 
   #----------------------------------------------------------------------------
   tabtokens:
-    :: setup-job('gcc' 'tabtokens')
+    :: setup-dependent-job('gcc' 'tabtokens')
     name: tabtokens/${{matrix.cxx}}/c++${{matrix.std}}/${{matrix.bt}}
     :: runs-on-docker-c4core('${{matrix.img}}')
     needs: canary
@@ -42,7 +42,7 @@ jobs:
 
   #----------------------------------------------------------------------------
   noexceptions:
-    :: setup-job('gcc' 'noexceptions')
+    :: setup-dependent-job('gcc' 'noexceptions')
     name: noexceptions/${{matrix.cxx}}/c++${{matrix.std}}/${{matrix.bt}}
     :: runs-on-docker-c4core('${{matrix.img}}')
     needs: canary
@@ -55,7 +55,7 @@ jobs:
 
   #----------------------------------------------------------------------------
   nocallbacks:
-    :: setup-job('gcc' 'nocallbacks')
+    :: setup-dependent-job('gcc' 'nocallbacks')
     name: nocallbacks/${{matrix.cxx}}/c++${{matrix.std}}/${{matrix.bt}}
     :: runs-on-docker-c4core('${{matrix.img}}')
     needs: canary
@@ -68,7 +68,7 @@ jobs:
 
   #----------------------------------------------------------------------------
   dbg:
-    :: setup-job('gcc' 'dbg')
+    :: setup-dependent-job('gcc' 'dbg')
     name: dbg/${{matrix.name}}/${{matrix.gcc}}
     :: runs-on-docker-c4core('${{matrix.img}}')
     needs: canary
@@ -87,7 +87,12 @@ jobs:
     env:: load('share/env.yaml') + {'CXX_' '${{matrix.gcc}}'}
     steps:
     - :: checkout-action-docker
-    - run: c4core-install g++-${{matrix.gcc}}
+    - name: install
+      run: |
+        # retry if it fails
+        c4core-install g++-${{matrix.gcc}} \
+        || c4core-install g++-${{matrix.gcc}} \
+        || c4core-install g++-${{matrix.gcc}}
     - name: show info
       run: source .github/setenv.sh && c4_show_info
     - name: configure (issue \#${{matrix.issue}})
@@ -101,7 +106,15 @@ jobs:
           -DRYML_BUILD_TESTS=ON \
           -DRYML_DBG=ON
     - name: build (issue \#${{matrix.issue}})
-      run: cmake --build build --target ryml-test-build --parallel --verbose
+      run: |
+        numprocs=`nproc`
+        if [[ "$cxxflags" == *"32"* ]] ; then
+            if (( $numprocs > 1 )) ; then
+                numprocs=$(($numprocs / 2))
+            fi
+        fi
+        export CMAKE_BUILD_PARALLEL_LEVEL=$numprocs
+        cmake --build build --target ryml-test-build --parallel $numprocs --verbose
     - name: run (issue \#${{matrix.issue}})
       run: |
         source .github/setenv.sh
@@ -110,7 +123,7 @@ jobs:
 
   #----------------------------------------------------------------------------
   misbuild:
-    :: setup-job('gcc' 'misbuild')
+    :: setup-dependent-job('gcc' 'misbuild')
     name: misbuild#${{matrix.issue}}/gcc${{matrix.gcc}}/c++${{matrix.std}}
     :: runs-on-docker-c4core('${{matrix.img}}')
     needs: canary
@@ -123,7 +136,12 @@ jobs:
     env:: load('share/env.yaml') + {'CXX_' '${{matrix.gcc}}'}
     steps:
     - :: checkout-action-docker
-    - run: c4core-install g++-${{matrix.gcc}}
+    - name: install
+      run: |
+        # retry if it fails
+        c4core-install g++-${{matrix.gcc}} \
+        || c4core-install g++-${{matrix.gcc}} \
+        || c4core-install g++-${{matrix.gcc}}
     - name: show info
       run: source .github/setenv.sh && c4_show_info
     - name: configure (issue \#${{matrix.issue}})
@@ -136,7 +154,13 @@ jobs:
           -DRYML_BUILD_TESTS=ON \
           -DRYML_DBG=OFF
     - name: build (issue \#${{matrix.issue}})
-      run: cmake --build build --target ryml-test-build --parallel --verbose
+      run: |
+        numprocs=`nproc`
+        if (( $numprocs > 1 )) ; then
+            numprocs=$(($numprocs / 2))
+        fi
+        export CMAKE_BUILD_PARALLEL_LEVEL=$numprocs
+        cmake --build build --target ryml-test-build --parallel $numprocs --verbose
     - name: run (issue \#${{matrix.issue}})
       run: |
         source .github/setenv.sh
@@ -161,7 +185,7 @@ jobs:
 
   # split these two valgrind jobs to make them faster
   vg1:
-    :: setup-job('gcc' 'vg1')
+    :: setup-dependent-job('gcc' 'vg1')
     name: extended/${{matrix.cxx}}/${{matrix.bits}}bit/c++${{matrix.std}}/vg/D_O1_O2
     :: runs-on-docker-c4core('${{matrix.img}}')
     needs: canary
@@ -170,12 +194,16 @@ jobs:
     steps:
     - :: checkout-manual
     - name: install
-      run: c4core-install g++-${{matrix.cxx}}
+      run: |
+        # retry if it fails
+        c4core-install g++-${{matrix.cxx}} \
+        || c4core-install g++-${{matrix.cxx}} \
+        || c4core-install g++-${{matrix.cxx}}
     - :: run-gcc-manual-with-flags('Debug'                '-m${{matrix.bits}}')
     - :: run-gcc-manual-with-flags('Release' '-O1 -DNDEBUG -m${{matrix.bits}}')
     - :: run-gcc-manual-with-flags('Release' '-O2 -DNDEBUG -m${{matrix.bits}}')
   vg2:
-    :: setup-job('gcc' 'vg2')
+    :: setup-dependent-job('gcc' 'vg2')
     name: extended/${{matrix.cxx}}/${{matrix.bits}}bit/c++${{matrix.std}}/vg/O3_Os
     :: runs-on-docker-c4core('${{matrix.img}}')
     needs: canary
@@ -184,14 +212,18 @@ jobs:
     steps:
     - :: checkout-manual
     - name: install
-      run: c4core-install g++-${{matrix.cxx}}
+      run: |
+        # retry if it fails
+        c4core-install g++-${{matrix.cxx}} \
+        || c4core-install g++-${{matrix.cxx}} \
+        || c4core-install g++-${{matrix.cxx}}
     - :: run-gcc-manual-with-flags('Release' '-O3 -DNDEBUG -m${{matrix.bits}}')
     - :: run-gcc-manual-with-flags('Release' '-Os -DNDEBUG -m${{matrix.bits}}')
 
   #----------------------------------------------------------------------------
   # without valgrind: older versions
   extended:
-    :: setup-job('gcc' 'extended')
+    :: setup-dependent-job('gcc' 'extended')
     name: extended/${{matrix.cxx}}/${{matrix.bits}}bit/c++${{matrix.std}}
     :: runs-on-docker-c4core('${{matrix.img}}')
     needs: canary
@@ -217,8 +249,8 @@ jobs:
         - {std: 11, cxx:  6  , bits: 32, vg: OFF, img: 18.04}
         - {std: 11, cxx:  5  , bits: 64, vg: OFF, img: 18.04}
         - {std: 11, cxx:  5  , bits: 32, vg: OFF, img: 18.04}
-        - {std: 11, cxx:  4.9, bits: 64, vg: OFF, img: 18.04}
-        - {std: 11, cxx:  4.9, bits: 32, vg: OFF, img: 18.04}
+        - {std: 11, cxx:  4.9, bits: 64, vg: OFF, img: 18.04, halfnprocs: 1}
+        - {std: 11, cxx:  4.9, bits: 32, vg: OFF, img: 18.04, halfnprocs: 1}
         - {std: 11, cxx:  4.8, bits: 64, vg: OFF, img: 18.04}
         - {std: 11, cxx:  4.8, bits: 32, vg: OFF, img: 18.04}
     env:: load('share/env.yaml')
@@ -226,15 +258,15 @@ jobs:
     - :: checkout-manual
     - name: install
       run: c4core-install g++-${{matrix.cxx}}
-    - :: run-gcc-manual-with-flags('Debug'                '-m${{matrix.bits}}')
-    - :: run-gcc-manual-with-flags('Release' '-O1 -DNDEBUG -m${{matrix.bits}}')
-    - :: run-gcc-manual-with-flags('Release' '-O2 -DNDEBUG -m${{matrix.bits}}')
-    - :: run-gcc-manual-with-flags('Release' '-O3 -DNDEBUG -m${{matrix.bits}}')
-    - :: run-gcc-manual-with-flags('Release' '-Os -DNDEBUG -m${{matrix.bits}}')
+    - :: run-gcc-manual-with-flags('Debug'                '-m${{matrix.bits}}' '${{matrix.halfnprocs}}')
+    - :: run-gcc-manual-with-flags('Release' '-O1 -DNDEBUG -m${{matrix.bits}}' '${{matrix.halfnprocs}}')
+    - :: run-gcc-manual-with-flags('Release' '-O2 -DNDEBUG -m${{matrix.bits}}' '${{matrix.halfnprocs}}')
+    - :: run-gcc-manual-with-flags('Release' '-O3 -DNDEBUG -m${{matrix.bits}}' '${{matrix.halfnprocs}}')
+    - :: run-gcc-manual-with-flags('Release' '-Os -DNDEBUG -m${{matrix.bits}}' '${{matrix.halfnprocs}}')
 
   #----------------------------------------------------------------------------
   gccsan:
-    :: setup-job('gcc' 'gccsan')
+    :: setup-dependent-job('gcc' 'gccsan')
     name: gccsan/${{matrix.bt}}/${{matrix.cxx}}/c++${{matrix.std}}
     :: runs-on-docker-c4core('22.04')
     needs: canary
@@ -251,7 +283,7 @@ jobs:
 
   #----------------------------------------------------------------------------
   arm:
-    :: setup-job('gcc' 'arm') + runs-on-docker-c4core('18.04')
+    :: setup-dependent-job('gcc' 'arm') + runs-on-docker-c4core('18.04')
     name: arm/c++${{matrix.std}}/${{matrix.bt}}
     needs: canary
     strategy:
@@ -273,9 +305,13 @@ jobs:
     steps:
     - :: checkout-manual
     - name: install gcc-arm-linux-gnueabihf
-      run:
-        c4core-install arm-linux-gnueabihf;
-        c4core-install qemu
+      run: |
+        c4core-install arm-linux-gnueabihf \
+        || c4core-install arm-linux-gnueabihf \
+        || c4core-install arm-linux-gnueabihf
+        c4core-install qemu \
+        || c4core-install qemu \
+        || c4core-install qemu
     - name: show info
       run: source .github/setenv.sh && c4_show_info
     - name: configure---------------------------------------------------
@@ -289,7 +325,7 @@ jobs:
 
   #----------------------------------------------------------------------------
   #analyzer:
-  #  :: setup-job('gcc' 'analyzer')
+  #  :: setup-dependent-job('gcc' 'analyzer')
   #  name: analyzer/${{matrix.bits}}bit/${{matrix.bt}}
   #  :: runs-on-docker-c4core('${{matrix.img}}')
   #  strategy:

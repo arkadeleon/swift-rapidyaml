@@ -84,9 +84,9 @@ TEST(serialize, type_as_str)
 
     char buf[256];
     c4::csubstr ret = c4::yml::emit_yaml(t, buf);
-    EXPECT_EQ(ret, R"(v2: '(10,11)'
-v3: '(100,101,102)'
-v4: '(1000,1001,1002,1003)'
+    EXPECT_EQ(ret, R"(v2: (10,11)
+v3: (100,101,102)
+v4: (1000,1001,1002,1003)
 )");
 }
 } // namespace foo
@@ -225,15 +225,15 @@ TEST(serialize, integral)
         i = 1; t[2] >> i; EXPECT_EQ(i, 20);
         i = 1; t[3] >> i; EXPECT_EQ(i, -30);
         i = 1; t[4] >> i; EXPECT_EQ(i, 0xaf);
-        ExpectError::check_error_basic(&t, [&]{ t[5] >> i; });
-        ExpectError::check_error_basic(&t, [&]{ t[6] >> i; });
+        ExpectError::check_error_visit(&t, [&]{ t[5] >> i; });
+        ExpectError::check_error_visit(&t, [&]{ t[6] >> i; });
         i = 1; t[0] >> key(i); EXPECT_EQ(i, 0);
         i = 1; t[1] >> key(i); EXPECT_EQ(i, 10);
         i = 1; t[2] >> key(i); EXPECT_EQ(i, 20);
         i = 1; t[3] >> key(i); EXPECT_EQ(i, -30);
         i = 1; t[4] >> key(i); EXPECT_EQ(i, 0xaf);
-        ExpectError::check_error_basic(&t, [&]{ t[5] >> key(i); });
-        ExpectError::check_error_basic(&t, [&]{ t[6] >> key(i); });
+        ExpectError::check_error_visit(&t, [&]{ t[5] >> key(i); });
+        ExpectError::check_error_visit(&t, [&]{ t[6] >> key(i); });
     });
 }
 
@@ -339,11 +339,11 @@ TEST(deserialize, issue434_0)
         int value = 0;
         EXPECT_FALSE(read(node, &value));
     }
-    ExpectError::check_error_basic(&tree, [&]{
+    ExpectError::check_error_visit(&tree, [&]{
         int value = 0;
         cnode >> value;
     });
-    ExpectError::check_error_basic(&tree, [&]{
+    ExpectError::check_error_visit(&tree, [&]{
         int value = 0;
         node >> value;
     });
@@ -355,11 +355,11 @@ TEST(deserialize, issue434_0)
         double value = 0;
         EXPECT_FALSE(read(node, &value));
     }
-    ExpectError::check_error_basic(&tree, [&]{
+    ExpectError::check_error_visit(&tree, [&]{
         double value = 0;
         cnode >> value;
     });
-    ExpectError::check_error_basic(&tree, [&]{
+    ExpectError::check_error_visit(&tree, [&]{
         double value = 0;
         node >> value;
     });
@@ -381,11 +381,11 @@ void test_deserialize_trailing_434(csubstr yaml, csubstr val, csubstr first, dou
         int value = {};
         EXPECT_FALSE(read(node, &value));
     }
-    ExpectError::check_error_basic(&tree, [&]{
+    ExpectError::check_error_visit(&tree, [&]{
         int value = 1;
         cnode >> value;
     });
-    ExpectError::check_error_basic(&tree, [&]{
+    ExpectError::check_error_visit(&tree, [&]{
         int value = 1;
         node >> value;
     });
@@ -555,12 +555,18 @@ TEST(serialize, issue442_50)
 }
 TEST(serialize, issue442_60)
 {
-    EXPECT_TRUE(scalar_style_query_plain("123"));
-    EXPECT_TRUE(scalar_style_query_plain("-123"));
-    EXPECT_TRUE(scalar_style_query_plain("+123"));
-    EXPECT_EQ(scalar_style_choose("123"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_choose("-123"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_choose("+123"), SCALAR_PLAIN);
+    EXPECT_TRUE(scalar_style_query_plain_flow("123"));
+    EXPECT_TRUE(scalar_style_query_plain_flow("-123"));
+    EXPECT_TRUE(scalar_style_query_plain_flow("+123"));
+    EXPECT_EQ(scalar_style_choose_flow("123"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_flow("-123"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_flow("+123"), SCALAR_PLAIN);
+    EXPECT_TRUE(scalar_style_query_plain_block("123"));
+    EXPECT_TRUE(scalar_style_query_plain_block("-123"));
+    EXPECT_TRUE(scalar_style_query_plain_block("+123"));
+    EXPECT_EQ(scalar_style_choose_block("123"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_block("-123"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_block("+123"), SCALAR_PLAIN);
     {
         Tree tree;
         tree.rootref() << "123";
@@ -584,12 +590,18 @@ TEST(serialize, issue442_60)
 }
 TEST(serialize, issue442_61)
 {
-    EXPECT_TRUE(scalar_style_query_plain("2.35e-10"));
-    EXPECT_TRUE(scalar_style_query_plain("-2.35e-10"));
-    EXPECT_TRUE(scalar_style_query_plain("+2.35e-10"));
-    EXPECT_EQ(scalar_style_choose("2.35e-10"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_choose("-2.35e-10"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_choose("+2.35e-10"), SCALAR_PLAIN);
+    EXPECT_TRUE(scalar_style_query_plain_flow("2.35e-10"));
+    EXPECT_TRUE(scalar_style_query_plain_flow("-2.35e-10"));
+    EXPECT_TRUE(scalar_style_query_plain_flow("+2.35e-10"));
+    EXPECT_EQ(scalar_style_choose_flow("2.35e-10"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_flow("-2.35e-10"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_flow("+2.35e-10"), SCALAR_PLAIN);
+    EXPECT_TRUE(scalar_style_query_plain_block("2.35e-10"));
+    EXPECT_TRUE(scalar_style_query_plain_block("-2.35e-10"));
+    EXPECT_TRUE(scalar_style_query_plain_block("+2.35e-10"));
+    EXPECT_EQ(scalar_style_choose_block("2.35e-10"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_block("-2.35e-10"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_block("+2.35e-10"), SCALAR_PLAIN);
     {
         Tree tree;
         tree.rootref() << 2.35e-10;

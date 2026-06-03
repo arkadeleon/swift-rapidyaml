@@ -219,6 +219,8 @@ void mklarge(Parser *p, Callbacks const& cb)
     new ((void*)p) Parser(evt_handler, p->options());
     p->reserve_stack(20); // cause an allocation
     p->reserve_locations(128); // cause an allocation
+    EXPECT_GE(p->stack_capacity(), 20);
+    EXPECT_GE(p->locations_capacity(), 128);
 }
 
 
@@ -246,26 +248,52 @@ TEST(Parser, callbacks_ctor)
     EXPECT_EQ(cbt.num_deallocs, 0u);
 }
 
-TEST(Parser, reserve_capacity)
+TEST(Parser, reserve_stack)
 {
     CallbacksTester cbt("test", 30000/*Bytes*/);
     {
         Parser::handler_type evt_handler = {cbt.callbacks()};
+        using Stack = detail::stack<EventHandlerTreeState>;
+        Stack const& stack = evt_handler.m_stack;
+        enum : id_type { sso_size = Stack::sso_size }; // NOLINT
         Parser parser(&evt_handler);
-        EXPECT_EQ(cbt.num_allocs, 0u);
-        EXPECT_EQ(cbt.num_deallocs, 0u);
-        parser.reserve_stack(18);
-        EXPECT_EQ(cbt.num_allocs, 1u);
-        EXPECT_EQ(cbt.num_deallocs, 0u);
-        parser.reserve_stack(24);
-        EXPECT_EQ(cbt.num_allocs, 2u);
-        EXPECT_EQ(cbt.num_deallocs, 1u);
-        parser.reserve_stack(28);
-        EXPECT_EQ(cbt.num_allocs, 3u);
-        EXPECT_EQ(cbt.num_deallocs, 2u);
+        for(id_type cap = 0; cap <= sso_size; ++cap)
+        {
+            SCOPED_TRACE(cap);
+            parser.reserve_stack(cap);
+            EXPECT_EQ(cbt.num_allocs, 0u);
+            EXPECT_EQ(cbt.num_deallocs, 0u);
+            EXPECT_EQ(stack.capacity(), sso_size);
+        }
+        for(id_type cap = sso_size + 1; cap <= 2u * sso_size; ++cap)
+        {
+            SCOPED_TRACE(cap);
+            parser.reserve_stack(cap);
+            EXPECT_GE(parser.stack_capacity(), cap);
+            EXPECT_EQ(parser.stack_capacity(), sso_size * 2u);
+            EXPECT_EQ(cbt.num_allocs, 1u);
+            EXPECT_EQ(cbt.num_deallocs, 0u);
+        }
+        for(id_type cap = (2u * sso_size) + 1u; cap < 4u * sso_size; ++cap)
+        {
+            SCOPED_TRACE(cap);
+            parser.reserve_stack(cap);
+            EXPECT_GE(parser.stack_capacity(), cap);
+            EXPECT_EQ(parser.stack_capacity(), sso_size * 4u);
+            EXPECT_EQ(cbt.num_allocs, 2u);
+            EXPECT_EQ(cbt.num_deallocs, 1u);
+        }
+        for(id_type cap = 0; cap < 4u * sso_size; ++cap)
+        {
+            SCOPED_TRACE(cap);
+            parser.reserve_stack(cap);
+            EXPECT_EQ(stack.capacity(), sso_size * 4u);
+            EXPECT_EQ(cbt.num_allocs, 2u);
+            EXPECT_EQ(cbt.num_deallocs, 1u);
+        }
     }
-    EXPECT_EQ(cbt.num_allocs, 3u);
-    EXPECT_EQ(cbt.num_deallocs, 3u);
+    EXPECT_EQ(cbt.num_allocs, 2u);
+    EXPECT_EQ(cbt.num_deallocs, 2u);
     cbt.check();
 }
 
@@ -279,6 +307,7 @@ TEST(Parser, reserve_locations)
         EXPECT_EQ(ts.num_allocs, 0u);
         EXPECT_EQ(ts.num_deallocs, 0u);
         parser.reserve_locations(128);
+        EXPECT_GE(parser.locations_capacity(), 128);
         EXPECT_EQ(ts.num_allocs, 1u);
         EXPECT_EQ(ts.num_deallocs, 0u);
         EXPECT_EQ(ts.alloc_size, 128u * sizeof(size_t));
@@ -544,11 +573,19 @@ TEST(Parser, filename_and_buffer_are_stored)
     csubstr csrc = src_;
     Parser::handler_type evt_handler = {};
     Parser parser(&evt_handler);
-    EXPECT_EQ(parser.filename(), csubstr{});
+    EXPECT_NE(parser.m_evt_handler, nullptr);
+    EXPECT_EQ(parser.m_evt_handler->m_curr, nullptr);
+    EXPECT_EQ(parser.filename().str, nullptr);
+    EXPECT_EQ(parser.filename().len, 0);
+    EXPECT_EQ(parser.source().str, nullptr);
+    EXPECT_EQ(parser.source().len, 0);
     {
         Tree tree = parse_in_place(&parser, "file0", src);
         EXPECT_EQ(parser.filename(), "file0");
-        EXPECT_TRUE(is_same(parser.source(), src));
+        EXPECT_NE(parser.m_evt_handler, nullptr);
+        EXPECT_NE(parser.m_evt_handler->m_curr, nullptr);
+        EXPECT_EQ(parser.source().str, src.str);
+        EXPECT_EQ(parser.source().len, src.len);
     }
     {
         Tree tree = parse_in_arena(&parser, "file1", csrc);
@@ -590,17 +627,14 @@ TEST(Parser, alloc_arena)
 {
     Tree tree;
     Parser::handler_type evt_handler = {};
-    int data = 0;
-    auto relocate = [](void*, csubstr prev, substr next_arena){
-        EXPECT_FALSE(prev.overlaps(next_arena));
-    };
+    Parser parser(&evt_handler);
     evt_handler.reset(&tree, tree.root_id());
-    evt_handler.start_parse("filename", "", relocate, &data);
+    evt_handler.start_parse("filename", substr{});
     substr bufa = evt_handler.alloc_arena(64);
     bufa.fill('a');
     csubstr prev = bufa;
     csubstr prev_arena = tree.arena();
-    substr bufb = evt_handler.alloc_arena(64, &bufa);
+    substr bufb = parser._alloc_arena(64, &bufa);
     csubstr curr_arena = tree.arena();
     EXPECT_NE(prev_arena.str, curr_arena.str);
     EXPECT_NE(prev.str, bufa.str);
@@ -1513,7 +1547,7 @@ TEST_F(ParseToSeqFlowTest, whitespace__to__seq_flow__new_child)
 TEST_F(ParseToSeqFlowTest, val_plain__to__seq_flow__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_plain), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1533,7 +1567,7 @@ TEST_F(ParseToSeqFlowTest, val_plain__to__seq_flow__new_child)
 TEST_F(ParseToSeqFlowTest, val_squo__to__seq_flow__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_squo), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1553,7 +1587,7 @@ TEST_F(ParseToSeqFlowTest, val_squo__to__seq_flow__new_child)
 TEST_F(ParseToSeqFlowTest, val_dquo__to__seq_flow__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_dquo), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1573,7 +1607,7 @@ TEST_F(ParseToSeqFlowTest, val_dquo__to__seq_flow__new_child)
 TEST_F(ParseToSeqFlowTest, val_literal__to__seq_flow__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_literal), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1593,7 +1627,7 @@ TEST_F(ParseToSeqFlowTest, val_literal_anchor__to__seq_flow__new_child)
 TEST_F(ParseToSeqFlowTest, val_folded__to__seq_flow__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_folded), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1613,7 +1647,7 @@ TEST_F(ParseToSeqFlowTest, val_folded__to__seq_flow__new_child)
 TEST_F(ParseToSeqFlowTest, val_ref__to__seq_flow__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_ref), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1675,7 +1709,7 @@ TEST_F(ParseToSeqFlowTest, seq_blck__to__seq_flow__new_child)
 TEST_F(ParseToSeqFlowTest, map_flow__to__seq_flow__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(map_flow), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1695,7 +1729,7 @@ TEST_F(ParseToSeqFlowTest, map_flow__to__seq_flow__new_child)
 TEST_F(ParseToSeqFlowTest, map_blck_plain__to__seq_blck__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(map_blck_plain), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1715,7 +1749,7 @@ TEST_F(ParseToSeqFlowTest, map_blck_plain__to__seq_blck__new_child)
 TEST_F(ParseToSeqFlowTest, map_blck_squo__to__seq_blck__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(map_blck_squo), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1735,7 +1769,7 @@ TEST_F(ParseToSeqFlowTest, map_blck_squo__to__seq_blck__new_child)
 TEST_F(ParseToSeqFlowTest, map_blck_dquo__to__seq_blck__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(map_blck_dquo), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1755,7 +1789,7 @@ TEST_F(ParseToSeqFlowTest, map_blck_dquo__to__seq_blck__new_child)
 TEST_F(ParseToSeqFlowTest, map_blck_literal__to__seq_blck__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(map_blck_literal), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1775,7 +1809,7 @@ TEST_F(ParseToSeqFlowTest, map_blck_literal__to__seq_blck__new_child)
 TEST_F(ParseToSeqFlowTest, map_blck_folded__to__seq_blck__root)
 {
     NodeRef dst = dst_seq_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(map_blck_folded), dst);
     });
     _c4dbg_tree("actual", dst_seq_flow);
@@ -1831,7 +1865,7 @@ TEST_F(ParseToMapFlowTest, whitespace__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_plain__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_plain), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -1851,7 +1885,7 @@ TEST_F(ParseToMapFlowTest, val_plain__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_plain_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_plain_anchor), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -1871,7 +1905,7 @@ TEST_F(ParseToMapFlowTest, val_plain_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_plain_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_plain_tag), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -1891,7 +1925,7 @@ TEST_F(ParseToMapFlowTest, val_plain_tag__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_squo__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_squo), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -1911,7 +1945,7 @@ TEST_F(ParseToMapFlowTest, val_squo__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_squo_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_squo_anchor), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -1931,7 +1965,7 @@ TEST_F(ParseToMapFlowTest, val_squo_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_squo_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_squo_tag), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -1951,7 +1985,7 @@ TEST_F(ParseToMapFlowTest, val_squo_tag__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_dquo__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_dquo), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -1971,7 +2005,7 @@ TEST_F(ParseToMapFlowTest, val_dquo__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_dquo_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_dquo_anchor), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -1991,7 +2025,7 @@ TEST_F(ParseToMapFlowTest, val_dquo_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_dquo_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_dquo_tag), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -2011,7 +2045,7 @@ TEST_F(ParseToMapFlowTest, val_dquo_tag__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_literal__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_literal), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -2031,7 +2065,7 @@ TEST_F(ParseToMapFlowTest, val_literal__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_literal_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_literal_anchor), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -2051,7 +2085,7 @@ TEST_F(ParseToMapFlowTest, val_literal_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_literal_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_literal_tag), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -2071,7 +2105,7 @@ TEST_F(ParseToMapFlowTest, val_literal_tag__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_folded__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_folded), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -2091,7 +2125,7 @@ TEST_F(ParseToMapFlowTest, val_folded__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_folded_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_folded_anchor), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -2111,7 +2145,7 @@ TEST_F(ParseToMapFlowTest, val_folded_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_folded_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_folded_tag), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -2131,7 +2165,7 @@ TEST_F(ParseToMapFlowTest, val_folded_tag__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, val_ref__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_ref), dst);
     });
     _c4dbg_tree("actual", dst_map_flow);
@@ -2151,7 +2185,7 @@ TEST_F(ParseToMapFlowTest, val_ref_to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, seq_flow__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(seq_flow), dst);
     });
 }
@@ -2170,7 +2204,7 @@ TEST_F(ParseToMapFlowTest, seq_flow__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, seq_flow_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(seq_flow_anchor), dst);
     });
 }
@@ -2189,7 +2223,7 @@ TEST_F(ParseToMapFlowTest, seq_flow_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, seq_flow_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(seq_flow_tag), dst);
     });
 }
@@ -2208,7 +2242,7 @@ TEST_F(ParseToMapFlowTest, seq_flow_tag__to__map_flow__new_child)
 TEST_F(ParseToMapFlowTest, seq_blck__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(seq_blck), dst);
     });
 }
@@ -2278,7 +2312,7 @@ TEST_F(ParseToMapFlowTest, map_flow_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
     parse_in_arena(to_csubstr(map_flow_tag), dst);
-    const Tree expected = parse_in_arena("!!tag\nmap: flow\nyes: it is\n");
+    const Tree expected = parse_in_arena("!!map\nmap: flow\nyes: it is\n");
     _c4dbg_tree("expected", expected);
     _c4dbg_tree("actual", dst_map_flow);
     test_compare(dst_map_flow, expected);
@@ -2288,7 +2322,7 @@ TEST_F(ParseToMapFlowTest, map_flow_tag__to__map_flow__new_child)
 {
     NodeRef dst = dst_map_flow.rootref().append_child({KEY, "dst"});
     parse_in_arena(to_csubstr(map_flow_tag), dst);
-    const Tree expected = parse_in_arena("dst: !!tag\n  map: flow\n  yes: it is\n");
+    const Tree expected = parse_in_arena("dst: !!map\n  map: flow\n  yes: it is\n");
     _c4dbg_tree("expected", expected);
     _c4dbg_tree("actual", dst_map_flow);
     test_compare(dst_map_flow, expected);
@@ -2446,7 +2480,7 @@ TEST_F(ParseToMapFlowTest, map_block_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_flow.rootref();
     parse_in_arena(to_csubstr(map_blck_tag), dst);
-    const Tree expected = parse_in_arena("!!tag {map: block, yes: it is}");
+    const Tree expected = parse_in_arena("!!map {map: block, yes: it is}");
     _c4dbg_tree("expected", expected);
     _c4dbg_tree("actual", dst_map_flow);
     test_compare(dst_map_flow, expected);
@@ -2456,7 +2490,7 @@ TEST_F(ParseToMapFlowTest, map_block_tag__to__map_flow__new_child)
 {
     NodeRef dst = dst_map_flow.rootref().append_child({KEY, "dst"});
     parse_in_arena(to_csubstr(map_blck_tag), dst);
-    const Tree expected = parse_in_arena("dst: !!tag {map: block, yes: it is}");
+    const Tree expected = parse_in_arena("dst: !!map {map: block, yes: it is}");
     _c4dbg_tree("expected", expected);
     _c4dbg_tree("actual", dst_map_flow);
     test_compare(dst_map_flow, expected);
@@ -2493,7 +2527,7 @@ class ParseToMapBlockTest : public ParseToNodeTest {};
 TEST_F(ParseToMapBlockTest, val_plain__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_plain), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2513,7 +2547,7 @@ TEST_F(ParseToMapBlockTest, val_plain__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_plain_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_plain_anchor), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2533,7 +2567,7 @@ TEST_F(ParseToMapBlockTest, val_plain_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_plain_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_plain_tag), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2553,7 +2587,7 @@ TEST_F(ParseToMapBlockTest, val_plain_tag__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_squo__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_squo), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2573,7 +2607,7 @@ TEST_F(ParseToMapBlockTest, val_squo__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_squo_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_squo_anchor), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2593,7 +2627,7 @@ TEST_F(ParseToMapBlockTest, val_squo_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_squo_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_squo_tag), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2613,7 +2647,7 @@ TEST_F(ParseToMapBlockTest, val_squo_tag__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_dquo__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_dquo), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2633,7 +2667,7 @@ TEST_F(ParseToMapBlockTest, val_dquo__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_dquo_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_dquo_anchor), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2653,7 +2687,7 @@ TEST_F(ParseToMapBlockTest, val_dquo_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_dquo_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_dquo_tag), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2673,7 +2707,7 @@ TEST_F(ParseToMapBlockTest, val_dquo_tag__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_literal__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_literal), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2693,7 +2727,7 @@ TEST_F(ParseToMapBlockTest, val_literal__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_literal_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_literal_anchor), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2713,7 +2747,7 @@ TEST_F(ParseToMapBlockTest, val_literal_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_literal_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_literal_tag), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2733,7 +2767,7 @@ TEST_F(ParseToMapBlockTest, val_literal_tag__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_folded__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_folded), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2753,7 +2787,7 @@ TEST_F(ParseToMapBlockTest, val_folded__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_folded_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_folded_anchor), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2773,7 +2807,7 @@ TEST_F(ParseToMapBlockTest, val_folded_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_folded_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_folded_tag), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2793,7 +2827,7 @@ TEST_F(ParseToMapBlockTest, val_folded_tag__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, val_ref__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(val_ref), dst);
     });
     _c4dbg_tree("actual", dst_map_blck);
@@ -2813,7 +2847,7 @@ TEST_F(ParseToMapBlockTest, val_ref_to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, seq_flow__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(seq_flow), dst);
     });
 }
@@ -2832,7 +2866,7 @@ TEST_F(ParseToMapBlockTest, seq_flow__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, seq_flow_anchor__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(seq_flow_anchor), dst);
     });
 }
@@ -2851,7 +2885,7 @@ TEST_F(ParseToMapBlockTest, seq_flow_anchor__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, seq_flow_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(seq_flow_tag), dst);
     });
 }
@@ -2870,7 +2904,7 @@ TEST_F(ParseToMapBlockTest, seq_flow_tag__to__map_flow__new_child)
 TEST_F(ParseToMapBlockTest, seq_blck__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
-    ExpectError::check_error_basic(dst.tree(), [&]{
+    ExpectError::check_error_parse(dst.tree(), [&]{
         parse_in_arena(to_csubstr(seq_blck), dst);
     });
 }
@@ -2940,7 +2974,7 @@ TEST_F(ParseToMapBlockTest, map_flow_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
     parse_in_arena(to_csubstr(map_flow_tag), dst);
-    const Tree expected = parse_in_arena("!!tag\nmap: flow\nyes: it is\n");
+    const Tree expected = parse_in_arena("!!map\nmap: flow\nyes: it is\n");
     _c4dbg_tree("expected", expected);
     _c4dbg_tree("actual", dst_map_blck);
     test_compare(dst_map_blck, expected);
@@ -2950,7 +2984,7 @@ TEST_F(ParseToMapBlockTest, map_flow_tag__to__map_flow__new_child)
 {
     NodeRef dst = dst_map_blck.rootref().append_child({KEY, "dst"});
     parse_in_arena(to_csubstr(map_flow_tag), dst);
-    const Tree expected = parse_in_arena("dst: !!tag\n  map: flow\n  yes: it is\n");
+    const Tree expected = parse_in_arena("dst: !!map\n  map: flow\n  yes: it is\n");
     _c4dbg_tree("expected", expected);
     _c4dbg_tree("actual", dst_map_blck);
     test_compare(dst_map_blck, expected);
@@ -3108,7 +3142,7 @@ TEST_F(ParseToMapBlockTest, map_block_tag__to__map_flow__root)
 {
     NodeRef dst = dst_map_blck.rootref();
     parse_in_arena(to_csubstr(map_blck_tag), dst);
-    const Tree expected = parse_in_arena("!!tag {map: block, yes: it is}");
+    const Tree expected = parse_in_arena("!!map {map: block, yes: it is}");
     _c4dbg_tree("expected", expected);
     _c4dbg_tree("actual", dst_map_blck);
     test_compare(dst_map_blck, expected);
@@ -3118,7 +3152,7 @@ TEST_F(ParseToMapBlockTest, map_block_tag__to__map_flow__new_child)
 {
     NodeRef dst = dst_map_blck.rootref().append_child({KEY, "dst"});
     parse_in_arena(to_csubstr(map_blck_tag), dst);
-    const Tree expected = parse_in_arena("dst: !!tag {map: block, yes: it is}");
+    const Tree expected = parse_in_arena("dst: !!map {map: block, yes: it is}");
     _c4dbg_tree("expected", expected);
     _c4dbg_tree("actual", dst_map_blck);
     test_compare(dst_map_blck, expected);

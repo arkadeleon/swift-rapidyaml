@@ -1,24 +1,61 @@
 c4_setup_testing(GTEST)
 
+function(ryml_get_target_exe target_name target_file)
+    if(CMAKE_CROSSCOMPILING)
+        set(tgt ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:${target_name}>)
+    else()
+        set(tgt $<TARGET_FILE:${target_name}>)
+    endif()
+    set(${target_file} ${tgt} PARENT_SCOPE)
+endfunction()
+
+function(ryml_setup_test_target_props target_name)
+    c4_target_compile_flags(${target_name} PUBLIC GCC -Wno-useless-cast)
+    if(RYML_DBG)
+        target_compile_definitions(${target_name} PUBLIC RYML_DBG)
+    endif()
+    if(RYML_SAVE_TEST_YAML)
+        target_compile_definitions(${target_name} PUBLIC RYML_SAVE_TEST_YAML)
+    endif()
+    get_target_property(target_type ${target_name} TYPE)
+    if(target_type STREQUAL "SHARED_LIBRARY")
+        set_target_properties(${target_name} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    endif ()
+endfunction()
+
+function(ryml_add_test_exe_no_lib name)
+    c4_add_executable(${name} LIBS ryml FOLDER test ${ARGN})
+    ryml_setup_test_target_props(${name})
+    ryml_maybe_dump_test_yaml(${name})
+    add_dependencies(ryml-test-build ${name})
+endfunction()
 
 function(ryml_add_test_no_lib test_name)
-    c4_add_executable(${test_name} LIBS ryml FOLDER test ${ARGN})
-    if(RYML_DBG)
-        target_compile_definitions(${test_name} PRIVATE RYML_DBG)
-        c4_target_compile_flags(${test_name} PUBLIC GCC -Wno-useless-cast)
-    endif()
+    ryml_add_test_exe_no_lib(${test_name} ${ARGN})
     c4_add_test(${test_name})
 endfunction()
-ryml_add_test_no_lib(ryml-test-quickstart
-    SOURCES ../samples/quickstart.cpp)
-ryml_add_test_no_lib(ryml-test-quickstart-ints
-    SOURCES
-        ../samples/quickstart-ints.cpp
-        ../src_extra/c4/yml/extra/event_handler_ints.hpp
-        ../src_extra/c4/yml/extra/event_handler_ints.cpp
-        ../src_extra/c4/yml/extra/ints_utils.hpp
-        ../src_extra/c4/yml/extra/ints_utils.cpp
-    INC_DIRS ../src_extra)
+
+# quickstart tests
+ryml_add_test_no_lib(ryml-test-quickstart-ints SOURCES ../samples/quickstart-ints.cpp)
+ryml_add_test_exe_no_lib(ryml-test-quickstart  SOURCES ../samples/quickstart.cpp)
+function(ryml_add_quickstart_test targetname testname)
+    ryml_get_target_exe(${targetname} exe)
+    separate_arguments(_vg_opts UNIX_COMMAND "${RYML_VALGRIND_OPTIONS}")
+    # c4_add_test() cannot be used with multiple tests from the same
+    # exe, so we use explicit add_test()+valgrind. Also, use
+    # RESOURCE_LOCK to prevent the tests from running simultaneously
+    add_test(NAME ${testname} COMMAND ${exe} ${ARGN})
+    set(lockid quickstart-lock)
+    set_tests_properties(${testname} PROPERTIES RESOURCE_LOCK ${lockid})
+    if(RYML_VALGRIND)
+        add_test(NAME ${testname}-valgrind
+            COMMAND valgrind ${_vg_opts} $<TARGET_FILE:${targetname}> ${ARGN}
+            COMMAND_EXPAND_LISTS)
+        set_tests_properties(${testname}-valgrind PROPERTIES RESOURCE_LOCK ${lockid})
+    endif()
+endfunction()
+ryml_add_quickstart_test(ryml-test-quickstart ryml-test-quickstart)
+ryml_add_quickstart_test(ryml-test-quickstart ryml-test-quickstart-quiet --quiet)
 
 
 c4_add_library(ryml-_testlib LIBRARY_TYPE STATIC
@@ -32,28 +69,11 @@ c4_add_library(ryml-_testlib LIBRARY_TYPE STATIC
        test_lib/test_engine.cpp
        test_lib/test_events_ints_helpers.hpp
        test_lib/test_events_ints_helpers.cpp
-       ../src_extra/c4/yml/extra/event_handler_ints.cpp
-       ../src_extra/c4/yml/extra/event_handler_ints.hpp
-       ../src_extra/c4/yml/extra/event_handler_testsuite.cpp
-       ../src_extra/c4/yml/extra/event_handler_testsuite.hpp
-       ../src_extra/c4/yml/extra/ints_utils.cpp
-       ../src_extra/c4/yml/extra/ints_utils.hpp
-       ../src_extra/c4/yml/extra/ints_to_testsuite.cpp
-       ../src_extra/c4/yml/extra/ints_to_testsuite.hpp
-       ../src_extra/c4/yml/extra/string.hpp
+       test_lib/test_save.cpp
     INC_DIRS ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/../src_extra
     LIBS ryml c4fs gtest
     FOLDER test)
-if(BUILD_SHARED_LIBS)
-    # this is needed to resolve get_case() because it is provided by
-    # the test linking to this library
-    set_target_properties(ryml-_testlib PROPERTIES
-        POSITION_INDEPENDENT_CODE ON)
-endif()
-if(RYML_DBG)
-    target_compile_definitions(ryml-_testlib PUBLIC RYML_DBG)
-endif()
-
+ryml_setup_test_target_props(ryml-_testlib)
 c4_add_library(ryml-_testmain LIBRARY_TYPE OBJECT
     SOURCES test_lib/test_main.cpp test_lib/test_main.hpp
     LIBS ryml
@@ -66,12 +86,19 @@ if(DEFINED RYML_DEFAULT_CALLBACKS)
 endif()
 
 function(ryml_add_test test_name)
+    cmake_parse_arguments("" "BIG" "" "LIBS" ${ARGN})
     set(t ryml-test-${test_name})
     c4_add_executable(${t}
         SOURCES test_${test_name}.cpp
-        LIBS ${ARGN} ryml-_testlib ryml-_testmain
+        LIBS ryml-_testlib ryml-_testmain
         FOLDER test)
+    if(RYML_SAVE_TEST_YAML)
+        target_sources(${t} PRIVATE test_lib/test_save.cpp)
+    endif()
     c4_add_test(${t})
+    if(MSVC AND _BIG) # MSVC bigobj
+        target_compile_options(${t} PRIVATE /bigobj)
+    endif()
 endfunction()
 
 
@@ -82,25 +109,36 @@ c4_add_library(ryml-_testgroup LIBRARY_TYPE STATIC
        test_lib/test_group.cpp
     LIBS ryml ryml-_testlib c4fs
     FOLDER test)
-if(RYML_DBG)
-    target_compile_definitions(ryml-_testgroup PUBLIC RYML_DBG)
-endif()
+ryml_setup_test_target_props(ryml-_testgroup)
 function(ryml_add_test_case_group name)
-    ryml_add_test(${name})
+    ryml_add_test(${name} ${ARGN})
     target_link_libraries(ryml-test-${name} PUBLIC ryml-_testgroup)
 endfunction()
 
 
-ryml_add_test(engine_1_doc)
-ryml_add_test(engine_2_seq)
-ryml_add_test(engine_3_map)
-ryml_add_test(engine_4_anchor)
-ryml_add_test(engine_5_tag)
-ryml_add_test(engine_6_qmrk_1)
-ryml_add_test(engine_6_qmrk_2)
-ryml_add_test(engine_7_seqimap)
-ryml_add_test(engine_8_scalars_tokens)
-ryml_add_test(extra_testsuite)
+ryml_add_test(engine_1_doc_1 BIG)
+ryml_add_test(engine_1_doc_2 BIG)
+ryml_add_test(engine_2_seq_block_1 BIG)
+ryml_add_test(engine_2_seq_block_2 BIG)
+ryml_add_test(engine_2_seq_flow_1 BIG)
+ryml_add_test(engine_2_seq_flow_2 BIG)
+ryml_add_test(engine_2_seq_flow_3 BIG)
+ryml_add_test(engine_3_map_block_1 BIG)
+ryml_add_test(engine_3_map_block_2 BIG)
+ryml_add_test(engine_3_map_flow_1 BIG)
+ryml_add_test(engine_3_map_flow_2 BIG)
+ryml_add_test(engine_3_map_flow_3 BIG)
+ryml_add_test(engine_4_anchor BIG)
+ryml_add_test(engine_5_tag_1 BIG)
+ryml_add_test(engine_5_tag_2 BIG)
+ryml_add_test(engine_5_tag_3 BIG)
+ryml_add_test(engine_6_qmrk_1 BIG)
+ryml_add_test(engine_6_qmrk_2 BIG)
+ryml_add_test(engine_6_qmrk_3 BIG)
+ryml_add_test(engine_6_qmrk_4 BIG)
+ryml_add_test(engine_7_seqimap BIG)
+ryml_add_test(engine_8_scalars_tokens BIG)
+ryml_add_test(engine_9_indentation BIG)
 ryml_add_test(extra_ints)
 ryml_add_test(version)
 ryml_add_test(callbacks)
@@ -118,7 +156,8 @@ ryml_add_test(json)
 ryml_add_test(preprocess)
 ryml_add_test(merge)
 ryml_add_test(location)
-ryml_add_test(bom)
+ryml_add_test(bom_1)
+ryml_add_test(bom_2)
 ryml_add_test(escape_scalar)
 ryml_add_test_case_group(empty_file)
 ryml_add_test_case_group(doc)
@@ -159,31 +198,10 @@ if(CMAKE_COMPILER_IS_GNUCXX
         c4_target_compile_flags(ryml-test-scalar_plain PUBLIC GCC -Wno-array-bounds -Wno-stringop-overflow)
     endif()
 endif()
-# MSVC bigobj
-if(MSVC)
-    target_compile_options(ryml-test-engine_1_doc            PRIVATE /bigobj)
-    target_compile_options(ryml-test-engine_2_seq            PRIVATE /bigobj)
-    target_compile_options(ryml-test-engine_3_map            PRIVATE /bigobj)
-    target_compile_options(ryml-test-engine_4_anchor         PRIVATE /bigobj)
-    target_compile_options(ryml-test-engine_5_tag            PRIVATE /bigobj)
-    target_compile_options(ryml-test-engine_6_qmrk_1         PRIVATE /bigobj)
-    target_compile_options(ryml-test-engine_6_qmrk_2         PRIVATE /bigobj)
-    target_compile_options(ryml-test-engine_7_seqimap        PRIVATE /bigobj)
-    target_compile_options(ryml-test-engine_8_scalars_tokens PRIVATE /bigobj)
-endif()
 
 
 #-------------------------------------------------------------------------
 # test the tools as well
-
-function(ryml_get_target_exe target_name target_file)
-    if(CMAKE_CROSSCOMPILING)
-        set(tgt ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:${target_name}>)
-    else()
-        set(tgt $<TARGET_FILE:${target_name}>)
-    endif()
-    set(${target_file} ${tgt} PARENT_SCOPE)
-endfunction()
 
 if(NOT EMSCRIPTEN)
     option(RYML_TEST_TOOLS "Enable tests for the tools. Requires file system access." ON)
@@ -210,34 +228,54 @@ if(RYML_TEST_TOOLS)
 ")
         set("${fileout}" "${filename}" PARENT_SCOPE)
     endfunction()
-    function(ryml_add_event_tool_test name expect_success flags contents)
-        ryml_create_file(${name}.yml "${contents}" file)
-        string(REPLACE " " ";" flags "${flags}")
-        add_test(NAME ryml-test-tool-events-${name} COMMAND ${RYML_TGT_EVENTS} ${flags} ${file})
+    function(ryml_add_event_tool_test_ name expect_success args contents)
+        string(REPLACE " " ";" args "${args}")
+        add_test(NAME ryml-test-tool-events-${name} COMMAND ${RYML_TGT_EVENTS} ${args} ${file})
         if(NOT expect_success)
             set_tests_properties(ryml-test-tool-events-${name} PROPERTIES WILL_FAIL TRUE)
         endif()
     endfunction()
+    function(ryml_add_event_tool_test name expect_success args contents)
+        ryml_create_file(${name}.yml "${contents}" file)
+        ryml_add_event_tool_test_(${name} ${expect_success} "${args}" "${contents}")
+    endfunction()
+    function(ryml_add_event_tool_test_all_ name expect_success args contents with_tree)
+        ryml_create_file(${name}.yml "${contents}" file)
+        if(${with_tree})
+            ryml_add_event_tool_test_(${name}-tree ${expect_success} "tst ${args}" "${contents}")
+        endif()
+        ryml_add_event_tool_test_(${name}-ints ${expect_success} "tsi ${args}" "${contents}")
+        ryml_add_event_tool_test_(${name}-rymlints ${expect_success} "ri ${args}" "${contents}")
+    endfunction()
+    function(ryml_add_event_tool_test_all name expect_success args contents)
+        ryml_add_event_tool_test_all_(${name} ${expect_success} "${args}" "${contents}" TRUE)
+    endfunction()
+    function(ryml_add_event_tool_test_tsonly name expect_success args contents)
+        ryml_add_event_tool_test_all_(${name} ${expect_success} "${args}" "${contents}" FALSE)
+    endfunction()
     ryml_get_target_exe(ryml-yaml-events RYML_TGT_EVENTS)
     ryml_add_event_tool_test(success_help TRUE "--help" "{foo: bar, baz: [exactly]}")
-    ryml_add_event_tool_test(success_help2 TRUE "tst --help" "{foo: bar, baz: [exactly]}")
+    ryml_add_event_tool_test_all(success_help2 TRUE "--help" "{foo: bar, baz: [exactly]}")
     ryml_add_event_tool_test(fail_nocmd FALSE "" "foo")
     ryml_add_event_tool_test(fail_badcmd FALSE "barbar" "foo")
-    ryml_add_event_tool_test(success_timing TRUE "tst --timing" "{foo: bar, baz: [exactly]}")
-    ryml_add_event_tool_test(success_tree TRUE "tst" "{foo: bar, baz: [exactly]}")
-    ryml_add_event_tool_test(success_evts TRUE "tss" "{{this: is, a: keymap}: [seq,val]}")
-    ryml_add_event_tool_test(success_evts_ints TRUE "tsi" "{{this: is, a: keymap}: [seq,val]}")
-    ryml_add_event_tool_test(success_ryml_ints TRUE "ri" "{{this: is, a: keymap}: [seq,val]}")
+    ryml_add_event_tool_test_all(success TRUE "" "{foo: bar, baz: [exactly]}")
+    ryml_add_event_tool_test_all(success_timing TRUE " --timing" "{foo: bar, baz: [exactly]}")
+    ryml_add_event_tool_test_all(success_quiet TRUE " --quiet" "{foo: bar, baz: [exactly]}")
+    ryml_add_event_tool_test_tsonly(success_contkeys TRUE "" "{{this: is, a: keymap}: [seq,val]}")
     ryml_add_event_tool_test(success_evts_ints_resize TRUE "tsi --ints-size 1" "{{this: is, a: keymap}: [seq,val]}")
     ryml_add_event_tool_test(fail_evts_ints_resize FALSE "tsi --ints-size" "{{this: is, a: keymap}: [seq,val]}")
     ryml_add_event_tool_test(fail_evts_ints_resize2 FALSE "tsi --ints-size xyz" "{{this: is, a: keymap}: [seq,val]}")
     ryml_add_event_tool_test(fail_evts_ints_no_resize FALSE "tsi --ints-size 1 --ints-size-force" "{{this: is, a: keymap}: [seq,val]}")
-    ryml_add_event_tool_test(fail_squo_tree FALSE "tst" "foo: 'bar")
-    ryml_add_event_tool_test(fail_squo_evts FALSE "tss" "foo: 'bar")
-    ryml_add_event_tool_test(fail_dquo_tree FALSE "tst" "foo: \"bar")
-    ryml_add_event_tool_test(fail_dquo_evts FALSE "tss" "foo: \"bar")
-    ryml_add_event_tool_test(fail_seq1_tree FALSE "tst" "[ a, b, c ] ]")
-    ryml_add_event_tool_test(fail_seq2_evts FALSE "tss" "[ [a, b, c ]")
+    ryml_add_event_tool_test_all(fail_squo FALSE "" "foo: 'bar")
+    ryml_add_event_tool_test_all(fail_dquo FALSE "" "foo: \"bar")
+    ryml_add_event_tool_test_all(fail_seq1 FALSE "" "[ [a, b, c ]")
+    ryml_add_event_tool_test_all(fail_seq2 FALSE "" "[ a, b, c ] ]")
+    ryml_add_event_tool_test_all(success_custom_tag1 TRUE "  "                "{ !footag foo: bar, baz: [exactly]}")
+    ryml_add_event_tool_test_all(success_custom_tag2 TRUE " --resolve-tags "  "{ !footag foo: bar, baz: [exactly]}")
+    ryml_add_event_tool_test_all(success_noresolvetags TRUE ""                "{ !m!tag foo: bar, baz: [exactly]}")
+    ryml_add_event_tool_test_all(fail_unresolved_tag FALSE " --resolve-tags " "{ !m!tag foo: bar, baz: [exactly]}")
+    ryml_add_event_tool_test_all(fail_unresolved_tag_short FALSE " -rt "      "{ !m!tag foo: bar, baz: [exactly]}")
+    ryml_add_event_tool_test_all(success_resolvetags TRUE " --resolve-tags"   "%TAG !m! my-\n---\n{ !m!tag foo: bar, baz: [exactly]}")
     if(UNIX)
         add_test(NAME ryml-test-tool-events-stdin COMMAND echo foo | ${RYML_TGT_EVENTS} tsi -)
     endif()
@@ -254,10 +292,6 @@ option(RYML_TEST_SUITE "Enable cases from yaml-test-suite, https://github.com/ya
 if(RYML_TEST_SUITE)
     set(ed ${CMAKE_CURRENT_BINARY_DIR}/subprojects) # casual ryml extern dir (these projects are not part of ryml and are downloaded and compiled on the fly)
 
-    c4_require_subproject(c4log REMOTE
-        GIT_REPOSITORY https://github.com/biojppm/c4log
-        GIT_TAG master)
-
     set(tsdir ${ed}/yaml-test-suite)
     c4_download_remote_proj(yaml-test-suite suite_dir
         GIT_REPOSITORY https://github.com/yaml/yaml-test-suite
@@ -268,15 +302,6 @@ if(RYML_TEST_SUITE)
 
     c4_add_executable(ryml-test-suite
         SOURCES
-            ../src_extra/c4/yml/extra/event_handler_ints.cpp
-            ../src_extra/c4/yml/extra/event_handler_ints.hpp
-            ../src_extra/c4/yml/extra/event_handler_testsuite.cpp
-            ../src_extra/c4/yml/extra/event_handler_testsuite.hpp
-            ../src_extra/c4/yml/extra/ints_utils.cpp
-            ../src_extra/c4/yml/extra/ints_utils.hpp
-            ../src_extra/c4/yml/extra/ints_to_testsuite.cpp
-            ../src_extra/c4/yml/extra/ints_to_testsuite.hpp
-            ../src_extra/c4/yml/extra/string.hpp
             testsuite.cpp
             testsuite/testsuite_common.hpp
             testsuite/testsuite_events_emitter.cpp
@@ -383,8 +408,7 @@ if(RYML_TEST_FUZZ)
         ryml_get_target_exe(ryml-test-fuzz-${name} tgtexe)
         function(ryml_add_fuzz_test_file name_ dir file)
             string(REPLACE "/" "_" fuzz_name "${file}")
-            add_test(NAME ryml-test-fuzz-${name_}-${fuzz_name}
-                COMMAND ${tgtexe} ${dir}/${file})
+            add_test(NAME ryml-test-fuzz-${name_}-${fuzz_name} COMMAND ${tgtexe} ${dir}/${file})
             set_tests_properties(ryml-test-fuzz-${name_}-${fuzz_name} PROPERTIES TIMEOUT 10)
         endfunction()
         foreach(fuzz_file ${fuzz_files})
@@ -392,11 +416,5 @@ if(RYML_TEST_FUZZ)
         endforeach()
     endfunction()
     ryml_add_fuzz_test(parse_emit)
-    ryml_add_fuzz_test(events_testsuite
-        ../src_extra/c4/yml/extra/event_handler_testsuite.hpp
-        ../src_extra/c4/yml/extra/event_handler_testsuite.cpp
-        ../src_extra/c4/yml/extra/string.hpp)
-    ryml_add_fuzz_test(events_ints
-        ../src_extra/c4/yml/extra/event_handler_ints.hpp
-        ../src_extra/c4/yml/extra/event_handler_ints.cpp)
+    ryml_add_fuzz_test(events_ints)
 endif()

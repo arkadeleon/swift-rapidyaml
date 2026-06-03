@@ -6,6 +6,7 @@
 #endif
 #include <stdexcept>
 #include <csetjmp>
+#include "c4/yml/extra/event_handler_ints.hpp"
 
 
 C4_SUPPRESS_WARNING_MSVC_WITH_PUSH(4996) // fopen: This function or variable may be unsafe
@@ -20,6 +21,52 @@ static_assert(std::is_same<std::underlying_type<decltype(c4::yml::npos)>::type, 
 static_assert(std::is_same<std::underlying_type<decltype(c4::yml::NONE)>::type, id_type>::value, "invalid type");
 static_assert(size_t(c4::yml::npos) == ((size_t)-1), "invalid value"); // some debuggers show the wrong value...
 static_assert(size_t(c4::yml::NONE) == ((size_t)-1), "invalid value"); // some debuggers show the wrong value...
+
+template<class T>
+constexpr bool check_remove_cvref()
+{
+    static_assert(std::is_same<T, typename detail::_remove_cvref<T>::type>::value, "remove cvref");
+    static_assert(std::is_same<T, typename detail::_remove_cvref<T&>::type>::value, "remove cvref");
+    static_assert(std::is_same<T, typename detail::_remove_cvref<T&&>::type>::value, "remove cvref");
+    static_assert(std::is_same<T, typename detail::_remove_cvref<const T>::type>::value, "remove cvref");
+    static_assert(std::is_same<T, typename detail::_remove_cvref<const T&>::type>::value, "remove cvref");
+    static_assert(std::is_same<T, typename detail::_remove_cvref<const T&&>::type>::value, "remove cvref");
+    return true;
+}
+static_assert(check_remove_cvref<substr>(), "remove cvref");
+static_assert(check_remove_cvref<csubstr>(), "remove cvref");
+static_assert(check_remove_cvref<char *>(), "remove cvref");
+static_assert(check_remove_cvref<const char *>(), "remove cvref");
+
+static_assert(c4::is_string<char[2]>::value, "dump directly");
+static_assert(c4::is_string<char(&)[2]>::value, "dump directly");
+static_assert(c4::is_string<char(&&)[2]>::value, "dump directly");
+static_assert(c4::is_string<const char[2]>::value, "dump directly");
+static_assert(c4::is_string<const char(&&)[2]>::value, "dump directly");
+static_assert(c4::is_string<substr>::value, "dump directly");
+static_assert(c4::is_string<csubstr>::value, "dump directly");
+static_assert(c4::is_string<std::string>::value, "dump directly");
+
+template<class T>
+constexpr bool check_dump_directly()
+{
+    static_assert(detail::_dump_directly<T>::value, "dump directly");
+    static_assert(detail::_dump_directly<T&>::value, "dump directly");
+    static_assert(detail::_dump_directly<T&&>::value, "dump directly");
+    static_assert(detail::_dump_directly<T const>::value, "dump directly");
+    static_assert(detail::_dump_directly<T const&>::value, "dump directly");
+    static_assert(detail::_dump_directly<T const&&>::value, "dump directly");
+    return true;
+}
+static_assert(check_dump_directly<substr>(), "dump directly");
+static_assert(check_dump_directly<csubstr>(), "dump directly");
+static_assert(check_dump_directly<char*>(), "dump directly");
+static_assert(check_dump_directly<const char*>(), "dump directly");
+static_assert(check_dump_directly<char[2]>(), "dump directly");
+static_assert(check_dump_directly<char(&)[2]>(), "dump directly");
+static_assert(check_dump_directly<char(&&)[2]>(), "dump directly");
+static_assert(check_dump_directly<std::string>(), "dump directly");
+
 
 std::string stored_msg;
 std::string stored_msg_full;

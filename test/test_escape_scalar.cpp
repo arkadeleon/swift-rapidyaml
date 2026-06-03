@@ -24,8 +24,7 @@ class EscapeScalarTest : public testing::TestWithParam<EscapeScalarCase> {};
 TEST_P(EscapeScalarTest, escape_scalar)
 {
     EscapeScalarCase const& ec = GetParam();
-    printf("%s:%d: %s\n", ec.file, ec.line, ec.escaped.str);
-    RYML_TRACE_FMT("defined in:\n{}:{}: {}", ec.file, ec.line, ec.escaped);
+    RYML_TRACE_FMT("defined in:\n{}:{}: \"{}\"", ec.file, ec.line, ec.escaped);
     std::string buf_;
     // empty
     substr buf = to_substr(buf_);
@@ -50,6 +49,28 @@ TEST_P(EscapeScalarTest, escape_scalar)
     EXPECT_EQ(ec.escaped, buf.first(ec.escaped.len));
 }
 
+TEST_P(EscapeScalarTest, adjust_pos_with_escapes)
+{
+    EscapeScalarCase const& ec = GetParam();
+    RYML_TRACE_FMT("defined in:\n{}:{}: \"{}\"", ec.file, ec.line, ec.escaped);
+    // beginning of scalar
+    EXPECT_EQ(adjust_pos_with_escapes(ec.scalar, 0), 0);
+    // end of scalar, without added newlines
+    for(size_t extra = 0; extra < 10; ++extra)
+    {
+        size_t pos = ec.scalar.len + extra;
+        size_t expected = ec.escaped.len + extra;
+        size_t num_newlines = ec.scalar.count('\n');
+        RYML_TRACE_FMT("pos={} expected={} num_newlines={}", pos, expected, num_newlines);
+        // end of scalar, without added newlines
+        EXPECT_EQ(adjust_pos_with_escapes(ec.scalar, pos), expected);
+        EXPECT_EQ(adjust_pos_with_escapes(ec.scalar, pos, false), expected);
+        // end of scalar, with added newlines
+        EXPECT_EQ(adjust_pos_with_escapes(ec.scalar, pos, true), expected + num_newlines);
+    }
+}
+
+
 #define _ec(scalar, escaped) EscapeScalarCase{__FILE__, __LINE__, csubstr(scalar), csubstr(escaped)}
 const EscapeScalarCase escape_cases[] = {
     _ec("", ""),
@@ -65,18 +86,47 @@ const EscapeScalarCase escape_cases[] = {
     _ec("\a", "\\a"),
     _ec("\v", "\\v"),
     _ec("\x1b", "\\e"),
+    _ec("\n\n", "\\n\\n"),
+    _ec("\\\\", "\\\\\\\\"),
+    _ec("\t\t", "\\t\\t"),
+    _ec("\r\r", "\\r\\r"),
+    _ec("\0\0", "\\0\\0"),
+    _ec("\f\f", "\\f\\f"),
+    _ec("\b\b", "\\b\\b"),
+    _ec("\a\a", "\\a\\a"),
+    _ec("\v\v", "\\v\\v"),
+    _ec("\x1b\x1b", "\\e\\e"),
+    _ec("\n\n\n", "\\n\\n\\n"),
+    _ec("\\\\\\", "\\\\\\\\\\\\"),
+    _ec("\t\t\t", "\\t\\t\\t"),
+    _ec("\r\r\r", "\\r\\r\\r"),
+    _ec("\0\0\0", "\\0\\0\\0"),
+    _ec("\f\f\f", "\\f\\f\\f"),
+    _ec("\b\b\b", "\\b\\b\\b"),
+    _ec("\a\a\a", "\\a\\a\\a"),
+    _ec("\v\v\v", "\\v\\v\\v"),
+    _ec("\x1b\x1b\x1b", "\\e\\e\\e"),
     _ec("\xc2\xa0", "\\_"),
     _ec("\xc2\x85", "\\N"),
     _ec("\xc2\x86", "\xc2\x86"),
+    _ec("\xc2\xa0\xc2\xa0", "\\_\\_"),
+    _ec("\xc2\x85\xc2\x85", "\\N\\N"),
+    _ec("\xc2\xa0\xc2\xa0\xc2\xa0", "\\_\\_\\_"),
+    _ec("\xc2\x85\xc2\x85\xc2\x85", "\\N\\N\\N"),
     _ec("\xe2\x80\xa8", "\\L"),
     _ec("\xe2\x80\xa9", "\\P"),
     _ec("\xe2\x80\xa0", "\xe2\x80\xa0"),
+    _ec("\xe2\x80\xa8\xe2\x80\xa8", "\\L\\L"),
+    _ec("\xe2\x80\xa9\xe2\x80\xa9", "\\P\\P"),
+    _ec("\xe2\x80\xa8\xe2\x80\xa8\xe2\x80\xa8", "\\L\\L\\L"),
+    _ec("\xe2\x80\xa9\xe2\x80\xa9\xe2\x80\xa9", "\\P\\P\\P"),
     _ec("	\t\r\n\0\f\a\v\x1b\xc2\x85\xc2\xa0\xe2\x80\xa8\xe2\x80\xa9 \b",
         "\\t\\t\\r\\n\\0\\f\\a\\v\\e\\N\\_\\L\\P \\b"),
 };
 
 
 INSTANTIATE_TEST_SUITE_P(EscapeScalar, EscapeScalarTest, testing::ValuesIn(escape_cases));
+
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------

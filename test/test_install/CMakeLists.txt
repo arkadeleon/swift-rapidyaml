@@ -4,9 +4,8 @@ project(ryml
     HOMEPAGE_URL "https://github.com/biojppm/rapidyaml"
     LANGUAGES CXX)
 include(../../ext/c4core/cmake/c4Project.cmake)
-c4_project(VERSION 0.11.1
+c4_project(VERSION 0.13.0
     AUTHOR "Joao Paulo Magalhaes <dev@jpmag.me>")
-
 
 if(RYML_TEST_INSTALL_PACKAGE_MODE)
     find_package(ryml REQUIRED)
@@ -22,4 +21,7 @@ endif()
 enable_testing()
 set(RYML_INSTALL_TEST ON)
 include(../../ext/testbm.cmake)
+function(ryml_maybe_dump_test_yaml target)
+    # nothing to do
+endfunction()
 add_subdirectory(../../test test)

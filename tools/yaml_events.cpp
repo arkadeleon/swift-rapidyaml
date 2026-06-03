@@ -8,12 +8,10 @@
 #include <c4/yml/event_handler_tree.hpp>
 #include <c4/yml/parse_engine.def.hpp>
 #include <c4/yml/escape_scalar.hpp>
-#endif
-#include <c4/yml/extra/string.hpp>
 #include <c4/yml/extra/event_handler_ints.hpp>
-#include <c4/yml/extra/event_handler_testsuite.hpp>
 #include <c4/yml/extra/ints_utils.hpp>
 #include <c4/yml/extra/ints_to_testsuite.hpp>
+#endif
 #include <testsuite/testsuite_events.hpp>
 #include <c4/fs/fs.hpp>
 #include <cstdio>
@@ -28,7 +26,7 @@ std::jmp_buf jmp_env = {};
 c4::csubstr jmp_msg = {};
 #endif
 
-C4_SUPPRESS_WARNING_GCC("-Wold-style-cast")
+C4_SUPPRESS_WARNING_GCC_CLANG("-Wold-style-cast")
 
 
 //-----------------------------------------------------------------------------
@@ -38,7 +36,6 @@ using namespace c4::yml;
 
 enum class evts_type
 {
-    testsuite_src,
     testsuite_ints,
     testsuite_tree,
     ryml_ints,
@@ -46,8 +43,8 @@ enum class evts_type
 
 struct Args
 {
-    csubstr filename = "-";
-    evts_type evts = evts_type::testsuite_src;
+    csubstr filename = "stdin";
+    evts_type evts = evts_type::testsuite_ints;
     int ints_size = -1; // estimate by default
     bool ints_size_force = false; // do not force the estimated size
     static bool parse(Args *args, int argc, const char *argv[], int *errcode);
@@ -59,12 +56,6 @@ ryml-yaml-events <command> <options> [-]        # read from stdin (default)
 ryml-yaml-events <command> <options> <file>     # read from file
 
 The command must be one of the following:
-
-    testsuite_src,ts_src,tss
-         emit test suite events directly from source: parse the YAML
-         source, and directly emit events during the parse (ie, no
-         ryml tree is created). This is the default behavior when the
-         option is omitted.
 
     testsuite_tree,ts_tree,tst
          emit test suite events from tree: parse the YAML source,
@@ -87,6 +78,9 @@ The following options influence the behavior of the program:
     --timings,--timing,-t
          print task timings and size information (to stderr)
 
+    --quiet,-q
+         do not emit, only parse
+
 The following options influence the behavior of testsuite_ints and ryml_ints:
 
     --ints-size <int-number>,-is <int-number>
@@ -105,11 +99,10 @@ The following options influence the behavior of testsuite_ints and ryml_ints:
          which requires two parses and two string copies of the
          original source buffer.
 
-EXAMPLES:
+    --resolve-tags,-rt
+         resolve tags. Default is not to resolve tags.
 
-  $ ryml-yaml-events ts_src            # parse stdin to test suite events, then print the events
-  $ ryml-yaml-events ts_src -          # parse stdin to test suite events, then print the events
-  $ ryml-yaml-events ts_src <file>     # parse file to test suite events, then print the events
+EXAMPLES:
 
   $ ryml-yaml-events ts_tree           # parse stdin to ryml tree, emit test suite events from created tree
   $ ryml-yaml-events ts_tree -         # parse stdin to ryml tree, emit test suite events from created tree
@@ -131,7 +124,6 @@ EXAMPLES:
 using IntEvents = std::vector<extra::ievt::DataType>;
 
 std::string load_file(csubstr filename);
-extra::string emit_testsuite_events(csubstr filename, substr filecontents);
 std::string emit_testsuite_events_from_tree(csubstr filename, substr filecontents);
 std::string emit_testsuite_events_from_ints(csubstr filename, substr filecontents, IntEvents &evts, bool fail_size);
 void emit_ints_events(csubstr filename, substr filecontents, IntEvents &evts, bool fail_size);
@@ -139,6 +131,8 @@ int estimate_ints_size(csubstr filecontents, int size);
 Callbacks create_custom_callbacks();
 
 
+ParserOptions parse_opts = {};
+bool quiet = false;
 bool timing_enabled = false;
 double src_size = 0;
 namespace stdc = std::chrono;
@@ -159,8 +153,8 @@ struct stopwatch
         if(!timing_enabled) return;
         stdc::duration<double, std::milli> delta = clock_type::now() - start;
         for(stopwatch const* sw : stack)
-            fprintf(stderr, "%s:", sw->name);
-        fprintf(stderr, " %.6fms (%.3fMB/s)\n", delta.count(), src_size / delta.count() * 1.e-3);
+            fprintf(stderr, "%s:", sw->name); // NOLINT
+        fprintf(stderr, " %.6fms (%.3fMB/s)\n", delta.count(), src_size / delta.count() * 1.e-3); // NOLINT
         stack.resize(stack.size()-1);
     }
     static std::vector<stopwatch*> stack;
@@ -188,24 +182,11 @@ int main(int argc, const char *argv[])
             STOPWATCH("load_file");
             src = load_file(args.filename);
             src_size = (double)src.size();
-            if(timing_enabled) fprintf(stderr, "src_size=%zuB\n", src.size());
+            if(timing_enabled) fprintf(stderr, "src_size=%zuB\n", src.size()); // NOLINT
         }
         STOPWATCH("process");
         switch(args.evts)
         {
-        case evts_type::testsuite_src:
-        {
-            extra::string evts;
-            {
-                STOPWATCH("testsuite_src");
-                evts = emit_testsuite_events(args.filename, to_substr(src));
-            }
-            {
-                STOPWATCH("print");
-                std::fwrite(evts.data(), 1, evts.size(), stdout);
-            }
-            break;
-        }
         case evts_type::testsuite_tree:
         {
             std::string evts;
@@ -213,9 +194,10 @@ int main(int argc, const char *argv[])
                 STOPWATCH("testsuite_tree");
                 evts = emit_testsuite_events_from_tree(args.filename, to_substr(src));
             }
+            if(!quiet)
             {
                 STOPWATCH("print");
-                std::fwrite(evts.data(), 1, evts.size(), stdout);
+                std::fwrite(evts.data(), 1, evts.size(), stdout); // NOLINT
             }
             break;
         }
@@ -229,9 +211,10 @@ int main(int argc, const char *argv[])
                 STOPWATCH("testsuite_ints");
                 ts_evts = emit_testsuite_events_from_ints(args.filename, to_substr(src), int_evts, args.ints_size_force);
             }
+            if(!quiet)
             {
                 STOPWATCH("print");
-                std::fwrite(ts_evts.data(), 1, ts_evts.size(), stdout);
+                std::fwrite(ts_evts.data(), 1, ts_evts.size(), stdout); // NOLINT
             }
             break;
         }
@@ -267,25 +250,16 @@ std::string emit_testsuite_events_from_tree(csubstr filename, substr filecontent
     }
     {
         STOPWATCH("parse");
-        parse_in_place(filename, filecontents, &tree);
+        parse_in_place(filename, filecontents, &tree, parse_opts);
     }
+    std::string result;
+    if(!quiet)
     {
         STOPWATCH("emit_events");
-        std::string result = emit_events_from_tree<std::string>(tree);
+        result = emit_events_from_tree<std::string>(tree);
         return result;
     }
-}
-
-extra::string emit_testsuite_events(csubstr filename, substr filecontents)
-{
-    extra::EventHandlerTestSuite::EventSink sink = {};
-    extra::EventHandlerTestSuite handler(&sink, create_custom_callbacks());
-    ParseEngine<extra::EventHandlerTestSuite> parser(&handler);
-    {
-        STOPWATCH("parse");
-        parser.parse_in_place_ev(filename, filecontents);
-    }
-    return sink;
+    return result;
 }
 
 csubstr parse_events_ints(csubstr filename, substr filecontents, std::string &parsed, std::string &arena, IntEvents &evts, bool fail_size)
@@ -293,7 +267,7 @@ csubstr parse_events_ints(csubstr filename, substr filecontents, std::string &pa
     using I = extra::ievt::DataType;
     using Handler = extra::EventHandlerInts;
     Handler handler(create_custom_callbacks());
-    ParseEngine<Handler> parser(&handler);
+    ParseEngine<Handler> parser(&handler, parse_opts);
     substr src = filecontents;
     if(!fail_size)
     {
@@ -308,9 +282,10 @@ csubstr parse_events_ints(csubstr filename, substr filecontents, std::string &pa
         parser.parse_in_place_ev(filename, src);
     }
     size_t sz = (size_t)handler.required_size_events();
-    if(timing_enabled) fprintf(stderr, "current_size=%zu vs needed_size=%zu. arena_size=%zu\n", evts.size(), sz, arena.size());
+    if(timing_enabled) fprintf(stderr, "current_size=%zu vs needed_size=%zu. arena_size=%zu vs needed=%zu\n", evts.size(), sz, arena.size(), handler.required_size_arena()); // NOLINT
     if (!handler.fits_buffers())
     {
+        STOPWATCH("retry");
         if(fail_size)
         {
             _RYML_ERR_BASIC("buffers too small");
@@ -343,12 +318,13 @@ std::string emit_testsuite_events_from_ints(csubstr filename, substr filecontent
     std::string arena;
     csubstr parsed;
     {
-        STOPWATCH("events");
+        STOPWATCH("parse");
         parsed = parse_events_ints(filename, filecontents, buf, arena, evts, fail_size);
     }
     std::string result;
+    if(!quiet)
     {
-        STOPWATCH("emit");
+        STOPWATCH("emit_ts");
         extra::events_ints_to_testsuite(parsed, to_substr(arena), evts.data(), (I)evts.size(), &result);
     }
     return result;
@@ -364,8 +340,9 @@ void emit_ints_events(csubstr filename, substr filecontents, IntEvents &evts, bo
         STOPWATCH("events");
         parsed = parse_events_ints(filename, filecontents, buf, arena, evts, fail_size);
     }
+    if(!quiet)
     {
-        STOPWATCH("emit");
+        STOPWATCH("emit_ints");
         extra::events_ints_print(parsed, to_substr(arena), evts.data(), (I)evts.size());
     }
 }
@@ -376,7 +353,7 @@ int estimate_ints_size(csubstr filecontents, int size)
     {
         STOPWATCH("estimate_size");
         int est = extra::estimate_events_ints_size(filecontents);
-        if(timing_enabled) fprintf(stderr, "estimated_size=%d*%d=%d\n", -size, est, -size * est);
+        if(timing_enabled) fprintf(stderr, "estimated_size=%d*%d=%d\n", -size, est, -size * est); // NOLINT
         size = -size * est;
     }
     return size;
@@ -403,12 +380,7 @@ bool Args::parse(Args *args, int argc, const char *argv[], int *errcode)
     bool has_cmd = false;
     {
         csubstr s = to_csubstr(argv[1]);
-        if(s == "testsuite_src" || s == "ts_src" || s == "tss")
-        {
-            args->evts = evts_type::testsuite_src;
-            has_cmd = true;
-        }
-        else if(s == "testsuite_tree" || s == "ts_tree" || s == "tst")
+        if(s == "testsuite_tree" || s == "ts_tree" || s == "tst")
         {
             args->evts = evts_type::testsuite_tree;
             has_cmd = true;
@@ -445,6 +417,14 @@ bool Args::parse(Args *args, int argc, const char *argv[], int *errcode)
         {
             timing_enabled = true;
         }
+        else if(arg == "--quiet" || arg == "-q")
+        {
+            quiet = true;
+        }
+        else if(arg == "--resolve-tags" || arg == "-rt")
+        {
+            parse_opts = parse_opts.resolve_tags(true).resolve_tags_all(true);
+        }
         else if(arg == "--ints-size-force" || arg == "-isf")
         {
             args->ints_size_force = true;
@@ -459,6 +439,8 @@ bool Args::parse(Args *args, int argc, const char *argv[], int *errcode)
         }
         else
         {
+            if(arg == "-")
+                arg = "stdin";
             args->filename = arg;
         }
     }
@@ -467,7 +449,7 @@ bool Args::parse(Args *args, int argc, const char *argv[], int *errcode)
 
 std::string load_file(csubstr filename)
 {
-    if(filename == "-") // read from stdin
+    if(filename == "-" || filename == "stdin") // read from stdin
     {   // LCOV_EXCL_START
         std::string buf;
         buf.reserve(128);
@@ -477,7 +459,7 @@ std::string load_file(csubstr filename)
     }
     else if(!fs::path_exists(filename.str))
     {
-        std::fprintf(stderr, "%s: file not found (cwd=%s)\n", filename.str, fs::cwd<std::string>().c_str()); // LCOV_EXCL_LINE
+        std::fprintf(stderr, "%s: file not found (cwd=%s)\n", filename.str, fs::cwd<std::string>().c_str()); // LCOV_EXCL_LINE // NOLINT
         err_basic(RYML_LOC_HERE(), "file not found"); // LCOV_EXCL_LINE
     }
     return fs::file_get_contents<std::string>(filename.str);
@@ -514,14 +496,17 @@ Callbacks create_custom_callbacks()
         })
         .set_error_basic([](csubstr msg, yml::ErrorDataBasic const& errdata, void *){
             yml::err_basic_format(dump2stderr, msg, errdata); // LCOV_EXCL_LINE
+            dump2stderr("\n"); // LCOV_EXCL_LINE
             throwerr(msg); // LCOV_EXCL_LINE
         })
         .set_error_parse([](csubstr msg, yml::ErrorDataParse const& errdata, void *){
             yml::err_parse_format(dump2stderr, msg, errdata); // LCOV_EXCL_LINE
+            dump2stderr("\n"); // LCOV_EXCL_LINE
             throwerr(msg); // LCOV_EXCL_LINE
         })
         .set_error_visit([](csubstr msg, yml::ErrorDataVisit const& errdata, void *){
             yml::err_visit_format(dump2stderr, msg, errdata); // LCOV_EXCL_LINE
+            dump2stderr("\n"); // LCOV_EXCL_LINE
             throwerr(msg); // LCOV_EXCL_LINE
         });
 }

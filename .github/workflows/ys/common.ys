@@ -53,6 +53,11 @@ defn setup-job(workflowname jobname)::
 
 
 #----------------------------------------------------------
+defn setup-dependent-job(workflowname jobname)::
+  continue-on-error: false
+
+
+#----------------------------------------------------------
 defn runs-on-docker-c4core(which)::
   runs-on: ubuntu-24.04
   container:: "ghcr.io/biojppm/c4core/ubuntu$which:latest"
@@ -211,7 +216,11 @@ version-get-vars =::
 
 #----------------------------------------------------------
 install-cxx =::
-- run: c4core-install ${{matrix.cxx}}
+- run: |
+    # retry if it fails
+    c4core-install ${{matrix.cxx}} \
+      || c4core-install ${{matrix.cxx}} \
+      || c4core-install ${{matrix.cxx}}
 
 
 #----------------------------------------------------------
@@ -255,15 +264,15 @@ run-steps =::
 #----------------------------------------------------------
 
 
-defn run-gcc-manual-with-flags(buildtype flags=""):
-  run-manual-with-flags('g++' 'gcc' buildtype flags)
+defn run-gcc-manual-with-flags(buildtype flags="" halfnprocs="0"):
+  run-manual-with-flags('g++' 'gcc' buildtype flags halfnprocs)
 
 
-defn run-clang-manual-with-flags(buildtype flags=""):
-  run-manual-with-flags('clang++' 'clang' buildtype flags)
+defn run-clang-manual-with-flags(buildtype flags="" halfnprocs="0"):
+  run-manual-with-flags('clang++' 'clang' buildtype flags halfnprocs)
 
 
-defn run-manual-with-flags(cxx cc buildtype flags="")::
+defn run-manual-with-flags(cxx cc buildtype flags="" halfnprocs="0")::
 # $(buildtype:uc)
 # also in that case you could $uc(buildtype)
 # $(<expr>) is the more general syntax for any expr
@@ -291,7 +300,17 @@ defn run-manual-with-flags(cxx cc buildtype flags="")::
       -DRYML_DBG=OFF
 - name:: "build $buildtype ::: $flags"
   run:: |
-    cmake --build build/$buildtype --target ryml-test-build --parallel --verbose
+    source .github/setenv.sh
+    numprocs=`_c4getnumcores`
+    if [ -n "$halfnprocs"] ; then
+        if [ "$halfnprocs" == "1" ] ; then
+            if (( \$numprocs > 1 )) ; then
+                numprocs=\$((\$numprocs / 2))
+            fi
+        fi
+    fi
+    export CMAKE_BUILD_PARALLEL_LEVEL=\$numprocs
+    cmake --build build/$buildtype --target ryml-test-build --parallel \$numprocs --verbose
 - name:: "run $buildtype ::: $flags"
   run:: |
     source .github/setenv.sh

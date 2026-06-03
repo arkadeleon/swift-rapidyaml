@@ -7,6 +7,9 @@
 #include <c4/yml/error.hpp>
 #endif
 
+#include <cassert>
+
+// NOLINTBEGIN(bugprone-use-after-move,hicpp-invalid-access-moved)
 
 namespace c4 {
 namespace yml {
@@ -382,5 +385,7 @@ C4_NO_INLINE void err_visit_format(DumpFn &&dumpfn, csubstr msg, ErrorDataVisit 
 
 } // namespace yml
 } // namespace c4
+
+// NOLINTEND(bugprone-use-after-move,hicpp-invalid-access-moved)
 
 #endif /* _C4_YML_ERROR_HPP_ */

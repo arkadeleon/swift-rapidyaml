@@ -154,34 +154,22 @@ void EventsEmitter::emit_scalar(csubstr val, char openchar)
 
 void EventsEmitter::emit_tag(csubstr tag, id_type node)
 {
-    size_t tagsize = m_tree->resolve_tag(to_substr(tagbuf), tag, node);
-    if(tagsize)
+    (void)node;
+    csubstr ntag = normalize_tag_long(tag, to_substr(tagbuf));
+    if(!ntag.str)
     {
-        if(tagsize > tagbuf.size())
-        {
-            tagbuf.resize(tagsize);
-            tagsize = m_tree->resolve_tag(to_substr(tagbuf), tag, node);
-        }
-        pr(to_substr(tagbuf).first(tagsize));
+        tagbuf.resize(2 * ntag.len);
+        ntag = normalize_tag_long(tag, to_substr(tagbuf));
+    }
+    if(ntag.begins_with('<'))
+    {
+        pr(ntag);
     }
     else
     {
-        csubstr ntag = normalize_tag_long(tag, to_substr(tagbuf));
-        if(!ntag.str)
-        {
-            tagbuf.resize(2 * ntag.len);
-            ntag = normalize_tag_long(tag, to_substr(tagbuf));
-        }
-        if(ntag.begins_with('<'))
-        {
-            pr(ntag);
-        }
-        else
-        {
-            pr('<');
-            pr(ntag);
-            pr('>');
-        }
+        pr('<');
+        pr(ntag);
+        pr('>');
     }
 }
 

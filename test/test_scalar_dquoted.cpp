@@ -338,6 +338,16 @@ dquoted_case test_cases_filter[] = {
     //dqc("	\n\ndetected\n\n", "\t\ndetected\n"), // this case cannot be prefixed with anything.
     dqc(R"(This is a key\nthat has multiple lines\n)", "This is a key\nthat has multiple lines\n"),
     dqc("This is a key\n\nthat has multiple lines\n\n", "This is a key\nthat has multiple lines\n"),
+    dqc(R"( ---)",  " ---"),
+    // 85
+    dqc(R"( ...)",  " ..."),
+    dqc(R"( --- )",  " --- "),
+    dqc(R"( ... )",  " ... "),
+    dqc(R"(  ---  )",  "  ---  "),
+    dqc(R"(  ...  )",  "  ...  "),
+    // 90
+    dqc(" ---\n",  " --- "),
+    dqc(" ...\n",  " ... "),
     #undef dqc
 };
 C4_SUPPRESS_WARNING_MSVC_POP
@@ -419,7 +429,6 @@ INSTANTIATE_TEST_SUITE_P(double_quoted_filter,
 TEST(double_quoted, issue486)
 {
     csubstr srcs[] = {
-        "foo: \"test,\nbar\"", // this is invalid YAML, but ryml can parse it (but won't in the future)
         "foo: \"test,\n bar\"" // ... this is valid
     };
     auto check = [](Tree const &t){
@@ -616,15 +625,10 @@ string"
   string"
 ---
 - "quoted
-string"
+ string"
 ---
-"quoted
-  string": "quoted
+"quoted string": "quoted
   string"
----
-"quoted
-string": "quoted
-string"
 )";
     test_check_emit_check(yaml, [](Tree const &t){
         EXPECT_EQ(t.docref(0).val(), "quoted string");
@@ -632,7 +636,6 @@ string"
         EXPECT_EQ(t.docref(2)[0].val(), "quoted string");
         EXPECT_EQ(t.docref(3)[0].val(), "quoted string");
         EXPECT_EQ(t.docref(4)["quoted string"].val(), "quoted string");
-        EXPECT_EQ(t.docref(5)["quoted string"].val(), "quoted string");
     });
 }
 
@@ -709,10 +712,9 @@ TEST(double_quoted, test_suite_R4YG)
     csubstr yaml = R"(
 - "	
 
-detected
+ detected
 
-"
-
+ "
 )";
     test_check_emit_check(yaml, [](Tree const &t){
         EXPECT_EQ(t[0].val(), csubstr("\t\ndetected\n"));
@@ -744,6 +746,7 @@ void verify_error_is_reported(csubstr case_name, csubstr yaml, Location loc={})
 
 TEST(double_quoted, error_on_unmatched_quotes)
 {
+    verify_error_is_reported("doc", R"(")");
     verify_error_is_reported("map block", R"(foo: "'
 bar: "")");
     verify_error_is_reported("seq block", R"(- "'
@@ -754,6 +757,7 @@ bar: "")");
 
 TEST(double_quoted, error_on_unmatched_quotes_with_escapes)
 {
+    verify_error_is_reported("doc", R"("\")");
     verify_error_is_reported("map block", R"(foo: "\"'
 bar: "")");
     verify_error_is_reported("seq block", R"(- "\"'
@@ -1046,11 +1050,125 @@ R"("This is a key
 
 that has multiple lines
 
-": and this is its value
+"
 )",
-N(MB, L{N(KD|VP, "This is a key\nthat has multiple lines\n", "and this is its value")})
+N(VD, "This is a key\nthat has multiple lines\n")
 );
-}
+
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 0", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+bar"
+)",
+  Location(3, 1)
+);
+
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 1", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+ bar"
+)",
+  Location(3, 1)
+);
+
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 2", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+  bar"
+)",
+  Location(3, 1)
+);
+
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 4",
+R"(
+- - "bar
+   bar"
+)",
+  N(SB, L{N(SB, L{N(VD, "bar bar")})})
+);
+
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 0, empty", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 0, spaces lt indent", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+  
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 0, spaces eq indent", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+   
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 0, spaces gt indent", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+    
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 0, spaces gt indent + tabs", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+      	
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 0, spaces eq indent + tabs 1", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+    	
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 0, spaces eq indent + tabs 2", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+   	
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 0, spaces lt indent + tabs 1", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+  	
+bar"
+)",
+  Location(3, 1)
+);
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 0, spaces lt indent + tabs 2", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+ 	
+bar"
+)",
+  Location(3, 1)
+);
+ADD_CASE_TO_GROUP("dquoted, invalid indentation JKF3, 0, spaces lt indent + tabs 3", EXPECT_PARSE_ERROR,
+R"(
+- - "bar
+	
+bar"
+)",
+  Location(3, 1)
+);
+
+} // CASE_GROUP(DOUBLE_QUOTED)
 
 } // namespace yml
 } // namespace c4

@@ -95,8 +95,8 @@ typedef enum : DataType {
 
     // Directive flags
     YAML = (1 << 23),  ///< yaml directive: `\%YAML <version>`
-    TAGD = (1 << 24),  ///< tag directive, name : `\%TAG <name> .......`
-    TAGV = (1 << 25),  ///< tag directive, value: `\%TAG ...... <value>`
+    TAGH = (1 << 24),  ///< tag directive, handle: `\%TAG <handle> ........`
+    TAGP = (1 << 25),  ///< tag directive, prefix: `\%TAG ........ <prefix>`
 
     /// special flag to mark a scalar as unfiltered (when the parser
     /// is set not to filter).
@@ -112,7 +112,7 @@ typedef enum : DataType {
     /// following the event. For such events, the next two integers
     /// will provide respectively the string's offset and length. See
     /// also @ref PSTR.
-    WSTR = SCLR|ALIA|ANCH|TAG_|TAGD|TAGV|YAML,
+    WSTR = SCLR|ALIA|ANCH|TAG_|TAGH|TAGP|YAML,
 
 } EventFlags;
 
@@ -181,9 +181,10 @@ struct EventHandlerIntsState : public c4::yml::ParserState
 
 
 /** A parser event handler that creates a compact representation of
- * the YAML tree in a buffer of integers (see @ref ievt::EventFlags)
- * containing masks (to represent events) and offset+length (to
- * represent strings in the source buffer).
+ * the YAML tree in a contiguous buffer of integers. The integers are
+ * @ref ievt::EventFlags containing masks (to represent events),
+ * interleaved with offset+length (to represent strings in the source
+ * buffer).
  *
  * This is meant for use by other programming languages, and supports
  * container keys (unlike the ryml tree). It parses faster than the ryml
@@ -440,6 +441,7 @@ struct EventHandlerInts : public c4::yml::EventHandlerStack<EventHandlerInts, Ev
 
     using value_type = ievt::DataType;
     using state = EventHandlerIntsState; // our internal state must inherit from parser state
+    enum { requires_strings_on_buffers = true };
 
     /** @} */
 
@@ -452,9 +454,9 @@ public:
     int32_t m_evt_size;
     substr m_arena;
     size_t m_arena_pos;
-    TagDirective m_tag_directives[RYML_MAX_TAG_DIRECTIVES];
-    bool m_has_yaml_directive;
-    bool m_has_docs;
+    id_type m_curr_doc;
+    TagDirectives m_tag_directives;
+    TagCache m_tag_cache;
 
     // undefined at the end
     #define _enable_(bits) _enable__<bits>()
@@ -470,14 +472,14 @@ public:
     EventHandlerInts(c4::yml::Callbacks const& cb)
         : EventHandlerStack(cb)
     {
-        reset(csubstr{}, substr{}, nullptr, 0);
+        reset(substr{}, substr{}, nullptr, 0);
     }
     EventHandlerInts()
         : EventHandlerInts(c4::yml::get_callbacks())
     {
     }
 
-    void reset(csubstr str, substr arena, ievt::DataType *dst, int32_t dst_size)
+    void reset(substr str, substr arena, ievt::DataType *dst, int32_t dst_size)
     {
         _stack_reset_root();
         m_curr->flags |= c4::yml::RUNK|c4::yml::RTOP;
@@ -490,10 +492,9 @@ public:
         m_evt_size = dst_size;
         m_evt_pos = 0;
         m_evt_prev = 0;
-        m_has_docs = false;
-        m_has_yaml_directive = false;
-        for(TagDirective &td : m_tag_directives)
-            td = {};
+        m_curr_doc = 0;
+        m_tag_directives.clear();
+        m_tag_cache.clear();
     }
 
     /** get the size needed for the event buffer from the previous parse
@@ -510,8 +511,9 @@ public:
         return m_arena_pos;
     }
 
-    /** Predicate to test if the event buffer successfully accomodated
-     * all the parse events.
+    /** Predicate to test if the event and arena buffers successfully
+     * accomodated all the parse events.
+     *
      * @warning this is valid only until the next parse */
     bool fits_buffers() const
     {
@@ -523,6 +525,9 @@ public:
         // does not apply here
     }
 
+    C4_ALWAYS_INLINE TagDirectives &tag_directives() { return m_tag_directives; }
+    C4_ALWAYS_INLINE TagCache &tag_cache() { return m_tag_cache; }
+
     /** @} */
 
 public:
@@ -530,17 +535,15 @@ public:
     /** @name parse events
      * @{ */
 
-    void start_parse(const char* filename, csubstr src, c4::yml::detail::pfn_relocate_arena relocate_arena, void *relocate_arena_data)
+    void start_parse(const char* filename, substr src)
     {
         _RYML_ASSERT_BASIC_(m_stack.m_callbacks, src.str == m_src.str);
         _RYML_ASSERT_BASIC_(m_stack.m_callbacks, src.len == m_src.len);
-        this->_stack_start_parse(filename, src, relocate_arena, relocate_arena_data);
+        this->_stack_start_parse(filename, src);
     }
 
     void finish_parse()
     {
-        if((_num_tag_directives() || m_has_yaml_directive) && !m_has_docs)
-            _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "directives cannot be used without a document");
         this->_stack_finish_parse();
     }
 
@@ -585,7 +588,6 @@ public:
             _push();
             _enable_(DOC);
         }
-        m_has_docs = true;
     }
     /** implicit doc end (without ...) */
     void end_doc()
@@ -597,6 +599,7 @@ public:
             _c4dbgp("pop!");
             _pop();
         }
+        ++m_curr_doc;
     }
 
     /** explicit doc start, with --- */
@@ -607,7 +610,6 @@ public:
         _c4dbgp("push!");
         _push();
         _enable_(DOC);
-        m_has_docs = true;
     }
     /** explicit doc end, with ... */
     void end_doc_expl()
@@ -619,7 +621,7 @@ public:
             _c4dbgp("pop!");
             _pop();
         }
-        m_has_yaml_directive = false;
+        ++m_curr_doc;
     }
 
     /** @} */
@@ -741,12 +743,243 @@ public:
         m_curr->evt_type = {};
     }
 
+    /** @} */
+
+public:
+
+    /** @name YAML scalar events */
+    /** @{ */
+
+
+    C4_ALWAYS_INLINE void set_key_scalar_plain_empty()
+    {
+        _c4dbgpf("{}/{}: set_key_scalar_plain_empty", m_evt_pos, m_evt_size);
+        _send_str_(_get_latest_empty_scalar(), ievt::KEY_|ievt::SCLR|ievt::PLAI);
+        _enable_(c4::yml::KEY|c4::yml::KEY_PLAIN|c4::yml::KEYNIL);
+    }
+    C4_ALWAYS_INLINE void set_val_scalar_plain_empty()
+    {
+        _c4dbgpf("{}/{}: set_val_scalar_plain_empty", m_evt_pos, m_evt_size);
+        _send_str_(_get_latest_empty_scalar(), ievt::VAL_|ievt::SCLR|ievt::PLAI);
+        _enable_(c4::yml::VAL|c4::yml::VAL_PLAIN|c4::yml::VALNIL);
+    }
+
+
+    C4_ALWAYS_INLINE void set_key_scalar_plain(csubstr scalar)
+    {
+        _c4dbgpf("{}/{}: set_key_scalar_plain: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str-m_src.str, scalar.len, scalar);
+        _send_str_(scalar, ievt::KEY_|ievt::SCLR|ievt::PLAI);
+        _enable_(c4::yml::KEY|c4::yml::KEY_PLAIN);
+    }
+    C4_ALWAYS_INLINE void set_val_scalar_plain(csubstr scalar)
+    {
+        _c4dbgpf("{}/{}: set_val_scalar_plain: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str-m_src.str, scalar.len, scalar);
+        _send_str_(scalar, ievt::VAL_|ievt::SCLR|ievt::PLAI);
+        _enable_(c4::yml::VAL|c4::yml::VAL_PLAIN);
+    }
+
+
+    C4_ALWAYS_INLINE void set_key_scalar_dquoted(csubstr scalar)
+    {
+        _c4dbgpf("{}/{}: set_key_scalar_dquo: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
+        _send_str_(scalar, ievt::KEY_|ievt::SCLR|ievt::DQUO);
+        _enable_(c4::yml::KEY|c4::yml::KEY_DQUO);
+    }
+    C4_ALWAYS_INLINE void set_val_scalar_dquoted(csubstr scalar)
+    {
+        _c4dbgpf("{}/{}: set_val_scalar_dquo: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
+        _send_str_(scalar, ievt::VAL_|ievt::SCLR|ievt::DQUO);
+        _enable_(c4::yml::VAL|c4::yml::VAL_DQUO);
+    }
+
+
+    C4_ALWAYS_INLINE void set_key_scalar_squoted(csubstr scalar)
+    {
+        _c4dbgpf("{}/{}: set_key_scalar_squo: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str-m_src.str, scalar.len, scalar);
+        _send_str_(scalar, ievt::KEY_|ievt::SCLR|ievt::SQUO);
+        _enable_(c4::yml::KEY|c4::yml::KEY_SQUO);
+    }
+    C4_ALWAYS_INLINE void set_val_scalar_squoted(csubstr scalar)
+    {
+        _c4dbgpf("{}/{}: set_val_scalar_squo: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str-m_src.str, scalar.len, scalar);
+        _send_str_(scalar, ievt::VAL_|ievt::SCLR|ievt::SQUO);
+        _enable_(c4::yml::VAL|c4::yml::VAL_SQUO);
+    }
+
+
+    C4_ALWAYS_INLINE void set_key_scalar_literal(csubstr scalar)
+    {
+        _c4dbgpf("{}/{}: set_key_scalar_literal: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
+        _send_str_(scalar, ievt::KEY_|ievt::SCLR|ievt::LITL);
+        _enable_(c4::yml::KEY|c4::yml::KEY_LITERAL);
+    }
+    C4_ALWAYS_INLINE void set_val_scalar_literal(csubstr scalar)
+    {
+        _c4dbgpf("{}/{}: set_val_scalar_literal: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
+        _send_str_(scalar, ievt::VAL_|ievt::SCLR|ievt::LITL);
+        _enable_(c4::yml::VAL|c4::yml::VAL_LITERAL);
+    }
+
+
+    C4_ALWAYS_INLINE void set_key_scalar_folded(csubstr scalar)
+    {
+        _c4dbgpf("{}/{}: set_key_scalar_folded: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
+        _send_str_(scalar, ievt::KEY_|ievt::SCLR|ievt::FOLD);
+        _enable_(c4::yml::KEY|c4::yml::KEY_FOLDED);
+    }
+    C4_ALWAYS_INLINE void set_val_scalar_folded(csubstr scalar)
+    {
+        _c4dbgpf("{}/{}: set_val_scalar_folded: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
+        _send_str_(scalar, ievt::VAL_|ievt::SCLR|ievt::FOLD);
+        _enable_(c4::yml::VAL|c4::yml::VAL_FOLDED);
+    }
+
+
+    C4_ALWAYS_INLINE void mark_key_scalar_unfiltered()
+    {
+        _c4dbgpf("{}/{}: mark_key_scalar_unfiltered", m_evt_pos, m_evt_size);
+        if(m_evt_pos < m_evt_size)
+            m_evt[m_evt_pos] |= ievt::UNFILT;
+    }
+    C4_ALWAYS_INLINE void mark_val_scalar_unfiltered()
+    {
+        _c4dbgpf("{}/{}: mark_val_scalar_unfiltered", m_evt_pos, m_evt_size);
+        if(m_evt_pos < m_evt_size)
+            m_evt[m_evt_pos] |= ievt::UNFILT;
+    }
+
+    /** @} */
+
+private:
+
+    /** @cond dev*/
+    #define _add_scalar_(i, scalar)                                     \
+    _c4dbgpf("{}/{}: scalar!", i, m_evt_size);                          \
+    _RYML_ASSERT_BASIC_(m_stack.m_callbacks, _is_sub_(scalar));         \
+    _RYML_ASSERT_BASIC_(m_stack.m_callbacks, m_evt[i] & ievt::WSTR);    \
+    _RYML_ASSERT_BASIC_(m_stack.m_callbacks, i + 3 < m_evt_size);       \
+    if(C4_LIKELY(scalar.is_sub(m_src)))                                 \
+    {                                                                   \
+        m_evt[i + 1] = (ievt::DataType)(scalar.str - m_src.str);        \
+    }                                                                   \
+    else                                                                \
+    {                                                                   \
+        m_evt[i] |= ievt::AREN;                                         \
+        m_evt[i + 1] = (ievt::DataType)(scalar.str - m_arena.str);      \
+        _c4dbgpf("{}/{}: arena! ->{}", i, m_evt_size, m_evt[i+1]);      \
+    }                                                                   \
+    m_evt[i + 2] = (ievt::DataType)scalar.len;                          \
+    m_evt[i + 3] = ievt::PSTR
+    /** @endcond */
+
+public:
+
+    /** @name YAML anchor/reference events */
+    /** @{ */
+
+    void set_key_anchor(csubstr anchor)
+    {
+        _c4dbgpf("{}/{}: set_key_anchor: {}", m_evt_pos, m_evt_size, anchor);
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, !_has_any_(KEYREF));
+        _enable_(c4::yml::KEYANCH);
+        if(m_evt_pos + 3 < m_evt_size)
+        {
+            m_evt[m_evt_pos] |= ievt::KEY_|ievt::ANCH;
+            _add_scalar_(m_evt_pos, anchor);
+        }
+        m_evt_prev = m_evt_pos;
+        m_evt_pos += 3;
+    }
+    void set_val_anchor(csubstr anchor)
+    {
+        _c4dbgpf("{}/{}: set_val_anchor: {}", m_evt_pos, m_evt_size, anchor);
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, !_has_any_(VALREF));
+        _enable_(c4::yml::VALANCH);
+        if(m_evt_pos + 3 < m_evt_size)
+        {
+            m_evt[m_evt_pos] |= ievt::VAL_|ievt::ANCH;
+            _add_scalar_(m_evt_pos, anchor);
+        }
+        m_evt_prev = m_evt_pos;
+        m_evt_pos += 3;
+    }
+
+    void set_key_ref(csubstr ref)
+    {
+        _c4dbgpf("{}/{}: set_key_ref: {}", m_evt_pos, m_evt_size, ref);
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, ref.begins_with('*'));
+        if(C4_UNLIKELY(_has_any_(KEYANCH)))
+            _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "key cannot have both anchor and ref");
+        _enable_(c4::yml::KEY|c4::yml::KEYREF);
+        _send_str_(ref.sub(1), ievt::KEY_|ievt::ALIA); // skip the leading *
+    }
+    void set_val_ref(csubstr ref)
+    {
+        _c4dbgpf("{}/{}: set_val_ref: {}", m_evt_pos, m_evt_size, ref);
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, ref.begins_with('*'));
+        if(C4_UNLIKELY(_has_any_(VALANCH)))
+            _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "val cannot have both anchor and ref");
+        _enable_(c4::yml::VAL|c4::yml::VALREF);
+        _send_str_(ref.sub(1), ievt::VAL_|ievt::ALIA); // skip the leading *
+    }
+
+    /** @} */
+
+public:
+
+    /** @name YAML tag events */
+    /** @{ */
+
+    void set_key_tag(csubstr tag)
+    {
+        _c4dbgpf("{}/{}: set key tag [{}]~~~{}~~~", m_evt_pos, m_evt_size, tag.len, tag.str ? tag : csubstr("(arena full)"));
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, _is_sub_(tag));
+        _enable_(c4::yml::KEYTAG);
+        _send_str_(tag, ievt::KEY_|ievt::TAG_);
+    }
+    void set_val_tag(csubstr tag)
+    {
+        _c4dbgpf("{}/{}: set val tag [{}]~~~{}~~~", m_evt_pos, m_evt_size, tag.len, tag.str ? tag : csubstr("(arena full)"));
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, _is_sub_(tag));
+        _enable_(c4::yml::VALTAG);
+        _send_str_(tag, ievt::VAL_|ievt::TAG_);
+    }
+
+    /** @} */
+
+public:
+
+    /** @name YAML directive events */
+    /** @{ */
+
+    void add_directive_yaml(csubstr yaml_version)
+    {
+        _c4dbgpf("{}/{}: %YAML directive! version={}", m_evt_pos, m_evt_size, yaml_version);
+        _send_str_(yaml_version, ievt::YAML);
+    }
+
+    void add_directive_tag(csubstr handle, csubstr prefix)
+    {
+        _c4dbgpf("{}/{}: %TAG directive! handle={} prefix={} doc_id={}", m_evt_pos, m_evt_size, handle, prefix, m_curr_doc);
+        if(C4_UNLIKELY(!m_tag_directives.add(handle, prefix, m_curr_doc)))
+            _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "too many %TAG directives");
+        _send_str_(handle, ievt::TAGH);
+        _send_str_(prefix, ievt::TAGP);
+    }
+
+    /** @} */
+
+public:
+
+    /** @name YAML structure events */
+    /** @{ */
+
     /** set the previous val as the first key of a new map, with flow style.
      *
      * See the documentation for @ref doc_event_handlers, which has
      * important notes about this event.
      */
-    void actually_val_is_first_key_of_new_map_flow()
+    C4_NO_INLINE void actually_val_is_first_key_of_new_map_flow()
     {
         _c4dbgpf("{}/{}: prev={} actually_val_is_first_key_of_new_map_flow", m_evt_pos, m_evt_size, m_evt_prev);
         _RYML_ASSERT_BASIC_(m_stack.m_callbacks, m_evt_pos > 2);
@@ -759,7 +992,7 @@ public:
         // ... BMAP flag start len (free)
         //          |              |
         //          prev           curr
-        if(m_evt_prev + 1 < m_evt_size)
+        if(m_evt_pos < m_evt_size)
         {
             if(m_evt[m_evt_prev] & ievt::WSTR)
             {
@@ -843,7 +1076,7 @@ public:
     void actually_val_is_first_key_of_new_map_block()
     {
         _c4dbgpf("{}/{}: prev={} actually_val_is_first_key_of_new_map_block", m_evt_pos, m_evt_size, m_evt_prev);
-        if(m_evt_prev < m_evt_size)
+        if(m_evt_pos < m_evt_size)
         {
             // interpolate BMAP|VAL|BLCK after the last BDOC
             int32_t pos = _find_last_bdoc(m_evt_pos);
@@ -877,7 +1110,119 @@ public:
 
 public:
 
-    /** @cond dev */
+    /** @name arena events */
+    /** @{ */
+
+    substr arena()
+    {
+        return m_arena.first(m_arena_pos < m_arena.len ? m_arena_pos : m_arena.len);
+    }
+    substr arena_rem() // NOLINT
+    {
+        return C4_LIKELY(m_arena_pos <= m_arena.len) ? m_arena.sub(m_arena_pos) : m_arena.last(0);
+    }
+    /** this may fail, in which case an empty string is returned */
+    substr alloc_arena(size_t len)
+    {
+        substr s = arena_rem();
+        if(C4_LIKELY(len <= s.len))
+            s.len = len;
+        else
+            s.str = nullptr;
+        m_arena_pos += len;
+        return s;
+    }
+
+    /** @} */
+
+public:
+
+    /** @name implementation helpers */
+    /** @{ */
+
+    /** push a new parent, add a child to the new parent, and set the
+     * child as the current node */
+    void _push()
+    {
+        _stack_push();
+        m_curr->evt_type = {};
+    }
+
+    /** end the current scope */
+    void _pop()
+    {
+        _stack_pop();
+    }
+
+    template<c4::yml::type_bits bits> C4_ALWAYS_INLINE void _enable__() noexcept
+    {
+        m_curr->evt_type |= bits;
+    }
+    template<c4::yml::type_bits bits> C4_ALWAYS_INLINE void _disable__() noexcept
+    {
+        m_curr->evt_type &= ~bits;
+    }
+    template<c4::yml::type_bits bits> C4_ALWAYS_INLINE bool _has_any__() const noexcept
+    {
+        return (m_curr->evt_type & bits) != c4::yml::type_bits(0);
+    }
+
+    C4_ALWAYS_INLINE int32_t _next(int32_t pos) const noexcept
+    {
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, pos < m_evt_size);
+        return pos + ((m_evt[pos] & ievt::WSTR) ? 3 : 1);
+    }
+
+    C4_ALWAYS_INLINE int32_t _prev(int32_t pos) const noexcept
+    {
+        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, pos < m_evt_size);
+        return pos - ((m_evt[pos] & ievt::PSTR) ? 3 : 1);
+    }
+
+    C4_ALWAYS_INLINE bool _is_sub_(csubstr str) const noexcept
+    {
+        return (!str.str || str.is_sub(m_src) || str.is_sub(m_arena));
+    }
+
+    C4_ALWAYS_INLINE void _send_flag_only_(ievt::DataType flags)
+    {
+        _c4dbgpf("{}/{}: flag only", m_evt_pos, m_evt_size);
+        if(m_evt_pos < m_evt_size)
+            m_evt[m_evt_pos] |= flags;
+        m_curr->evt_id = m_evt_pos;
+        m_evt_prev = m_evt_pos;
+        ++m_evt_pos;
+        if(m_evt_pos < m_evt_size)
+            m_evt[m_evt_pos] = {};
+    }
+
+    C4_ALWAYS_INLINE void _send_str_(csubstr scalar, ievt::DataType flags)
+    {
+        _c4dbgpf("{}/{}: send str", m_evt_pos, m_evt_size);
+        if(m_evt_pos + 3 < m_evt_size)
+        {
+            m_evt[m_evt_pos] |= flags;
+            _add_scalar_(m_evt_pos, scalar);
+        }
+        m_curr->evt_id = m_evt_pos;
+        m_evt_prev = m_evt_pos;
+        m_evt_pos += 3;
+    }
+
+    void _mark_parent_with_children_()
+    {
+        if(m_parent)
+            m_parent->has_children = true;
+    }
+
+    C4_ALWAYS_INLINE csubstr _get_latest_empty_scalar() const
+    {
+        // ideally we should search back in the latest event that has
+        // a scalar, then select a zero-length scalar immediately
+        // after that scalar. But this also works for now:
+        return m_src.first(0);
+    }
+
     int32_t _find_last_bdoc(int32_t pos) const
     {
         _RYML_ASSERT_BASIC_(m_stack.m_callbacks, pos < m_evt_size); // it's safe to read from the array
@@ -890,6 +1235,7 @@ public:
         }
         return -1; // LCOV_EXCL_LINE
     }
+
     int32_t _find_matching_open(ievt::DataType open, ievt::DataType close, int32_t pos) const
     {
         _c4dbgpf("find_matching: start at {}", pos);
@@ -920,6 +1266,7 @@ public:
         _c4dbgpf("find_matching: not found!", 0); // LCOV_EXCL_LINE
         return -1;  // LCOV_EXCL_LINE
     }
+
     int32_t _extend_left_to_include_tag_and_or_anchor(int32_t pos) const
     {
         _RYML_ASSERT_BASIC_(m_stack.m_callbacks, pos < m_evt_size);
@@ -932,431 +1279,9 @@ public:
         }
         return pos;
     }
-    C4_ALWAYS_INLINE int32_t _next(int32_t pos) const noexcept
-    {
-        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, pos < m_evt_size);
-        return pos + ((m_evt[pos] & ievt::WSTR) ? 3 : 1);
-    }
-    C4_ALWAYS_INLINE int32_t _prev(int32_t pos) const noexcept
-    {
-        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, pos < m_evt_size);
-        return pos - ((m_evt[pos] & ievt::PSTR) ? 3 : 1);
-    }
-    /** @endcond */
-
-public:
-
-    /** @name YAML scalar events */
-    /** @{ */
-
-
-    C4_ALWAYS_INLINE void set_key_scalar_plain_empty()
-    {
-        _c4dbgpf("{}/{}: set_key_scalar_plain_empty", m_evt_pos, m_evt_size);
-        _send_key_scalar_(_get_latest_empty_scalar(), ievt::PLAI);
-        _enable_(c4::yml::KEY|c4::yml::KEY_PLAIN|c4::yml::KEYNIL);
-    }
-    C4_ALWAYS_INLINE void set_val_scalar_plain_empty()
-    {
-        _c4dbgpf("{}/{}: set_val_scalar_plain_empty", m_evt_pos, m_evt_size);
-        _send_val_scalar_(_get_latest_empty_scalar(), ievt::PLAI);
-        _enable_(c4::yml::VAL|c4::yml::VAL_PLAIN|c4::yml::VALNIL);
-    }
-    C4_ALWAYS_INLINE csubstr _get_latest_empty_scalar() const
-    {
-        // ideally we should search back in the latest event that has
-        // a scalar, then select a zero-length scalar immediately
-        // after that scalar. But this also works for now:
-        return m_src.first(0);
-    }
-
-
-    C4_ALWAYS_INLINE void set_key_scalar_plain(csubstr scalar)
-    {
-        _c4dbgpf("{}/{}: set_key_scalar_plain: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str-m_src.str, scalar.len, scalar);
-        _send_key_scalar_(scalar, ievt::PLAI);
-        _enable_(c4::yml::KEY|c4::yml::KEY_PLAIN);
-    }
-    C4_ALWAYS_INLINE void set_val_scalar_plain(csubstr scalar)
-    {
-        _c4dbgpf("{}/{}: set_val_scalar_plain: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str-m_src.str, scalar.len, scalar);
-        _send_val_scalar_(scalar, ievt::PLAI);
-        _enable_(c4::yml::VAL|c4::yml::VAL_PLAIN);
-    }
-
-
-    C4_ALWAYS_INLINE void set_key_scalar_dquoted(csubstr scalar)
-    {
-        _c4dbgpf("{}/{}: set_key_scalar_dquo: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
-        _send_key_scalar_(scalar, ievt::DQUO);
-        _enable_(c4::yml::KEY|c4::yml::KEY_DQUO);
-    }
-    C4_ALWAYS_INLINE void set_val_scalar_dquoted(csubstr scalar)
-    {
-        _c4dbgpf("{}/{}: set_val_scalar_dquo: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
-        _send_val_scalar_(scalar, ievt::DQUO);
-        _enable_(c4::yml::VAL|c4::yml::VAL_DQUO);
-    }
-
-
-    C4_ALWAYS_INLINE void set_key_scalar_squoted(csubstr scalar)
-    {
-        _c4dbgpf("{}/{}: set_key_scalar_squo: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str-m_src.str, scalar.len, scalar);
-        _send_key_scalar_(scalar, ievt::SQUO);
-        _enable_(c4::yml::KEY|c4::yml::KEY_SQUO);
-    }
-    C4_ALWAYS_INLINE void set_val_scalar_squoted(csubstr scalar)
-    {
-        _c4dbgpf("{}/{}: set_val_scalar_squo: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str-m_src.str, scalar.len, scalar);
-        _send_val_scalar_(scalar, ievt::SQUO);
-        _enable_(c4::yml::VAL|c4::yml::VAL_SQUO);
-    }
-
-
-    C4_ALWAYS_INLINE void set_key_scalar_literal(csubstr scalar)
-    {
-        _c4dbgpf("{}/{}: set_key_scalar_literal: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
-        _send_key_scalar_(scalar, ievt::LITL);
-        _enable_(c4::yml::KEY|c4::yml::KEY_LITERAL);
-    }
-    C4_ALWAYS_INLINE void set_val_scalar_literal(csubstr scalar)
-    {
-        _c4dbgpf("{}/{}: set_val_scalar_literal: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
-        _send_val_scalar_(scalar, ievt::LITL);
-        _enable_(c4::yml::VAL|c4::yml::VAL_LITERAL);
-    }
-
-
-    C4_ALWAYS_INLINE void set_key_scalar_folded(csubstr scalar)
-    {
-        _c4dbgpf("{}/{}: set_key_scalar_folded: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
-        _send_key_scalar_(scalar, ievt::FOLD);
-        _enable_(c4::yml::KEY|c4::yml::KEY_FOLDED);
-    }
-    C4_ALWAYS_INLINE void set_val_scalar_folded(csubstr scalar)
-    {
-        _c4dbgpf("{}/{}: set_val_scalar_folded: @{} [{}]~~~{}~~~", m_evt_pos, m_evt_size, scalar.str?size_t(scalar.str-m_src.str):m_src.len, scalar.len, scalar.str?scalar:csubstr{});
-        _send_val_scalar_(scalar, ievt::FOLD);
-        _enable_(c4::yml::VAL|c4::yml::VAL_FOLDED);
-    }
-
-
-    C4_ALWAYS_INLINE void mark_key_scalar_unfiltered()
-    {
-        _c4dbgpf("{}/{}: mark_key_scalar_unfiltered", m_evt_pos, m_evt_size);
-        if(m_evt_pos < m_evt_size)
-            m_evt[m_evt_pos] |= ievt::UNFILT;
-    }
-    C4_ALWAYS_INLINE void mark_val_scalar_unfiltered()
-    {
-        _c4dbgpf("{}/{}: mark_val_scalar_unfiltered", m_evt_pos, m_evt_size);
-        if(m_evt_pos < m_evt_size)
-            m_evt[m_evt_pos] |= ievt::UNFILT;
-    }
 
     /** @} */
 
-public:
-
-    /** @cond dev*/
-    #define _add_scalar_(i, scalar)                                 \
-    _c4dbgpf("{}/{}: scalar!", i, m_evt_size);                      \
-    _RYML_ASSERT_BASIC_(m_stack.m_callbacks, scalar.is_sub(m_src) || scalar.is_sub(m_arena) || (scalar.str == nullptr)); \
-    _RYML_ASSERT_BASIC_(m_stack.m_callbacks, m_evt[i] & ievt::WSTR); \
-    _RYML_ASSERT_BASIC_(m_stack.m_callbacks, i + 3 < m_evt_size);    \
-    if(C4_LIKELY(scalar.is_sub(m_src)))                             \
-    {                                                               \
-        m_evt[i + 1] = (ievt::DataType)(scalar.str - m_src.str);    \
-    }                                                               \
-    else                                                            \
-    {                                                               \
-        m_evt[i] |= ievt::AREN;                                     \
-        m_evt[i + 1] = (ievt::DataType)(scalar.str - m_arena.str);  \
-        _c4dbgpf("{}/{}: arena! ->{}", i, m_evt_size, m_evt[i+1]);  \
-    }                                                               \
-    m_evt[i + 2] = (ievt::DataType)scalar.len;                      \
-    m_evt[i + 3] = ievt::PSTR
-    /** @endcond */
-
-    /** @name YAML anchor/reference events */
-    /** @{ */
-
-    void set_key_anchor(csubstr anchor)
-    {
-        _c4dbgpf("{}/{}: set_key_anchor", m_evt_pos, m_evt_size);
-        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, !_has_any_(KEYREF));
-        _enable_(c4::yml::KEYANCH);
-        if(m_evt_pos + 3 < m_evt_size)
-        {
-            m_evt[m_evt_pos] |= ievt::KEY_|ievt::ANCH;
-            _add_scalar_(m_evt_pos, anchor);
-        }
-        m_evt_prev = m_evt_pos;
-        m_evt_pos += 3;
-    }
-    void set_val_anchor(csubstr anchor)
-    {
-        _c4dbgpf("{}/{}: set_val_anchor", m_evt_pos, m_evt_size);
-        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, !_has_any_(VALREF));
-        _enable_(c4::yml::VALANCH);
-        if(m_evt_pos + 3 < m_evt_size)
-        {
-            m_evt[m_evt_pos] |= ievt::VAL_|ievt::ANCH;
-            _add_scalar_(m_evt_pos, anchor);
-        }
-        m_evt_prev = m_evt_pos;
-        m_evt_pos += 3;
-    }
-
-    void set_key_ref(csubstr ref)
-    {
-        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, ref.begins_with('*'));
-        if(C4_UNLIKELY(_has_any_(KEYANCH)))
-            _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "key cannot have both anchor and ref");
-        _enable_(c4::yml::KEY|c4::yml::KEYREF);
-        _send_str_(ref.sub(1), ievt::KEY_|ievt::ALIA); // skip the leading *
-    }
-    void set_val_ref(csubstr ref)
-    {
-        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, ref.begins_with('*'));
-        if(C4_UNLIKELY(_has_any_(VALANCH)))
-            _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "val cannot have both anchor and ref");
-        _enable_(c4::yml::VAL|c4::yml::VALREF);
-        _send_str_(ref.sub(1), ievt::VAL_|ievt::ALIA); // skip the leading *
-    }
-
-    /** @} */
-
-public:
-
-    /** @name YAML tag events */
-    /** @{ */
-
-    void set_key_tag(csubstr tag)
-    {
-        _c4dbgpf("{}/{}: set key tag ~~~{}~~~", m_evt_pos, m_evt_size, tag);
-        _enable_(c4::yml::KEYTAG);
-        _set_tag(tag, ievt::KEY_);
-    }
-    void set_val_tag(csubstr tag)
-    {
-        _c4dbgpf("{}/{}: set val tag [{}]~~~{}~~~", m_evt_pos, m_evt_size, tag.len, tag);
-        _enable_(c4::yml::VALTAG);
-        _set_tag(tag, ievt::VAL_);
-    }
-    void _set_tag(csubstr tag, ievt::DataType which)
-    {
-        csubstr ttag = _transform_directive(tag);
-        _c4dbgpf("{}/{}: transformed_tag [{}]~~~{}~~~", m_evt_pos, m_evt_size, ttag.len, ttag);
-        if(m_evt_pos + 3 < m_evt_size)
-        {
-            m_evt[m_evt_pos] |= which|ievt::TAG_;
-            _add_scalar_(m_evt_pos, ttag);
-        }
-        m_evt_prev = m_evt_pos;
-        m_evt_pos += 3;
-    }
-
-    /** @} */
-
-public:
-
-    /** @name YAML directive events */
-    /** @{ */
-
-    void add_directive(csubstr directive)
-    {
-        _c4dbgpf("{}/{}: add directive ~~~{}~~~", m_evt_pos, m_evt_size, directive);
-        _RYML_ASSERT_BASIC_(m_stack.m_callbacks, directive.begins_with('%'));
-        if(directive.begins_with("%TAG"))
-        {
-            const id_type pos = _num_tag_directives();
-            if(C4_UNLIKELY(pos >= RYML_MAX_TAG_DIRECTIVES))
-                _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "too many directives");
-            TagDirective &td = m_tag_directives[pos];
-            if(C4_UNLIKELY(!td.create_from_str(directive)))
-                _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "failed to add directive");
-            td.next_node_id = (id_type)m_evt_pos;
-            _send_str_(td.handle, ievt::TAGD);
-            _send_str_(td.prefix, ievt::TAGV);
-        }
-        else if(directive.begins_with("%YAML"))
-        {
-            _c4dbgpf("%YAML directive! ignoring...: {}", directive);
-            if(C4_UNLIKELY(m_has_yaml_directive))
-                _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "multiple yaml directives");
-            m_has_yaml_directive = true;
-            csubstr rest = directive.sub(5).triml(' ');
-            _send_str_(rest, ievt::YAML);
-        }
-        else
-        {
-            _c4dbgpf("unknown directive! ignoring... {}", directive);
-        }
-    }
-
-    /** @} */
-
-public:
-
-    /** @name YAML arena events */
-    /** @{ */
-
-    substr arena_rem()
-    {
-        return C4_LIKELY(m_arena_pos <= m_arena.len) ? m_arena.sub(m_arena_pos) : m_arena.last(0);
-    }
-
-    /** this may fail, in which case a an empty string is returned */
-    substr alloc_arena(size_t len)
-    {
-        substr s = arena_rem();
-        if(C4_LIKELY(len <= s.len))
-            s = s.first(len);
-        else
-            s.str = nullptr;
-        m_arena_pos += len;
-        return s;
-    }
-
-    /** this may fail, in which case an empty string is returned */
-    C4_ALWAYS_INLINE substr alloc_arena(size_t len, substr *relocated)
-    {
-        (void)relocated;
-        return alloc_arena(len);
-    }
-
-    /** @} */
-
-public:
-
-    /** push a new parent, add a child to the new parent, and set the
-     * child as the current node */
-    void _push()
-    {
-        _stack_push();
-        m_curr->evt_type = {};
-    }
-
-    /** end the current scope */
-    void _pop()
-    {
-        _stack_pop();
-    }
-
-    template<c4::yml::type_bits bits> C4_ALWAYS_INLINE void _enable__() noexcept
-    {
-        m_curr->evt_type |= bits;
-    }
-    template<c4::yml::type_bits bits> C4_ALWAYS_INLINE void _disable__() noexcept
-    {
-        m_curr->evt_type &= ~bits;
-    }
-    template<c4::yml::type_bits bits> C4_ALWAYS_INLINE bool _has_any__() const noexcept
-    {
-        return (m_curr->evt_type & bits) != c4::yml::type_bits(0);
-    }
-
-    void _mark_parent_with_children_()
-    {
-        if(m_parent)
-            m_parent->has_children = true;
-    }
-
-    C4_ALWAYS_INLINE void _send_flag_only_(ievt::DataType flags)
-    {
-        _c4dbgpf("{}/{}: flag only", m_evt_pos, m_evt_size);
-        if(m_evt_pos < m_evt_size)
-            m_evt[m_evt_pos] |= flags;
-        m_curr->evt_id = m_evt_pos;
-        m_evt_prev = m_evt_pos;
-        ++m_evt_pos;
-        if(m_evt_pos < m_evt_size)
-            m_evt[m_evt_pos] = {};
-    }
-
-    C4_ALWAYS_INLINE void _send_key_scalar_(csubstr scalar, ievt::DataType flags)
-    {
-        _c4dbgpf("{}/{}: key scalar", m_evt_pos, m_evt_size);
-        if(m_evt_pos + 3 < m_evt_size)
-        {
-            m_evt[m_evt_pos] |= ievt::SCLR|ievt::KEY_|flags;
-            _add_scalar_(m_evt_pos, scalar);
-        }
-        m_curr->evt_id = m_evt_pos;
-        m_evt_prev = m_evt_pos;
-        m_evt_pos += 3;
-    }
-
-    C4_ALWAYS_INLINE void _send_val_scalar_(csubstr scalar, ievt::DataType flags)
-    {
-        _c4dbgpf("{}/{}: val scalar", m_evt_pos, m_evt_size);
-        if(m_evt_pos + 3 < m_evt_size)
-        {
-            m_evt[m_evt_pos] |= ievt::SCLR|ievt::VAL_|flags;
-            _add_scalar_(m_evt_pos, scalar);
-        }
-        m_curr->evt_id = m_evt_pos;
-        m_evt_prev = m_evt_pos;
-        m_evt_pos += 3;
-    }
-
-    C4_ALWAYS_INLINE void _send_str_(csubstr scalar, ievt::DataType flags)
-    {
-        _c4dbgpf("{}/{}: send str", m_evt_pos, m_evt_size);
-        if(m_evt_pos + 3 < m_evt_size)
-        {
-            m_evt[m_evt_pos] |= flags;
-            _add_scalar_(m_evt_pos, scalar);
-        }
-        m_curr->evt_id = m_evt_pos;
-        m_evt_prev = m_evt_pos;
-        m_evt_pos += 3;
-    }
-
-    void _clear_tag_directives_()
-    {
-        for(TagDirective &td : m_tag_directives)
-            td = {};
-    }
-    C4_NODISCARD id_type _num_tag_directives() const
-    {
-        // this assumes we have a very small number of tag directives
-        id_type i = 0;
-        for(; i < RYML_MAX_TAG_DIRECTIVES; ++i)
-            if(m_tag_directives[i].handle.empty())
-                break;
-        return i;
-    }
-    csubstr _transform_directive(csubstr tag)
-    {
-        // lookup from the end. We want to find the first directive that
-        // matches the tag and has a target node id leq than the given
-        // node_id.
-        for(id_type i = RYML_MAX_TAG_DIRECTIVES-1; i != NONE; --i)
-        {
-            TagDirective const& td = m_tag_directives[i];
-            if(td.handle.empty())
-                continue;
-            if(tag.begins_with(td.handle) && (td.handle != td.prefix))
-            {
-                substr rem = arena_rem();
-                size_t len = td.transform(tag, rem, m_stack.m_callbacks, /*with_brackets*/false);
-                if(len == 0)
-                    return tag;
-                alloc_arena(len);
-                return rem.first(len <= rem.len ? len : 0);
-            }
-        }
-        if(tag.begins_with('!'))
-        {
-            if(is_custom_tag(tag))
-            {
-                _RYML_ERR_PARSE_(m_stack.m_callbacks, m_curr->pos, "tag not found");
-            }
-        }
-        return tag;
-    }
 #undef _enable_
 #undef _disable_
 #undef _has_any_

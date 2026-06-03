@@ -1,6 +1,7 @@
 #ifndef RYML_SINGLE_HEADER
 #include "c4/yml/std/std.hpp"
 #include "c4/yml/parse.hpp"
+#include "c4/yml/parse_engine.def.hpp"
 #include "c4/yml/emit.hpp"
 #include <c4/format.hpp>
 #include <c4/yml/detail/checks.hpp>
@@ -12,7 +13,7 @@
 #include <gtest/gtest.h>
 
 C4_SUPPRESS_WARNING_GCC_CLANG_PUSH
-#if __GNUC__ >= 6
+#if defined(__GNUC__) && __GNUC__ >= 6
 C4_SUPPRESS_WARNING_GCC("-Wnull-dereference")
 #endif
 
@@ -732,12 +733,117 @@ TEST(parse_json, seq_nested_on_seq_with_trailing_comma)
     test_compare(expected, actual);
 }
 
-
 TEST(emit_json, empty_val)
 {
     Tree t = parse_in_arena("a: \nb: \"\"\nc: !!tag\nd: !!tag e");
     EXPECT_EQ(emitrs_json<std::string>(t), "{\n  \"a\": null,\n  \"b\": \"\",\n  \"c\": \"\",\n  \"d\": \"e\"\n}\n");
 }
+
+//-----------------------------------------------------------------------------
+
+
+struct SpecialScalarError
+{
+    int line;
+    csubstr json;
+    Location errloc;
+};
+struct TestSpecialScalarErrorF : public ::testing::TestWithParam<SpecialScalarError>
+{
+};
+
+TEST_P(TestSpecialScalarErrorF, parse_json)
+{
+    SpecialScalarError const& p = GetParam();
+    RYML_TRACE_FMT("here:\n{}:{}: (case)", __FILE__, p.line);
+    if(p.errloc)
+    {
+        ExpectError::check_error_parse([&]{
+            Tree t = parse_json_in_arena(p.json);
+        }, p.errloc);
+    }
+    else
+    {
+        ExpectError::check_success([&]{
+            Tree t = parse_json_in_arena(p.json);
+        });
+    }
+}
+
+const SpecialScalarError test_cases_special_scalar[] = {
+    #define err(json, errloc) SpecialScalarError{__LINE__, csubstr(json), errloc}
+    #define suc(json) SpecialScalarError{__LINE__, csubstr(json), {}}
+    suc("{\n\"a\": null,\n\"b\": null}"),
+    suc("{\n\"a\": null,\n\"b\": null }"),
+    suc("{\n\"a\": null,\n\"b\": null\t}"),
+    suc("{\n\"a\": null,\n\"b\": null\n}"),
+    suc("{\n\"a\": null,\n\"b\": null\r\n}"),
+    err("{\n\"a\": null,\n\"b\": nulll}", Location(3, 6)),
+    err("{\n\"a\": null,\n\"b\": null_}", Location(3, 6)),
+    err("{\n\"a\": null,\n\"b\": null#err}", Location(3, 6)),
+    err("{\n\"a\": null,\n\"b\":  nulll}", Location(3, 7)),
+    err("{\n\"a\": null,\n\"b\":  null_}", Location(3, 7)),
+    err("{\n\"a\": null,\n\"b\":  null#err}", Location(3, 7)),
+    suc("{\n\"a\": true,\n\"b\": true}"),
+    suc("{\n\"a\": true,\n\"b\": true }"),
+    suc("{\n\"a\": true,\n\"b\": true\t}"),
+    suc("{\n\"a\": true,\n\"b\": true\n}"),
+    suc("{\n\"a\": true,\n\"b\": true\r\n}"),
+    err("{\n\"a\": true,\n\"b\": truee}", Location(3, 6)),
+    err("{\n\"a\": true,\n\"b\": true_}", Location(3, 6)),
+    err("{\n\"a\": true,\n\"b\": true#err}", Location(3, 6)),
+    err("{\n\"a\": true,\n\"b\":  truee}", Location(3, 7)),
+    err("{\n\"a\": true,\n\"b\":  true_}", Location(3, 7)),
+    err("{\n\"a\": false,\n\"b\":  true#err}", Location(3, 7)),
+    suc("{\n\"a\": false,\n\"b\": false}"),
+    suc("{\n\"a\": false,\n\"b\": false }"),
+    suc("{\n\"a\": false,\n\"b\": false\t}"),
+    suc("{\n\"a\": false,\n\"b\": false\n}"),
+    suc("{\n\"a\": false,\n\"b\": false\r\n}"),
+    err("{\n\"a\": false,\n\"b\": falsee}", Location(3, 6)),
+    err("{\n\"a\": false,\n\"b\": false_}", Location(3, 6)),
+    err("{\n\"a\": false,\n\"b\": false#err}", Location(3, 6)),
+    err("{\n\"a\": false,\n\"b\":  falsee}", Location(3, 7)),
+    err("{\n\"a\": false,\n\"b\":  false_}", Location(3, 7)),
+    err("{\n\"a\": false,\n\"b\":  false#err}", Location(3, 7)),
+    suc("[\nnull,\nnull]"),
+    suc("[\nnull,\nnull ]"),
+    suc("[\nnull,\nnull\t]"),
+    suc("[\nnull,\nnull\n]"),
+    suc("[\nnull,\nnull\r\n]"),
+    err("[\nnull,\nnulll]", Location(3, 1)),
+    err("[\nnull,\nnull_]", Location(3, 1)),
+    err("[\nnull,\nnull#err]", Location(3, 1)),
+    err("[\nnull,\n nulll]", Location(3, 2)),
+    err("[\nnull,\n null_]", Location(3, 2)),
+    err("[\nnull,\n null#err]", Location(3, 2)),
+    suc("[\ntrue,\ntrue]"),
+    suc("[\ntrue,\ntrue ]"),
+    suc("[\ntrue,\ntrue\t]"),
+    suc("[\ntrue,\ntrue\n]"),
+    suc("[\ntrue,\ntrue\r\n]"),
+    err("[\ntrue,\ntruee]", Location(3, 1)),
+    err("[\ntrue,\ntrue_]", Location(3, 1)),
+    err("[\ntrue,\ntrue#err]", Location(3, 1)),
+    err("[\ntrue,\n truee]", Location(3, 2)),
+    err("[\ntrue,\n true_]", Location(3, 2)),
+    err("[\ntrue,\n true#err]", Location(3, 2)),
+    suc("[\nfalse,\nfalse]"),
+    suc("[\nfalse,\nfalse ]"),
+    suc("[\nfalse,\nfalse\t]"),
+    suc("[\nfalse,\nfalse\n]"),
+    suc("[\nfalse,\nfalse\r\n]"),
+    err("[\nfalse,\nfalsee]", Location(3, 1)),
+    err("[\nfalse,\nfalse_]", Location(3, 1)),
+    err("[\nfalse,\nfalse#err]", Location(3, 1)),
+    err("[\nfalse,\n falsee]", Location(3, 2)),
+    err("[\nfalse,\n false#err]", Location(3, 2)),
+    #undef err
+    #undef suc
+};
+INSTANTIATE_TEST_SUITE_P(special_scalars,
+                         TestSpecialScalarErrorF,
+                         testing::ValuesIn(test_cases_special_scalar));
 
 
 //-------------------------------------------

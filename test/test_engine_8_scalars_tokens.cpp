@@ -134,6 +134,28 @@ ENGINE_TEST(PlainScalarWithColonSeq,
     ___(ps.end_stream());
 }
 
+ENGINE_TEST(PlainScalarWithColonSeqFlow, HAS_MULTILINE_SCALAR,
+            "[while\n:validplain]"
+            ,
+            "[\n  while :validplain\n]\n"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "=VAL :while :validplain\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.set_val_scalar_plain("while :validplain"));
+    ___(ps.end_seq_flow(multiline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
 
 //-----------------------------------------------------------------------------
 
@@ -201,221 +223,7 @@ ENGINE_TEST(BlockPlainScalarCommaSeq,
 
 //-----------------------------------------------------------------------------
 
-
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_0_0, Location(   1,32), "{ first: Sammy, last: Sosa }foo")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_0_1, Location(   2, 4), "{ first: Sammy, last: Sosa }\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_2_0, Location(   1,29), "{ first: Sammy, last: Sosa }- foo")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_2_1, Location(   2, 1), "{ first: Sammy, last: Sosa }\n- foo")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_3_0, Location(   1,29), "{ first: Sammy, last: Sosa }[foo,bar]")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_3_1, Location(   2, 1), "{ first: Sammy, last: Sosa }\n[foo,bar]")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_4_0, Location(   1,29), "{ first: Sammy, last: Sosa }{foo: bar}")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_4_1, Location(   2, 1), "{ first: Sammy, last: Sosa }\n{foo: bar}")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_5_0, Location(   1,29), "{ first: Sammy, last: Sosa }'foo'")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_5_1, Location(   2, 1), "{ first: Sammy, last: Sosa }\n'foo'")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_6_0, Location(   1,29), "{ first: Sammy, last: Sosa }|\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_6_1, Location(   2, 1), "{ first: Sammy, last: Sosa }\n|\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_7_0, Location(   1,29), "{ first: Sammy, last: Sosa }>\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_7_1, Location(   2, 1), "{ first: Sammy, last: Sosa }\n>\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_8_0, Location(   1,33), "{ first: Sammy, last: Sosa }?foo")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_8_1, Location(   2, 1), "{ first: Sammy, last: Sosa }\n?\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_9_0, Location(   1,33), "{ first: Sammy, last: Sosa }:foo")
-//ENGINE_TEST_ERRLOC(tokens_after_mapflow_9_1, Location(   2, 1), "{ first: Sammy, last: Sosa }\n:\nfoo")//fixme
-//ENGINE_TEST_ERRLOC(tokens_after_mapflow_10_0, Location(  1,29), "{ first: Sammy, last: Sosa }: foo")// fixme
-//ENGINE_TEST_ERRLOC(tokens_after_mapflow_10_1, Location(  2, 1), "{ first: Sammy, last: Sosa }\n: \nfoo")//fixme
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_11_0, Location(  1,34), "{ first: Sammy, last: Sosa } &foo")// fixme
-ENGINE_TEST_ERRLOC(tokens_after_mapflow_11_1, Location(  2, 5), "{ first: Sammy, last: Sosa }\n&foo")
-
-
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_0_0, Location(1,32), "[a,b,c,                   d]foo")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_0_1, Location(2, 4), "[a,b,c,                   d]\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_2_0, Location(1,29), "[a,b,c,                   d]- foo")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_2_1, Location(2, 1), "[a,b,c,                   d]\n- foo")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_3_0, Location(1,29), "[a,b,c,                   d][foo,bar]")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_3_1, Location(2, 1), "[a,b,c,                   d]\n[foo,bar]")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_4_0, Location(1,29), "[a,b,c,                   d]{foo: bar}")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_4_1, Location(2, 1), "[a,b,c,                   d]\n{foo: bar}")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_5_0, Location(1,29), "[a,b,c,                   d]'foo'")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_5_1, Location(2, 1), "[a,b,c,                   d]\n'foo'")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_6_0, Location(1,29), "[a,b,c,                   d]|\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_6_1, Location(2, 1), "[a,b,c,                   d]\n|\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_7_0, Location(1,29), "[a,b,c,                   d]>\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_7_1, Location(2, 1), "[a,b,c,                   d]\n>\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_8_0, Location(1,33), "[a,b,c,                   d]?foo")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_8_1, Location(2, 1), "[a,b,c,                   d]\n?\nfoo")
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_9_0, Location(1,33), "[a,b,c,                   d]:foo")// fixme
-//ENGINE_TEST_ERRLOC(tokens_after_seqflow_9_1, Location(2, 1), "[a,b,c,                   d]\n:\nfoo")//fixme
-//ENGINE_TEST_ERRLOC(tokens_after_seqflow_10_0, Location(1,29), "[a,b,c,                   d]: foo")// fixme
-//ENGINE_TEST_ERRLOC(tokens_after_seqflow_10_1, Location(2, 1), "[a,b,c,                   d]\n: \nfoo")//fixme
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_11_0, Location(1,34), "[a,b,c,                   d] &foo")// fixme
-ENGINE_TEST_ERRLOC(tokens_after_seqflow_11_1, Location(2, 5), "[a,b,c,                   d]\n&foo")
-
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq1, Location(1, 9), "[a,b,c]]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq2, Location(1, 9), "[a,b,c]}")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq3, Location(1, 8), "[a,b,c]{")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq4, Location(1, 8), "[a,b,c][")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq5, Location(1, 8), "[a,b,c]-")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq1_0, Location(1,10), "[a,b,c] ]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq2_0, Location(1,10), "[a,b,c] }")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq3_0, Location(1,9), "[a,b,c] {")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq4_0, Location(1,9), "[a,b,c] [")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq5_0, Location(1,9), "[a,b,c] -")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq1_1, Location(2,2), "[a,b,c]\n]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq2_1, Location(2,2), "[a,b,c]\n}")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq3_1, Location(2,1), "[a,b,c]\n{")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq4_1, Location(2,1), "[a,b,c]\n[")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Seq5_1, Location(2,1), "[a,b,c]\n-")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map1, Location(1, 8), "{a: b}]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map2, Location(1, 8), "{a: b}}")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map3, Location(1, 7), "{a: b}{")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map4, Location(1, 7), "{a: b}[")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map5, Location(1, 7), "{a: b}-")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map1_0, Location(1,9), "{a: b} ]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map2_0, Location(1,9), "{a: b} }")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map3_0, Location(1,8), "{a: b} {")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map4_0, Location(1,8), "{a: b} [")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map5_0, Location(1,8), "{a: b} -")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map1_1, Location(2,2), "{a: b}\n]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map2_1, Location(2,2), "{a: b}\n}")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map3_1, Location(2,1), "{a: b}\n{")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map4_1, Location(2,1), "{a: b}\n[")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow1Map5_1, Location(2,1), "{a: b}\n-")
-
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq1, Location(2, 9), "---\n[a,b,c]]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq2, Location(2, 9), "---\n[a,b,c]}")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq3, Location(2, 8), "---\n[a,b,c]{")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq4, Location(2, 8), "---\n[a,b,c][")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq5, Location(2, 8), "---\n[a,b,c]-")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq1_0, Location(2,10), "---\n[a,b,c] ]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq2_0, Location(2,10), "---\n[a,b,c] }")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq3_0, Location(2,9), "---\n[a,b,c] {")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq4_0, Location(2,9), "---\n[a,b,c] [")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq5_0, Location(2,9), "---\n[a,b,c] -")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq1_1, Location(3,2), "---\n[a,b,c]\n]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq2_1, Location(3,2), "---\n[a,b,c]\n}")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq3_1, Location(3,1), "---\n[a,b,c]\n{")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq4_1, Location(3,1), "---\n[a,b,c]\n[")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Seq5_1, Location(3,1), "---\n[a,b,c]\n-")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map1, Location(2, 8), "---\n{a: b}]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map2, Location(2, 8), "---\n{a: b}}")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map3, Location(2, 7), "---\n{a: b}{")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map4, Location(2, 7), "---\n{a: b}[")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map5, Location(2, 7), "---\n{a: b}-")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map1_0, Location(2,9), "---\n{a: b} ]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map2_0, Location(2,9), "---\n{a: b} }")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map3_0, Location(2,8), "---\n{a: b} {")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map4_0, Location(2,8), "---\n{a: b} [")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map5_0, Location(2,8), "---\n{a: b} -")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map1_1, Location(3,2), "---\n{a: b}\n]")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map2_1, Location(3,2), "---\n{a: b}\n}")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map3_1, Location(3,1), "---\n{a: b}\n{")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map4_1, Location(3,1), "---\n{a: b}\n[")
-ENGINE_TEST_ERRLOC(ExtraTokensFlow2Map5_1, Location(3,1), "---\n{a: b}\n-")
-
 ENGINE_TEST_ERRLOC(ExtraTokensScalar0, Location(2,6), "word1  # comment\nword2")
-
-ENGINE_TEST(ExtraTokensNoFalseError0,
-            "---\n"
-            "map : {foo: bar, notag: none}\n"
-            "seq : [foo, bar]\n"
-            "...\n"
-            ,
-            "---\n"
-            "map: {foo: bar,notag: none}\n"
-            "seq: [foo,bar]\n"
-            ,
-            "+STR\n"
-            "+DOC ---\n"
-            "+MAP\n"
-            "=VAL :map\n"
-            "+MAP {}\n"
-            "=VAL :foo\n"
-            "=VAL :bar\n"
-            "=VAL :notag\n"
-            "=VAL :none\n"
-            "-MAP\n"
-            "=VAL :seq\n"
-            "+SEQ []\n"
-            "=VAL :foo\n"
-            "=VAL :bar\n"
-            "-SEQ\n"
-            "-MAP\n"
-            "-DOC ...\n"
-            "-STR\n")
-{
-    ___(ps.begin_stream());
-    ___(ps.begin_doc_expl());
-    ___(ps.begin_map_val_block());
-        ___(ps.set_key_scalar_plain("map"));
-        ___(ps.begin_map_val_flow());
-            ___(ps.set_key_scalar_plain("foo"));
-            ___(ps.set_val_scalar_plain("bar"));
-            ___(ps.add_sibling());
-            ___(ps.set_key_scalar_plain("notag"));
-            ___(ps.set_val_scalar_plain("none"));
-        ___(ps.end_map_flow(singleline));
-        ___(ps.add_sibling());
-        ___(ps.set_key_scalar_plain("seq"));
-        ___(ps.begin_seq_val_flow());
-            ___(ps.set_val_scalar_plain("foo"));
-            ___(ps.add_sibling());
-            ___(ps.set_val_scalar_plain("bar"));
-        ___(ps.end_seq_flow(singleline));
-    ___(ps.end_map_block());
-    ___(ps.end_doc_expl());
-    ___(ps.end_stream());
-}
-
-ENGINE_TEST(ExtraTokensNoFalseError1,
-            "---\n"
-            "*mapref : {foo: bar, notag: none}\n"
-            "*seqref : [foo, bar]\n"
-            "...\n"
-            ,
-            "---\n"
-            "*mapref : {foo: bar,notag: none}\n"
-            "*seqref : [foo,bar]\n"
-            ,
-            "+STR\n"
-            "+DOC ---\n"
-            "+MAP\n"
-            "=ALI *mapref\n"
-            "+MAP {}\n"
-            "=VAL :foo\n"
-            "=VAL :bar\n"
-            "=VAL :notag\n"
-            "=VAL :none\n"
-            "-MAP\n"
-            "=ALI *seqref\n"
-            "+SEQ []\n"
-            "=VAL :foo\n"
-            "=VAL :bar\n"
-            "-SEQ\n"
-            "-MAP\n"
-            "-DOC ...\n"
-            "-STR\n")
-{
-    ___(ps.begin_stream());
-    ___(ps.begin_doc_expl());
-    ___(ps.begin_map_val_block());
-        ___(ps.set_key_ref("*mapref"));
-        ___(ps.begin_map_val_flow());
-            ___(ps.set_key_scalar_plain("foo"));
-            ___(ps.set_val_scalar_plain("bar"));
-            ___(ps.add_sibling());
-            ___(ps.set_key_scalar_plain("notag"));
-            ___(ps.set_val_scalar_plain("none"));
-        ___(ps.end_map_flow(singleline));
-        ___(ps.add_sibling());
-        ___(ps.set_key_ref("*seqref"));
-        ___(ps.begin_seq_val_flow());
-            ___(ps.set_val_scalar_plain("foo"));
-            ___(ps.add_sibling());
-            ___(ps.set_val_scalar_plain("bar"));
-        ___(ps.end_seq_flow(singleline));
-    ___(ps.end_map_block());
-    ___(ps.end_doc_expl());
-    ___(ps.end_stream());
-}
 
 
 //-----------------------------------------------------------------------------
@@ -487,10 +295,8 @@ ENGINE_TEST(PlainScalarBlockMap0,
 }
 ENGINE_TEST_ERRLOC(PlainScalarFlow0Seq0_0, Location(1,29), "[a!\"#$%&'()*+,-./09:;<=>?@AZ[\\]^_`az{|}~]")
 ENGINE_TEST_ERRLOC(PlainScalarFlow0Seq0_1, Location(1,29), "[a!\"#$%&'()*+,-./09:;<=>?@AZ{|}^_`az{|}~]")
-ENGINE_TEST_ERRLOC(PlainScalarFlow0Seq1_0, Location(2,28), "[\n"
-                   "a!\"#$%&'()*+,-./09:;<=>?@AZ[\\]^_`az{|}~\n]")
-ENGINE_TEST_ERRLOC(PlainScalarFlow0Seq1_1, Location(2,28), "[\n"
-                   "a!\"#$%&'()*+,-./09:;<=>?@AZ{|}^_`az{|}~\n]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow0Seq1_0, Location(2,28), "[\na!\"#$%&'()*+,-./09:;<=>?@AZ[\\]^_`az{|}~\n]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow0Seq1_1, Location(2,28), "[\na!\"#$%&'()*+,-./09:;<=>?@AZ{|}^_`az{|}~\n]")
 ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq0, Location(1,38), "[a!\"#$%&'()*+,-./09:;<=>?@]^_`az{|}~]")
 ENGINE_TEST(PlainScalarFlow0Seq1,
             "[\n"
@@ -517,6 +323,758 @@ ENGINE_TEST(PlainScalarFlow0Seq1,
     ___(ps.end_doc());
     ___(ps.end_stream());
 }
+
+
+//-----------------------------------------------------------------------------
+
+ENGINE_TEST(PlainScalarFlow1Seq2DashOk0, "[-?]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "=VAL :-?\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.set_val_scalar_plain("-?"));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2DashOk1, "[-:]"
+            ,
+            "[{-: }]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :-\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain("-"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Dash0, Location(1,2), "[-{]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Dash1, Location(1,2), "[-}]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Dash2, Location(1,2), "[-[]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Dash3, Location(1,2), "[-]]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Dash4, Location(1,2), "[-]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Dash5, Location(1,2), "[- ]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Dash6, Location(1,2), "[-\t]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Dash7, Location(1,2), "[-\n]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Dash8, Location(1,2), "[-,]")
+
+
+//-----------------------------------------------------------------------------
+
+ENGINE_TEST(PlainScalarFlow1Map2DashOk0, "{-?}"
+            ,
+            "{-?: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :-?\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain("-?"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2DashOk1, "{-:}"
+            ,
+            "{-: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :-\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain("-"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Dash0, Location(1,2), "{-{}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Dash1, Location(1,2), "{-}}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Dash2, Location(1,2), "{-[}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Dash3, Location(1,2), "{-]}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Dash4, Location(1,2), "{-}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Dash5, Location(1,2), "{- }")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Dash6, Location(1,2), "{-\t}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Dash7, Location(1,2), "{-\n}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Dash8, Location(1,2), "{-,}")
+
+
+//-----------------------------------------------------------------------------
+
+ENGINE_TEST(PlainScalarFlow1Seq2ColonOk0, "[:?]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "=VAL ::?\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.set_val_scalar_plain(":?"));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2ColonOk1, "[::]"
+            ,
+            "[{:: }]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL ::\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain(":"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2ColonOk2, "[:]"
+            ,
+            "[{: }]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2ColonOk3, "[: ]"
+            ,
+            "[{: }]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2ColonOk4, "[:\t]"
+            ,
+            "[{: }]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2ColonOk5, "[:\n]"
+            ,
+            "[\n  {\n    : \n  }\n]\n"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(multiline));
+    ___(ps.end_seq_flow(multiline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2ColonOk6, "[:,]"
+            ,
+            "[{: }]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Colon0, Location(1,2), "[:{]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Colon1, Location(1,3), "[:}]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Colon2, Location(1,2), "[:[]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Colon3, Location(1,5), "[:]]")
+
+
+//-----------------------------------------------------------------------------
+
+ENGINE_TEST(PlainScalarFlow1Map2ColonOk0, "{:?}"
+            ,
+            "{:?: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL ::?\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain(":?"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2ColonOk1, "{::}"
+            ,
+            "{:: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL ::\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain(":"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2ColonOk2, "{:}"
+            ,
+            "{: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2ColonOk3, "{: }"
+            ,
+            "{: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2ColonOk4, "{:\t}"
+            ,
+            "{: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2ColonOk5, "{:\n}"
+            ,
+            "{\n  : \n}\n"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(multiline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2ColonOk6, "{:,}"
+            ,
+            "{: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Colon0, Location(1,2), "{:{}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Colon1, Location(1,5), "{:}}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Colon2, Location(1,2), "{:[}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Colon3, Location(1,3), "{:]}")
+
+
+//-----------------------------------------------------------------------------
+
+ENGINE_TEST(PlainScalarFlow1Seq2QmrkOk0, "[? ]"
+            ,
+            "[{: }]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2QmrkOk1, "[?\t]"
+            ,
+            "[{: }]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2QmrkOk2, "[?\n]"
+            ,
+            "[\n  {\n    : \n  }\n]\n"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(multiline));
+    ___(ps.end_seq_flow(multiline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2QmrkOk3, "[?a]"
+            ,
+            "[?a]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "=VAL :?a\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.set_val_scalar_plain("?a"));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2QmrkOk4, "[?-]"
+            ,
+            "[?-]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "=VAL :?-\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.set_val_scalar_plain("?-"));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Seq2QmrkOk5, "[?:]"
+            ,
+            "[{?: }]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :?\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain("?"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Qmrk0, Location(1,2), "[?{]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Qmrk1, Location(1,2), "[?}]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Qmrk2, Location(1,2), "[?[]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Qmrk3, Location(1,2), "[?]]")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Seq2Qmrk4, Location(1,2), "[?]")
+
+
+//-----------------------------------------------------------------------------
+
+ENGINE_TEST(PlainScalarFlow1Map2QmrkOk0, "{? }"
+            ,
+            "{: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2QmrkOk1, "{?\t}"
+            ,
+            "{: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2QmrkOk2, "{?\n}"
+            ,
+            "{\n  : \n}\n"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(multiline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2QmrkOk3, "{?a}"
+            ,
+            "{?a: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :?a\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain("?a"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2QmrkOk4, "{?-}"
+            ,
+            "{?-: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :?-\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain("?-"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(PlainScalarFlow1Map2QmrkOk5, "{?:}"
+            ,
+            "{?: }"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+MAP {}\n"
+            "=VAL :?\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain("?"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Qmrk0, Location(1,2), "{?{}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Qmrk1, Location(1,2), "{?}}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Qmrk2, Location(1,2), "{?[}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Qmrk3, Location(1,2), "{?]}")
+ENGINE_TEST_ERRLOC(PlainScalarFlow1Map2Qmrk4, Location(1,2), "{?}")
 
 } // namespace yml
 } // namespace c4

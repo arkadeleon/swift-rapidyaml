@@ -8,35 +8,6 @@ namespace yml {
 
 namespace {
 
-struct bomspec
-{
-    csubstr name;
-    Encoding_e encoding;
-    csubstr bom;
-};
-
-const bomspec bomspecs[] = {
-    //                        bare string causes problems in gcc5 and earlier
-    {"NOBOM"       , UTF8   , csubstr("", size_t(0))},
-    {"UTF8"        , UTF8   , csubstr("\xef\xbb\xbf", 3)},
-    {"UTF16BE"     , UTF16BE, csubstr("\xfe\xff", 2)},
-    {"!UTF16BE-a"  , UTF16BE, csubstr("\x00""a", 2)},
-    {"!UTF16BE-b"  , UTF16BE, csubstr("\x00""b", 2)},
-    {"!UTF16BE-0"  , UTF16BE, csubstr("\x00""0", 2)},
-    {"UTF16LE"     , UTF16LE, csubstr("\xff\xfe", 2)},
-    {"!UTF16LE-a"  , UTF16LE, csubstr("a""\x00" , 2)},
-    {"!UTF16LE-b"  , UTF16LE, csubstr("b""\x00" , 2)},
-    {"!UTF16LE-0"  , UTF16LE, csubstr("0""\x00" , 2)},
-    {"UTF32BE"     , UTF32BE, csubstr("\x00\x00\xfe\xff", 4)},
-    {"!UTF32BE-a"  , UTF32BE, csubstr("\x00\x00\x00""a" , 4)},
-    {"!UTF32BE-b"  , UTF32BE, csubstr("\x00\x00\x00""b" , 4)},
-    {"!UTF32BE-0"  , UTF32BE, csubstr("\x00\x00\x00""0" , 4)},
-    {"UTF32LE"     , UTF32LE, csubstr("\xff\xfe\x00\x00", 4)},
-    {"!UTF32LE-a"  , UTF32LE, csubstr("a""\x00\x00\x00" , 4)},
-    {"!UTF32LE-b"  , UTF32LE, csubstr("b""\x00\x00\x00" , 4)},
-    {"!UTF32LE-0"  , UTF32LE, csubstr("0""\x00\x00\x00" , 4)},
-};
-
 template<class CreateFn, class TestFn>
 void test_bom(bomspec const& bom, CreateFn &&createfn, TestFn &&testfn, bool with_docs=true)
 {
@@ -126,7 +97,7 @@ void test_bom2(bom2spec const& spec, CreateFn &&createfn, TestFn &&testfn, bom2_
     else
     {
         pfn_error_basic orig = get_callbacks().m_error_basic;
-        ExpectError::check_error_basic([&]{
+        ExpectError::check_error_parse([&]{
             Parser::handler_type handler;
             Parser parser(&handler);
             Tree tree;
@@ -138,14 +109,6 @@ void test_bom2(bom2spec const& spec, CreateFn &&createfn, TestFn &&testfn, bom2_
     }
 }
 
-std::string namefor(bomspec const& param)
-{
-    std::string s(param.name.str, param.name.len);
-    substr ss = to_substr(s);
-    ss.replace('!', '_');
-    ss.replace('-', '_');
-    return s;
-}
 std::string namefor(bom2spec const& param)
 {
     return c4::catrs<std::string>(namefor(std::get<0>(param)), "__vs__", namefor(std::get<1>(param)));
@@ -168,10 +131,12 @@ struct TestBOM : public testing::TestWithParam<bomspec> {};
 struct TestBOM2 : public testing::TestWithParam<bom2spec> {};
 
 INSTANTIATE_TEST_SUITE_P(byte_order_mark, TestBOM,
-                         testing::ValuesIn(bomspecs),
+                         testing::ValuesIn(bomspecs.begin(), bomspecs.end()),
                          namefor<bomspec>);
 INSTANTIATE_TEST_SUITE_P(byte_order_mark, TestBOM2,
-                         testing::Combine(testing::ValuesIn(bomspecs), testing::ValuesIn(bomspecs)),
+                         testing::Combine(
+                             testing::ValuesIn(bomspecs.begin(), bomspecs.end()),
+                             testing::ValuesIn(bomspecs.begin(), bomspecs.end())),
                          namefor<bom2spec>);
 
 

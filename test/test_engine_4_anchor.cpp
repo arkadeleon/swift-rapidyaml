@@ -266,7 +266,9 @@ ENGINE_TEST(AnchorSeqFlowWithRefMultiLine,
 //-----------------------------------------------------------------------------
 
 ENGINE_TEST(AnchorMapBlock,
-            "&map\n&key1 key1: &val1 val1\n&key2 key2: &val2 val2\n"
+            "&map\n"
+            "&key1 key1: &val1 val1\n"
+            "&key2 key2: &val2 val2\n"
             ,
             "+STR\n"
             "+DOC\n"
@@ -1250,47 +1252,141 @@ ENGINE_TEST(DoubleAnchorKeyMap,
 }
 
 
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsBlockMapKey_SU74_1, Location(2,10), ""
+//-----------------------------------------------------------------------------
+
+ENGINE_TEST_ERRLOC(_4JVG_TooManyAnchors0, Location(2,11), ""
+                   "top2: &node2\n"
+                   "  &v2 val2"
+                   "")
+ENGINE_TEST_ERRLOC(_4JVG_TooManyAnchors1, Location(1,18), ""
+                   "top2: &node2 &v2 val2"
+                   "")
+
+ENGINE_TEST_ERRLOC(_4JVG_TooManyTags0, Location(2,11), ""
+                   "top2: !node2\n"
+                   "  !v2 val2"
+                   "")
+ENGINE_TEST_ERRLOC(_4JVG_TooManyTags1, Location(1,18), ""
+                   "top2: !node2 !v2 val2"
+                   "")
+
+
+//-----------------------------------------------------------------------------
+
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsBlockMapKey_1, Location(2,10), ""
                    "key1: &alias value1\n"
                    "&b *alias : value2\n")
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsBlockMapKey_SU74_2, Location(2,8), ""
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsBlockMapKey_2, Location(2,7), ""
                    "key1: &alias value1\n"
                    "*alias &b: value2\n")
 
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsFlowMapKey_SU74_1, Location(2,10), ""
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsFlowMapKey_1, Location(2,10), ""
                    "{key1: &alias value1,\n"
                    "&b *alias : value2}\n")
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsFlowMapKey_SU74_2, Location(2,8), ""
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsFlowMapKey_2, Location(2,8), ""
                    "{key1: &alias value1,\n"
                    "*alias &b: value2}\n")
 
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsFlowMapVal_SU74_1, Location(2,18), ""
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsFlowMapVal_1, Location(2,18), ""
                    "key1: &alias value1\n"
                    "value2: &b *alias\n")
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsFlowMapVal_SU74_2, Location(2,16), ""
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsFlowMapVal_2, Location(2,16), ""
                    "key1: &alias value1\n"
                    "value2: *alias &b\n")
 
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsBlockMapVal_SU74_1, Location(2,18), ""
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsBlockMapVal_1, Location(2,18), ""
                    "{key1: &alias value1,\n"
                    "value2: &b *alias\n}")
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsBlockMapVal_SU74_2, Location(2,16), ""
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsBlockMapVal_2, Location(2,16), ""
                    "{key1: &alias value1,\n"
                    "value2: *alias &b\n}")
 
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsFlowSeqVal_SU74_1, Location(2,12), ""
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsFlowSeqVal_1, Location(2,12), ""
                    "- &alias value1\n"
                    "- &b *alias\n")
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsFlowSeqVal_SU74_2, Location(2,10), ""
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsFlowSeqVal_2, Location(2,10), ""
                    "- &alias value1\n"
                    "- *alias &b\n")
 
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsBlockSeqVal_SU74_1, Location(2,10), ""
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsBlockSeqVal_1, Location(2,10), ""
                    "[&alias value1,\n"
                    "&b *alias]\n")
-ENGINE_TEST_ERRLOC(AnchorAndAliasAsBlockSeqVal_SU74_2, Location(2,8), ""
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsBlockSeqVal_2, Location(2,8), ""
                    "[&alias value1,\n"
                    "*alias &b]\n")
+
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsBlockSeqImapVal_1_val, Location(2,15), ""
+                   "[foo: &alias value1,\n"
+                   "bar: &b *alias]\n")
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsBlockSeqImapVal_2_val, Location(2,15), ""
+                   "[foo: &alias value1,\n"
+                   "bar: &b *alias]\n")
+
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsBlockSeqImapVal_1_key, Location(2,8), ""
+                   "[&alias value1: foo,\n"
+                   "*alias &b : foo]\n")
+ENGINE_TEST_ERRLOC(SU74_AnchorAndAliasAsBlockSeqImapVal_2_key, Location(2,8), ""
+                   "[&alias value1: foo,\n"
+                   "*alias &b : foo]\n")
+
+
+//-----------------------------------------------------------------------------
+
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsBlockMapKey_1, Location(2,10), ""
+                   "key1: &alias value1\n"
+                   "!t *alias : value2\n")
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsBlockMapKey_2, Location(2,7), ""
+                   "key1: &alias value1\n"
+                   "*alias !t: value2\n")
+
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsFlowMapKey_1, Location(2,10), ""
+                   "{key1: &alias value1,\n"
+                   "!t *alias : value2}\n")
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsFlowMapKey_2, Location(2,8), ""
+                   "{key1: &alias value1,\n"
+                   "*alias !t: value2}\n")
+
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsFlowMapVal_1, Location(2,18), ""
+                   "key1: &alias value1\n"
+                   "value2: !t *alias\n")
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsFlowMapVal_2, Location(2,16), ""
+                   "key1: &alias value1\n"
+                   "value2: *alias !t\n")
+
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsBlockMapVal_1, Location(2,18), ""
+                   "{key1: &alias value1,\n"
+                   "value2: !t *alias\n}")
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsBlockMapVal_2, Location(2,16), ""
+                   "{key1: &alias value1,\n"
+                   "value2: *alias !t\n}")
+
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsFlowSeqVal_1, Location(2,12), ""
+                   "- &alias value1\n"
+                   "- !t *alias\n")
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsFlowSeqVal_2, Location(2,10), ""
+                   "- &alias value1\n"
+                   "- *alias !t\n")
+
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsBlockSeqVal_1, Location(2,10), ""
+                   "[&alias value1,\n"
+                   "!t *alias]\n")
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsBlockSeqVal_2, Location(2,8), ""
+                   "[&alias value1,\n"
+                   "*alias !t]\n")
+
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsBlockSeqImapVal_1_val, Location(2,15), ""
+                   "[foo: &alias value1,\n"
+                   "bar: !t *alias]\n")
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsBlockSeqImapVal_2_val, Location(2,15), ""
+                   "[foo: &alias value1,\n"
+                   "bar: !t *alias]\n")
+
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsBlockSeqImapVal_1_key, Location(2,8), ""
+                   "[&alias value1: foo,\n"
+                   "*alias !t : foo]\n")
+ENGINE_TEST_ERRLOC(SU74_TagAndAliasAsBlockSeqImapVal_2_key, Location(2,8), ""
+                   "[&alias value1: foo,\n"
+                   "*alias !t : foo]\n")
 
 } // namespace yml
 } // namespace c4

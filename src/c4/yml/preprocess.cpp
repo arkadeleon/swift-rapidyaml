@@ -8,6 +8,8 @@ namespace c4 {
 namespace yml {
 
 C4_SUPPRESS_WARNING_GCC_CLANG_WITH_PUSH("-Wold-style-cast")
+// NOLINTBEGIN(modernize-avoid-c-style-cast)
+
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -22,7 +24,7 @@ C4_ALWAYS_INLINE bool _is_idchar(char c)
         || (c == '_' || c == '-' || c == '~' || c == '$');
 }
 
-enum _ppstate : int { kReadPending = 0, kKeyPending = 1, kValPending = 2 };
+enum _ppstate : int { kReadPending = 0, kKeyPending = 1, kValPending = 2 }; // NOLINT
 C4_ALWAYS_INLINE _ppstate _next(_ppstate s)
 {
     int n = (int)s + 1;
@@ -107,6 +109,7 @@ size_t preprocess_rxmap(csubstr s, substr buf)
     return writer.pos;
 }
 
+// NOLINTEND(modernize-avoid-c-style-cast)
 C4_SUPPRESS_WARNING_GCC_CLANG_POP
 
 } // namespace yml

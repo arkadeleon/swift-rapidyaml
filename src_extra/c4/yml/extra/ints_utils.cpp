@@ -57,8 +57,8 @@ c4::EnumSymbols<yml::extra::ievt::EventFlags> esyms<yml::extra::ievt::EventFlags
         {yml::extra::ievt::PSTR, "PSTR"},
         {yml::extra::ievt::UNFILT, "UNFILT"},
         {yml::extra::ievt::YAML, "YAML"},
-        {yml::extra::ievt::TAGD, "TAGD"},
-        {yml::extra::ievt::TAGV, "TAGV"},
+        {yml::extra::ievt::TAGH, "TAGH"},
+        {yml::extra::ievt::TAGP, "TAGP"},
     };
     return EnumSymbols<yml::extra::ievt::EventFlags>(syms);
 }

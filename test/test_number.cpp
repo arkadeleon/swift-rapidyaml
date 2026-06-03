@@ -200,10 +200,10 @@ set:
             SCOPED_TRACE(ch.key());
             float f = 0.f;
             double d = 0.;
-            ExpectError::check_error_basic(&t, [&]{ ch >> f; });
-            ExpectError::check_error_basic(&t, [&]{ ch >> d; });
-            ExpectError::check_error_basic(&t, [&]{ ch >> key(f); });
-            ExpectError::check_error_basic(&t, [&]{ ch >> key(d); });
+            ExpectError::check_error_visit(&t, [&]{ ch >> f; });
+            ExpectError::check_error_visit(&t, [&]{ ch >> d; });
+            ExpectError::check_error_visit(&t, [&]{ ch >> key(f); });
+            ExpectError::check_error_visit(&t, [&]{ ch >> key(d); });
         }
         EXPECT_EQ(emitrs_yaml<std::string>(t),
                   R"(good:
@@ -255,7 +255,8 @@ TEST(number, inf_0)
     EXPECT_EQ(t[1].val(), ".inf");
     EXPECT_EQ(t[2].val(), "-.inf");
     EXPECT_EQ(t[3].val(), "-.inf");
-    EXPECT_EQ(scalar_style_choose("-.inf"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_flow("-.inf"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_block("-.inf"), SCALAR_PLAIN);
     EXPECT_EQ(emitrs_yaml<std::string>(t),
               R"(- .inf
 - .inf
@@ -334,10 +335,10 @@ set:
             SCOPED_TRACE(ch.key());
             float f = 0.f;
             double d = 0.;
-            ExpectError::check_error_basic(&t, [&]{ ch >> f; });
-            ExpectError::check_error_basic(&t, [&]{ ch >> d; });
-            ExpectError::check_error_basic(&t, [&]{ ch >> key(f); });
-            ExpectError::check_error_basic(&t, [&]{ ch >> key(d); });
+            ExpectError::check_error_visit(&t, [&]{ ch >> f; });
+            ExpectError::check_error_visit(&t, [&]{ ch >> d; });
+            ExpectError::check_error_visit(&t, [&]{ ch >> key(f); });
+            ExpectError::check_error_visit(&t, [&]{ ch >> key(d); });
         }
         EXPECT_EQ(emitrs_yaml<std::string>(t),
                   R"(good:
@@ -428,10 +429,10 @@ set:
             SCOPED_TRACE(ch.key());
             float f = 0.f;
             double d = 0.;
-            ExpectError::check_error_basic(&t, [&]{ ch >> f; });
-            ExpectError::check_error_basic(&t, [&]{ ch >> d; });
-            ExpectError::check_error_basic(&t, [&]{ ch >> key(f); });
-            ExpectError::check_error_basic(&t, [&]{ ch >> key(d); });
+            ExpectError::check_error_visit(&t, [&]{ ch >> f; });
+            ExpectError::check_error_visit(&t, [&]{ ch >> d; });
+            ExpectError::check_error_visit(&t, [&]{ ch >> key(f); });
+            ExpectError::check_error_visit(&t, [&]{ ch >> key(d); });
         }
         EXPECT_EQ(emitrs_yaml<std::string>(t),
                   R"(good:
@@ -508,27 +509,27 @@ TEST(number, github_312__proposed_8e888_cannot_be_converted)
     EXPECT_FALSE(from_chars_float("-8e888", &f));
     EXPECT_FALSE(from_chars_float("-8e888", &d));
     Tree t = parse_in_arena("8e888");
-    ExpectError::check_error_basic(&t, [&]{ t.rootref() >> f; });
-    ExpectError::check_error_basic(&t, [&]{ t.rootref() >> d; });
+    ExpectError::check_error_visit(&t, [&]{ t.rootref() >> f; });
+    ExpectError::check_error_visit(&t, [&]{ t.rootref() >> d; });
 }
 
 TEST(number, github_312_535__json_styles_for_special_values)
 {
-    EXPECT_EQ(scalar_style_json_choose("nan"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose("inf"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose("infinity"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose("-infinity"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose(".nan"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose(".NaN"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose(".NAN"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose("inf"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose("-inf"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose(".inf"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose("-.inf"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose(".Inf"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose("-.Inf"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose(".INF"), SCALAR_PLAIN);
-    EXPECT_EQ(scalar_style_json_choose("-.INF"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json("nan"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json("inf"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json("infinity"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json("-infinity"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json(".nan"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json(".NaN"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json(".NAN"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json("inf"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json("-inf"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json(".inf"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json("-.inf"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json(".Inf"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json("-.Inf"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json(".INF"), SCALAR_PLAIN);
+    EXPECT_EQ(scalar_style_choose_json("-.INF"), SCALAR_PLAIN);
 }
 
 TEST(number, github_312_535)
@@ -557,6 +558,10 @@ TEST(number, github_312_535)
 }
 )";
     enum : int { is_yaml, is_json };
+    C4_SUPPRESS_WARNING_GCC_PUSH
+    #if defined(__GNUC__) && (__GNUC__ >= 7)
+    C4_SUPPRESS_WARNING_GCC("-Wduplicated-branches")
+    #endif
     auto checktree_ = [](Tree const& t, int type){
         // inf
         ConstNodeRef inf = type == is_yaml ? t["inf"] : t[".inf"];
@@ -592,6 +597,7 @@ TEST(number, github_312_535)
         EXPECT_EQ(t["normal"][1].val(), "0.2e3");
         EXPECT_EQ(t["normal"][2].val(), "4.e5");
     };
+    C4_SUPPRESS_WARNING_GCC_POP
     #define checktree(...) do { SCOPED_TRACE("here"); checktree_(__VA_ARGS__); } while(0)
     checktree(tree, is_yaml);
     std::string yaml = emitrs_yaml<std::string>(tree);

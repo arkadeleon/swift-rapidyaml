@@ -15,7 +15,7 @@
 #ifndef _C4_YML_COMMON_HPP_
 #include "c4/yml/common.hpp"
 #endif
-#ifndef C4_YML_NODE_TYPE_HPP_
+#ifndef _C4_YML_NODE_TYPE_HPP_
 #include "c4/yml/node_type.hpp"
 #endif
 #ifndef _C4_YML_TAG_HPP_
@@ -40,10 +40,12 @@ C4_SUPPRESS_WARNING_GCC_CLANG("-Wold-style-cast")
 C4_SUPPRESS_WARNING_GCC("-Wuseless-cast")
 C4_SUPPRESS_WARNING_GCC("-Wtype-limits")
 
+// NOLINTBEGIN(modernize-avoid-c-style-cast)
 
 namespace c4 {
 namespace yml {
 
+/** @cond dev */
 template<class T> inline auto read(Tree const* C4_RESTRICT tree, id_type id, T *v) -> typename std::enable_if<!std::is_arithmetic<T>::value, bool>::type;
 template<class T> inline auto read(Tree const* C4_RESTRICT tree, id_type id, T *v) -> typename std::enable_if<std::is_arithmetic<T>::value && !std::is_floating_point<T>::value, bool>::type;
 template<class T> inline auto read(Tree const* C4_RESTRICT tree, id_type id, T *v) -> typename std::enable_if<std::is_floating_point<T>::value, bool>::type;
@@ -51,6 +53,7 @@ template<class T> inline auto read(Tree const* C4_RESTRICT tree, id_type id, T *
 template<class T> inline auto readkey(Tree const* C4_RESTRICT tree, id_type id, T *v) -> typename std::enable_if<!std::is_arithmetic<T>::value, bool>::type;
 template<class T> inline auto readkey(Tree const* C4_RESTRICT tree, id_type id, T *v) -> typename std::enable_if<std::is_arithmetic<T>::value && !std::is_floating_point<T>::value, bool>::type;
 template<class T> inline auto readkey(Tree const* C4_RESTRICT tree, id_type id, T *v) -> typename std::enable_if<std::is_floating_point<T>::value, bool>::type;
+/** @endcond */
 
 
 template<class T> size_t to_chars_float(substr buf, T val);
@@ -520,10 +523,25 @@ public:
     id_type sibling(id_type node, id_type pos) const { return child(_p(node)->m_parent, pos); }
     id_type find_sibling(id_type node, csubstr const& key) const { return find_child(_p(node)->m_parent, key); }
 
-    id_type doc(id_type i) const { id_type rid = root_id(); _RYML_ASSERT_VISIT_(m_callbacks, is_stream(rid), this, rid); return child(rid, i); } //!< gets the @p i document node index. requires that the root node is a stream.
-
     id_type depth_asc(id_type node) const; /**< O(log(num_tree_nodes)) get the ascending depth of the node: number of levels between root and node */
     id_type depth_desc(id_type node) const; /**< O(num_tree_nodes) get the descending depth of the node: number of levels between node and deepest child */
+
+    /** gets the @p i document node index. requires that the root node is a stream. */
+    id_type doc(id_type i) const { id_type rid = root_id(); _RYML_ASSERT_VISIT_(m_callbacks, is_stream(rid), this, rid); return child(rid, i); }
+
+    /** get the document which is a parent document of node i, or the root if the tree is not a stream */
+    id_type ancestor_doc(id_type node) const
+    {
+        NodeData const *nd;
+        do
+        {
+            nd = _p(node);
+            if(nd->m_type.is_doc() || nd->m_parent == NONE)
+                break;
+            node = nd->m_parent;
+        } while(nd->m_parent != NONE);
+        return node;
+    }
 
     /** @} */
 
@@ -635,33 +653,46 @@ public:
 
 public:
 
-    /** @name tag directives */
+    /** @name tags and tag directives */
     /** @{ */
 
-    void resolve_tags();
+    /** Resolve tags in the tree such as `"!!str"` ->
+     * `"<tag:yaml.org,2002:str>"`, `"!foo"` ->
+     * `"<!foo>"` and custom tags as well, ie tags of the form
+     * `"!handle!tag"` for which there is a corresponding `"%%TAG"`
+     * directive
+     *
+     * @param cache an object of type @ref TagCache to minimize memory
+     *        usage by avoiding repeated instantiation of the resolved
+     *        tags in the tree's arena.
+     *
+     * @param all if true, resolve all tags; if false resolve only
+     *        custom tags, ie those that have a prefix such as
+     *        `"!m!tag"` with a matching `"%TAG"` directive */
+    void resolve_tags(TagCache &cache, bool all=true);
     void normalize_tags();
     void normalize_tags_long();
 
     id_type num_tag_directives() const;
-    bool add_tag_directive(csubstr directive);
-    id_type add_tag_directive(TagDirective const& td);
+    void add_tag_directive(csubstr handle, csubstr prefix, id_type id);
     void clear_tag_directives();
 
     /** resolve the given tag, appearing at node_id. Write the result into output.
      * @return the number of characters required for the resolved tag */
     size_t resolve_tag(substr output, csubstr tag, id_type node_id) const;
+    /** Wrapper for @ref Tree::resolve_tag(), returning a substring */
     csubstr resolve_tag_sub(substr output, csubstr tag, id_type node_id) const
     {
         size_t needed = resolve_tag(output, tag, node_id);
         return needed <= output.len ? output.first(needed) : output;
     }
 
-    TagDirective const* begin_tag_directives() const { return m_tag_directives; }
-    TagDirective const* end_tag_directives() const { return m_tag_directives + num_tag_directives(); }
-    c4::yml::TagDirectiveRange tag_directives() const { return c4::yml::TagDirectiveRange{begin_tag_directives(), end_tag_directives()}; }
+    c4::yml::TagDirectiveRange tag_directives() const { return m_tag_directives.directives(); }
 
+    /** @cond dev */
     RYML_DEPRECATED("use c4::yml::tag_directive_const_iterator") typedef TagDirective const* tag_directive_const_iterator;
     RYML_DEPRECATED("use c4::yml::TagDirectiveRange") typedef c4::yml::TagDirectiveRange TagDirectiveProxy;
+    /** @endcond */
 
     /** @} */
 
@@ -695,7 +726,7 @@ public:
 
 public:
 
-    #if defined(__clang__)
+    #if defined(__clang__) // NOLINT
     #   pragma clang diagnostic push
     #   pragma clang diagnostic ignored "-Wnull-dereference"
     #elif defined(__GNUC__)
@@ -996,7 +1027,7 @@ public:
     /** @name lookup */
     /** @{ */
 
-    struct lookup_result
+    struct RYML_EXPORT lookup_result
     {
         id_type  target;
         id_type  closest;
@@ -1307,7 +1338,12 @@ public:
 
     Callbacks m_callbacks;
 
-    TagDirective m_tag_directives[RYML_MAX_TAG_DIRECTIVES];
+    TagDirectives m_tag_directives;
+
+public:
+    /** @cond dev */
+    RYML_DEPRECATED("use Tree::resolve_tags(TagCache&)") void resolve_tags() { TagCache cache; resolve_tags(cache); }
+    /** @endcond */
 };
 
 
@@ -1358,14 +1394,14 @@ inline auto read(Tree const* C4_RESTRICT tree, id_type id, T *v)
     -> typename std::enable_if<std::is_arithmetic<T>::value && !std::is_floating_point<T>::value, bool>::type
 {
     using U = typename std::remove_cv<T>::type;
-    enum { ischar = std::is_same<char, U>::value || std::is_same<signed char, U>::value || std::is_same<unsigned char, U>::value };
+    enum { ischar = std::is_same<char, U>::value || std::is_same<signed char, U>::value || std::is_same<unsigned char, U>::value }; // NOLINT
     csubstr val = tree->val(id);
     NodeType ty = tree->type(id);
     if(C4_UNLIKELY((ty & VALNIL) || val.empty()))
         return false;
     // quote integral numbers if they have a leading 0
     // https://github.com/biojppm/rapidyaml/issues/291
-    char first = val[0];
+    char first = val.str[0];
     if(ty.is_val_quoted() && (first != '0' && !ischar))
         return false;
     else if(first == '+')
@@ -1383,14 +1419,14 @@ inline auto readkey(Tree const* C4_RESTRICT tree, id_type id, T *v)
     -> typename std::enable_if<std::is_arithmetic<T>::value && !std::is_floating_point<T>::value, bool>::type
 {
     using U = typename std::remove_cv<T>::type;
-    enum { ischar = std::is_same<char, U>::value || std::is_same<signed char, U>::value || std::is_same<unsigned char, U>::value };
+    enum { ischar = std::is_same<char, U>::value || std::is_same<signed char, U>::value || std::is_same<unsigned char, U>::value }; // NOLINT
     csubstr key = tree->key(id);
     NodeType ty = tree->type(id);
     if((ty & KEYNIL) || key.empty())
         return false;
     // quote integral numbers if they have a leading 0
     // https://github.com/biojppm/rapidyaml/issues/291
-    char first = key[0];
+    char first = key.str[0];
     if(ty.is_key_quoted() && (first != '0' && !ischar))
         return false;
     else if(first == '+')
@@ -1541,6 +1577,7 @@ csubstr serialize_to_arena(Tree * C4_RESTRICT tree, T const& C4_RESTRICT a)
 } // namespace yml
 } // namespace c4
 
+// NOLINTEND(modernize-avoid-c-style-cast)
 
 C4_SUPPRESS_WARNING_MSVC_POP
 C4_SUPPRESS_WARNING_GCC_CLANG_POP

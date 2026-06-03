@@ -9,6 +9,7 @@ C4_SUPPRESS_WARNING_MSVC(4702/*unreachable code*/)
 C4_SUPPRESS_WARNING_GCC_CLANG_WITH_PUSH("-Wold-style-cast")
 C4_SUPPRESS_WARNING_GCC("-Wtype-limits")
 C4_SUPPRESS_WARNING_GCC("-Wuseless-cast")
+// NOLINTBEGIN(modernize-avoid-c-style-cast)
 
 
 namespace c4 {
@@ -207,8 +208,7 @@ void Tree::_clear()
     m_free_tail = 0;
     m_arena = {};
     m_arena_pos = 0;
-    for(id_type i = 0; i < RYML_MAX_TAG_DIRECTIVES; ++i)
-        m_tag_directives[i] = {};
+    m_tag_directives.clear();
 }
 
 void Tree::_copy(Tree const& that)
@@ -227,6 +227,7 @@ void Tree::_copy(Tree const& that)
     m_free_tail = that.m_free_tail;
     m_arena_pos = that.m_arena_pos;
     m_arena = that.m_arena;
+    m_tag_directives = that.m_tag_directives;
     if(that.m_arena.str)
     {
         _RYML_ASSERT_VISIT_(m_callbacks, that.m_arena.len > 0, this, NONE);
@@ -236,8 +237,6 @@ void Tree::_copy(Tree const& that)
         _relocate(arena); // does a memcpy of the arena and updates nodes using the old arena
         m_arena = arena;
     }
-    for(id_type i = 0; i < RYML_MAX_TAG_DIRECTIVES; ++i)
-        m_tag_directives[i] = that.m_tag_directives[i];
 }
 
 void Tree::_move(Tree & that) noexcept
@@ -252,8 +251,7 @@ void Tree::_move(Tree & that) noexcept
     m_free_tail = that.m_free_tail;
     m_arena = that.m_arena;
     m_arena_pos = that.m_arena_pos;
-    for(id_type i = 0; i < RYML_MAX_TAG_DIRECTIVES; ++i)
-        m_tag_directives[i] = that.m_tag_directives[i];
+    m_tag_directives = that.m_tag_directives;
     that._clear();
 }
 
@@ -345,8 +343,7 @@ void Tree::clear()
         m_free_head = NONE;
         m_free_tail = NONE;
     }
-    for(id_type i = 0; i < RYML_MAX_TAG_DIRECTIVES; ++i)
-        m_tag_directives[i] = {};
+    m_tag_directives.clear();
 }
 
 void Tree::_claim_root()
@@ -862,40 +859,58 @@ void Tree::set_root_as_stream()
     id_type root = root_id();
     if(is_stream(root))
         return;
+    _c4dbgpf("set_root_as_stream. rootty={}", type(root).type);
+    bool empty_root = ((type(root) & (SEQ|MAP|VAL)) == 0);
+    for(TagDirective &C4_RESTRICT td : m_tag_directives)
+    {
+        if(td.doc_id >= m_cap || _p(td.doc_id)->m_parent == NONE)
+        {
+            _c4dbgpf("tagd[{}]: id={}->NONE", &td-m_tag_directives.m_directives, td.doc_id);
+            td.doc_id = NONE;
+        }
+    }
     // don't use _add_flags() because it's checked and will fail
+    id_type next_doc;
     if(!has_children(root))
     {
         if(is_container(root))
         {
-            id_type next_doc = append_child(root);
+            next_doc = append_child(root);
             _copy_props_wo_key(next_doc, root);
             _p(next_doc)->m_type.add(DOC);
         }
         else
         {
             _p(root)->m_type.add(SEQ);
-            id_type next_doc = append_child(root);
+            next_doc = append_child(root);
             _copy_props_wo_key(next_doc, root);
             _p(next_doc)->m_type.add(DOC);
             _p(next_doc)->m_type.rem(SEQ);
         }
-        _p(root)->m_type = STREAM;
-        return;
     }
-    _RYML_ASSERT_VISIT_(m_callbacks, !has_key(root), this, root);
-    id_type next_doc = append_child(root);
-    _copy_props_wo_key(next_doc, root);
-    _add_flags(next_doc, DOC);
-    for(id_type prev = NONE, ch = first_child(root), next = next_sibling(ch); ch != NONE; )
+    else
     {
-        if(ch == next_doc)
-            break;
-        move(ch, next_doc, prev);
-        prev = ch;
-        ch = next;
-        next = next_sibling(next);
+        _RYML_ASSERT_VISIT_(m_callbacks, !has_key(root), this, root);
+        next_doc = append_child(root);
+        _copy_props_wo_key(next_doc, root);
+        _add_flags(next_doc, DOC);
+        for(id_type prev = NONE, ch = first_child(root), next = next_sibling(ch); ch != NONE; )
+        {
+            if(ch == next_doc)
+                break;
+            move(ch, next_doc, prev);
+            prev = ch;
+            ch = next;
+            next = next_sibling(next);
+        }
     }
     _p(root)->m_type = STREAM;
+    for(TagDirective &C4_RESTRICT td : m_tag_directives)
+    {
+        id_type id = (td.doc_id != NONE) ? next_doc : (empty_root ? first_child(root) : m_free_head);
+        _c4dbgpf("tagd[{}]: id={}->{}", &td-m_tag_directives.m_directives, td.doc_id, id);
+        td.doc_id = id;
+    }
 }
 
 
@@ -903,13 +918,11 @@ void Tree::set_root_as_stream()
 void Tree::remove_children(id_type node)
 {
     _RYML_ASSERT_VISIT_(m_callbacks, get(node) != nullptr, this, node);
-    #if __GNUC__ >= 6
-    C4_SUPPRESS_WARNING_GCC_WITH_PUSH("-Wnull-dereference")
+    C4_SUPPRESS_WARNING_GCC_PUSH
+    #if defined(__GNUC__) && __GNUC__ >= 6
+    C4_SUPPRESS_WARNING_GCC("-Wnull-dereference")
     #endif
     id_type ich = get(node)->m_first_child;
-    #if __GNUC__ >= 6
-    C4_SUPPRESS_WARNING_GCC_POP
-    #endif
     while(ich != NONE)
     {
         remove_children(ich);
@@ -920,6 +933,7 @@ void Tree::remove_children(id_type node)
             break;
         ich = next;
     }
+    C4_SUPPRESS_WARNING_GCC_POP
 }
 
 bool Tree::change_type(id_type node, NodeType type)
@@ -1421,128 +1435,100 @@ void Tree::set_style_conditionally(id_type node,
 //-----------------------------------------------------------------------------
 id_type Tree::num_tag_directives() const
 {
-    // this assumes we have a very small number of tag directives
-    for(id_type i = 0; i < RYML_MAX_TAG_DIRECTIVES; ++i)
-        if(m_tag_directives[i].handle.empty())
-            return i;
-    return RYML_MAX_TAG_DIRECTIVES;
+    return m_tag_directives.size();
 }
 
 void Tree::clear_tag_directives()
 {
-    for(TagDirective &td : m_tag_directives)
-        td = {};
+    m_tag_directives.clear();
 }
 
-id_type Tree::add_tag_directive(TagDirective const& td)
+void Tree::add_tag_directive(csubstr handle, csubstr prefix, id_type id)
 {
-    _RYML_CHECK_BASIC_(m_callbacks, !td.handle.empty());
-    _RYML_CHECK_BASIC_(m_callbacks, !td.prefix.empty());
-    _RYML_CHECK_BASIC_(m_callbacks, td.handle.begins_with('!'));
-    _RYML_CHECK_BASIC_(m_callbacks, td.handle.ends_with('!'));
-    // https://yaml.org/spec/1.2.2/#rule-ns-word-char
-    _RYML_CHECK_BASIC_(m_callbacks, td.handle == '!' || td.handle == "!!" || td.handle.trim('!').first_not_of("01234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-") == npos);
-    id_type pos = num_tag_directives();
-    _RYML_CHECK_BASIC_(m_callbacks, pos < RYML_MAX_TAG_DIRECTIVES);
-    m_tag_directives[pos] = td;
-    return pos;
-}
-
-namespace {
-bool _create_tag_directive_from_str(csubstr directive_, TagDirective *td, Tree *tree)
-{
-    _RYML_CHECK_BASIC_(tree->callbacks(), directive_.begins_with("%TAG "));
-    if(!td->create_from_str(directive_))
-    {
-        _RYML_ERR_BASIC_(tree->callbacks(), "invalid tag directive");
-    }
-    td->next_node_id = tree->size();
-    if(!tree->empty())
-    {
-        const id_type prev = tree->size() - 1;
-        if(tree->is_root(prev) && tree->type(prev) != NOTYPE && !tree->is_stream(prev))
-            ++td->next_node_id;
-    }
-    _c4dbgpf("%TAG: handle={} prefix={} next_node={}", td->handle, td->prefix, td->next_node_id);
-    return true;
-}
-} // namespace
-
-bool Tree::add_tag_directive(csubstr directive_)
-{
-    TagDirective td;
-    if(_create_tag_directive_from_str(directive_, &td, this))
-    {
-        add_tag_directive(td);
-        return true;
-    }
-    return false;
+    _RYML_CHECK_BASIC_(m_callbacks,
+                       !handle.empty()
+                       &&
+                       !prefix.empty()
+                       &&
+                       is_valid_tag_handle(handle)
+                       &&
+                       m_tag_directives.add(handle, prefix, id));
 }
 
 size_t Tree::resolve_tag(substr output, csubstr tag, id_type node_id) const
 {
-    // lookup from the end. We want to find the first directive that
-    // matches the tag and has a target node id leq than the given
-    // node_id.
-    for(id_type i = RYML_MAX_TAG_DIRECTIVES-1; i != (id_type)-1; --i)
-    {
-        auto const& td = m_tag_directives[i];
-        if(td.handle.empty())
-            continue;
-        if(tag.begins_with(td.handle) && td.next_node_id <= node_id)
-            return td.transform(tag, output, m_callbacks);
-    }
-    if(tag.begins_with('!'))
-    {
-        if(is_custom_tag(tag))
-        {
-            _RYML_ERR_VISIT_(m_callbacks, this, node_id, "tag directive not found");
-        }
-    }
-    return 0; // return 0 to signal that the tag is local and cannot be resolved
+    size_t reqsz = 0;
+    m_tag_directives.resolve(output, &reqsz, tag, node_id, Location{}, callbacks());
+    return reqsz;
 }
 
 namespace {
-csubstr _transform_tag(Tree *t, csubstr tag, id_type node)
+// return the extra size needed for the arena to accomodate the resolved tag
+size_t _transform_tag(Tree *t, id_type node_id, id_type doc_id, TagCache &cache, csubstr tag, csubstr *resolved)
 {
-    _c4dbgpf("[{}] resolving tag ~~~{}~~~", node, tag);
-    size_t required_size = t->resolve_tag(substr{}, tag, node);
-    if(!required_size)
+    _c4dbgpf("tag: doc={} node={} resolving tag ~~~{}~~~", doc_id, node_id, tag);
+    (void)node_id;
+    size_t reqsize = 0;
+    if(tag.begins_with('<'))
     {
-        if(tag.begins_with("!<"))
-            tag = tag.sub(1);
-        _c4dbgpf("[{}] resolved tag: ~~~{}~~~", node, tag);
-        return tag;
+        *resolved = tag;
     }
-    const char *prev_arena = t->arena().str;(void)prev_arena;
-    substr buf = t->alloc_arena(required_size);
-    _RYML_ASSERT_VISIT_(t->m_callbacks, t->arena().str == prev_arena, t, node);
-    size_t actual_size = t->resolve_tag(buf, tag, node);
-    _RYML_ASSERT_VISIT_(t->m_callbacks, actual_size <= required_size, t, node);
-    _c4dbgpf("[{}] resolved tag: ~~~{}~~~", node, buf.first(actual_size));
-    return buf.first(actual_size);
+    else
+    {
+        _RYML_ASSERT_VISIT_(t->callbacks(), !tag.begins_with("!<"), t, node_id); // this should have been handled elsewhere
+        TagCache::LookupResult ret = cache.find(tag, doc_id);
+        if(ret)
+        {
+            _c4dbgpf("tag: doc={} node={} resolving tag: found in cache[{}]: {}", doc_id, node_id, ret.pos, _prs(ret.resolved));
+            *resolved = ret.resolved;
+        }
+        else
+        {
+            _c4dbgpf("tag: doc={} node={} tag not in cache ~~~{}~~~", doc_id, node_id, tag);
+            substr buf = t->m_arena.sub(t->m_arena_pos);
+            reqsize = t->resolve_tag(buf, tag, doc_id);
+            if(!reqsize)
+            {
+                *resolved = tag;
+            }
+            else if(reqsize <= buf.len)
+            {
+                t->m_arena_pos += reqsize;
+                *resolved = buf.first(reqsize);
+                cache.add(tag, *resolved, doc_id, ret.pos);
+                reqsize = 0;
+            }
+            else
+            {
+                _c4dbgpf("tag: doc={} node={} extra size needed: {}", doc_id, node_id, reqsize);
+            }
+            _c4dbgpf("tag: doc={} node={} resolved tag: ~~~{}~~~", doc_id, node_id, *resolved);
+        }
+    }
+    return reqsize;
 }
-void _resolve_tags(Tree *t, id_type node)
+size_t _resolve_tags(Tree *t, id_type node, id_type doc_id, TagCache &cache, bool all=true)
 {
     NodeData *C4_RESTRICT d = t->_p(node);
-    if(d->m_type & KEYTAG)
-        d->m_key.tag = _transform_tag(t, d->m_key.tag, node);
-    if(d->m_type & VALTAG)
-        d->m_val.tag = _transform_tag(t, d->m_val.tag, node);
+    size_t extra_size = 0;
+    if((d->m_type & KEYTAG) && (all || is_custom_tag(d->m_key.tag)))
+        extra_size += _transform_tag(t, node, doc_id, cache, d->m_key.tag, &d->m_key.tag);
+    if((d->m_type & VALTAG) && (all || is_custom_tag(d->m_val.tag)))
+        extra_size += _transform_tag(t, node, doc_id, cache, d->m_val.tag, &d->m_val.tag);
     for(id_type child = t->first_child(node); child != NONE; child = t->next_sibling(child))
-        _resolve_tags(t, child);
+        extra_size += _resolve_tags(t, child, doc_id, cache);
+    return extra_size;
 }
-size_t _count_resolved_tags_size(Tree const* t, id_type node)
+size_t _resolve_tags(Tree *t, TagCache &cache, bool all)
 {
-    size_t sz = 0;
-    NodeData const* C4_RESTRICT d = t->_p(node);
-    if(d->m_type & KEYTAG)
-        sz += t->resolve_tag(substr{}, d->m_key.tag, node);
-    if(d->m_type & VALTAG)
-        sz += t->resolve_tag(substr{}, d->m_val.tag, node);
-    for(id_type child = t->first_child(node); child != NONE; child = t->next_sibling(child))
-        sz += _count_resolved_tags_size(t, child);
-    return sz;
+   id_type r = t->root_id();
+    size_t extra_size = 0;
+    if(!t->is_stream(r))
+        extra_size += _resolve_tags(t, r, r, cache, all);
+    else
+        for(id_type doc_id = t->first_child(r); doc_id != NONE; doc_id = t->next_sibling(doc_id))
+            extra_size += _resolve_tags(t, doc_id, doc_id, cache, all);
+    return extra_size;
 }
 void _normalize_tags(Tree *t, id_type node)
 {
@@ -1566,14 +1552,22 @@ void _normalize_tags_long(Tree *t, id_type node)
 }
 } // namespace
 
-void Tree::resolve_tags()
+void Tree::resolve_tags(TagCache &cache, bool all)
 {
     if(empty())
         return;
-    size_t needed_size = _count_resolved_tags_size(this, root_id());
-    if(needed_size)
-        reserve_arena(arena_size() + needed_size);
-    _resolve_tags(this, root_id());
+    // try to resolve. While doing so, get the extra size needed for
+    // the arena, if the arena is currently too small.
+    size_t extra_size = _resolve_tags(this, cache, all);
+    // if the arena requires extra size, grow it and then resolve the
+    // missing entries
+    if(extra_size)
+    {
+        _c4dbgpf("tag: extrasize={} -- retry! {}->{}", extra_size, m_arena.len, m_arena.len + extra_size);
+        _grow_arena(extra_size);
+        extra_size = _resolve_tags(this, cache, all);
+        _RYML_ASSERT_BASIC_(callbacks(), extra_size == 0);
+    }
 }
 
 void Tree::normalize_tags()
@@ -1764,7 +1758,9 @@ id_type Tree::_next_node_modify(lookup_result * r, _lookup_path_token *parent)
         else
         {
             if(is_map(r->closest))
+            {
                 node = find_child(r->closest, token.value);
+            }
             else
             {
                 id_type pos = NONE;
@@ -2020,5 +2016,6 @@ bool Tree::_location_from_cont(Parser const& parser, id_type node, Location *C4_
 } // namespace c4
 
 
+// NOLINTEND(modernize-avoid-c-style-cast)
 C4_SUPPRESS_WARNING_GCC_CLANG_POP
 C4_SUPPRESS_WARNING_MSVC_POP

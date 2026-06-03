@@ -803,7 +803,7 @@ ENGINE_TEST(SeqIMap5QmrkRef1,
 }
 
 ENGINE_TEST(SeqIMap5QmrkRef2,
-            "[? *ref: b]"
+            "[? *ref : b]"
             ,
             "[{*ref : b}]"
             ,
@@ -823,6 +823,33 @@ ENGINE_TEST(SeqIMap5QmrkRef2,
     ___(ps.begin_seq_val_flow());
     ___(ps.begin_map_val_flow());
     ___(ps.set_key_ref("*ref"));
+    ___(ps.set_val_scalar_plain("b"));
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+ENGINE_TEST(SeqIMap5QmrkRef2_1,
+            "[? *ref: : b]"
+            ,
+            "[{*ref: : b}]"
+            ,
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=ALI *ref:\n"
+            "=VAL :b\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_ref("*ref:"));
     ___(ps.set_val_scalar_plain("b"));
     ___(ps.end_map_flow(singleline));
     ___(ps.end_seq_flow(singleline));
@@ -897,6 +924,395 @@ ENGINE_TEST(SeqIMap5QmrkMap,
     ___(ps.set_key_scalar_plain("a"));
     ___(ps.set_val_scalar_plain("map"));
     ___(ps.end_map_flow(singleline));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+//-----------------------------------------------------------------------------
+
+ENGINE_TEST_ERRLOC(SeqIMapColonNextLineAfterPlain0, Location(2,3),
+                   "[ key"       "\n"
+                   "  : value ]"       "\n")
+ENGINE_TEST_ERRLOC(SeqIMapColonNextLineAfterPlain1, Location(2,3),
+                   "[ key  "       "\n"
+                   "  : value ]"       "\n")
+ENGINE_TEST_ERRLOC(SeqIMapColonNextLineAfterPlain2, Location(2,3),
+                   "[ key # comment"   "\n"
+                   "  : value ]"       "\n")
+
+ENGINE_TEST_ERRLOC(SeqIMapColonNextLineAfterSquo0, Location(2,3),
+                   "[ 'key'"       "\n"
+                   "  : value ]"       "\n")
+ENGINE_TEST_ERRLOC(SeqIMapColonNextLineAfterSquo1, Location(2,3),
+                   "[ 'key'  "       "\n"
+                   "  : value ]"       "\n")
+ENGINE_TEST_ERRLOC(SeqIMapColonNextLineAfterSquo2, Location(2,3),
+                   "[ 'key' # comment"   "\n"
+                   "  : value ]"       "\n")
+
+ENGINE_TEST_ERRLOC(SeqIMapColonNextLineAfterDquo0, Location(2,3),
+                   "[ \"key\""       "\n"
+                   "  : value ]"       "\n")
+ENGINE_TEST_ERRLOC(SeqIMapColonNextLineAfterDquo1, Location(2,3),
+                   "[ \"key\"  "       "\n"
+                   "  : value ]"       "\n")
+ENGINE_TEST_ERRLOC(SeqIMapColonNextLineAfterDquo2, Location(2,3),
+                   "[ \"key\" # comment"   "\n"
+                   "  : value ]"       "\n")
+
+ENGINE_TEST_ERRLOC_(SeqIMapColonNextLineAfterSeq0, HAS_CONTAINER_KEYS,
+                    Location(2,3),
+                   "[ [seq]"   "\n"
+                   "  : value ]"       "\n")
+ENGINE_TEST_ERRLOC_(SeqIMapColonNextLineAfterSeq1, HAS_CONTAINER_KEYS,
+                    Location(2,3),
+                   "[ [seq]  "   "\n"
+                   "  : value ]"       "\n")
+ENGINE_TEST_ERRLOC_(SeqIMapColonNextLineAfterSeq2, HAS_CONTAINER_KEYS,
+                    Location(2,3),
+                   "[ [seq] # comment"   "\n"
+                   "  : value ]"       "\n")
+
+ENGINE_TEST_ERRLOC_(SeqIMapColonNextLineAfterMap0, HAS_CONTAINER_KEYS,
+                    Location(2,3),
+                   "[ {map: yes}"   "\n"
+                   "  : value ]"       "\n")
+ENGINE_TEST_ERRLOC_(SeqIMapColonNextLineAfterMap1, HAS_CONTAINER_KEYS,
+                    Location(2,3),
+                   "[ {map: yes}  "   "\n"
+                   "  : value ]"       "\n")
+ENGINE_TEST_ERRLOC_(SeqIMapColonNextLineAfterMap2, HAS_CONTAINER_KEYS,
+                    Location(2,3),
+                   "[ {map: yes} # comment"   "\n"
+                   "  : value ]"       "\n")
+
+
+//-----------------------------------------------------------------------------
+
+ENGINE_TEST(TagPlacementTerminatingColonFlow3SeqK,
+            "[!tag30: :,!tag31: :]\n"
+            ,
+            "[{!tag30: : },{!tag31: : }]"
+            ,
+            ""
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL <!tag30:> :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "+MAP {}\n"
+            "=VAL <!tag31:> :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_tag("!tag30:"));
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.add_sibling());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_tag("!tag31:"));
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(TagPlacementTerminatingColonFlow3SeqK1,
+            "[&anch30: !tag30: :,&anch31: !tag31: :]\n"
+            ,
+            "[{&anch30: !tag30: : },{&anch31: !tag31: : }]"
+            ,
+            ""
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL &anch30: <!tag30:> :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "+MAP {}\n"
+            "=VAL &anch31: <!tag31:> :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_anchor("anch30:"));
+    ___(ps.set_key_tag("!tag30:"));
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.add_sibling());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_anchor("anch31:"));
+    ___(ps.set_key_tag("!tag31:"));
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(TagPlacementTerminatingColonFlow3SeqK2,
+            "[!tag30: &anch30: :,!tag31: &anch31: :]\n"
+            ,
+            "[{&anch30: !tag30: : },{&anch31: !tag31: : }]"
+            ,
+            ""
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL &anch30: <!tag30:> :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "+MAP {}\n"
+            "=VAL &anch31: <!tag31:> :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_anchor("anch30:"));
+    ___(ps.set_key_tag("!tag30:"));
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.add_sibling());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_anchor("anch31:"));
+    ___(ps.set_key_tag("!tag31:"));
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(TagPlacementTerminatingColonFlow3SeqK3,
+            "[&anch30: :,&anch31: :]\n"
+            ,
+            "[{&anch30: : },{&anch31: : }]"
+            ,
+            ""
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL &anch30: :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "+MAP {}\n"
+            "=VAL &anch31: :\n"
+            "=VAL :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_anchor("anch30:"));
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.add_sibling());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_anchor("anch31:"));
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(TagPlacementTerminatingColonFlow5SeqV1,
+            "[: !tag50:,: !tag51:]"
+            ,
+            "[{: !tag50: },{: !tag51: }]"
+            ,
+            ""
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL <!tag50:> :\n"
+            "-MAP\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL <!tag51:> :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_tag("!tag50:"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.add_sibling());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_tag("!tag51:"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(TagPlacementTerminatingColonFlow5SeqV2,
+            "[: &anch50: !tag50:,: &anch51: !tag51:]"
+            ,
+            "[{: &anch50: !tag50: },{: &anch51: !tag51: }]"
+            ,
+            ""
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL &anch50: <!tag50:> :\n"
+            "-MAP\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL &anch51: <!tag51:> :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_anchor("anch50:"));
+    ___(ps.set_val_tag("!tag50:"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.add_sibling());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_anchor("anch51:"));
+    ___(ps.set_val_tag("!tag51:"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(TagPlacementTerminatingColonFlow5SeqV3,
+            "[: !tag50: &anch50:,: !tag51: &anch51:]"
+            ,
+            "[{: &anch50: !tag50: },{: &anch51: !tag51: }]"
+            ,
+            ""
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL &anch50: <!tag50:> :\n"
+            "-MAP\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL &anch51: <!tag51:> :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_anchor("anch50:"));
+    ___(ps.set_val_tag("!tag50:"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.add_sibling());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_anchor("anch51:"));
+    ___(ps.set_val_tag("!tag51:"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.end_seq_flow(singleline));
+    ___(ps.end_doc());
+    ___(ps.end_stream());
+}
+
+ENGINE_TEST(TagPlacementTerminatingColonFlow5SeqV4,
+            "[: &anch50:,: &anch51:]"
+            ,
+            "[{: &anch50: },{: &anch51: }]"
+            ,
+            ""
+            "+STR\n"
+            "+DOC\n"
+            "+SEQ []\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL &anch50: :\n"
+            "-MAP\n"
+            "+MAP {}\n"
+            "=VAL :\n"
+            "=VAL &anch51: :\n"
+            "-MAP\n"
+            "-SEQ\n"
+            "-DOC\n"
+            "-STR\n")
+{
+    ___(ps.begin_stream());
+    ___(ps.begin_doc());
+    ___(ps.begin_seq_val_flow());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_anchor("anch50:"));
+    ___(ps.set_val_scalar_plain_empty());
+    ___(ps.end_map_flow(singleline));
+    ___(ps.add_sibling());
+    ___(ps.begin_map_val_flow());
+    ___(ps.set_key_scalar_plain_empty());
+    ___(ps.set_val_anchor("anch51:"));
     ___(ps.set_val_scalar_plain_empty());
     ___(ps.end_map_flow(singleline));
     ___(ps.end_seq_flow(singleline));

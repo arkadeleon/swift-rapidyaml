@@ -16,9 +16,10 @@ jobs:
         - {std: 11, namesfx: 64bit      , cmk: "-DCMAKE_CXX_FLAGS=-m64"}
         - {std: 11, namesfx: 64bit_nocb , cmk: "-DCMAKE_CXX_FLAGS=-m64 -DRYML_DEFAULT_CALLBACKS=OFF"}
         - {std: 11, namesfx: 64bit_noexc, cmk: "-DCMAKE_CXX_FLAGS='-m64 -fno-exceptions -fno-rtti'"}
-        - {std: 11, namesfx: 64bit_exc  , cmk: "-DCMAKE_CXX_FLAGS='-m64' -DRYML_DEFAULT_CALLBACK_USES_EXCEPTIONS=ON"}
-        - {std: 11, namesfx: 64bit_dbg  , cmk: "-DCMAKE_CXX_FLAGS=-m64 -DRYML_DBG=ON"}
-        - {std: 11, namesfx: 32bit      , cmk: "-DCMAKE_CXX_FLAGS=-m32"}
+        - {std: 11, namesfx: 64bit_exc  , cmk: "-DCMAKE_CXX_FLAGS=-m64 -DRYML_DEFAULT_CALLBACK_USES_EXCEPTIONS=ON"}
+        - {std: 11, namesfx: 64bit_17   , cmk: "-DCMAKE_CXX_FLAGS=-m64 -DCMAKE_CXX_STANDARD=17"}
+        - {std: 11, namesfx: 64bit_dbg  , cmk: "-DCMAKE_CXX_FLAGS=-m64 -DRYML_DBG=ON", halfprocs: yes}
+        - {std: 11, namesfx: 32bit      , cmk: "-DCMAKE_CXX_FLAGS=-m32", halfprocs: yes}
         #- {std: 11, namesfx: 32bit_dbg  , cmk: "-DCMAKE_CXX_FLAGS=-m32 -DRYML_DBG=ON"}
     env:
       GCC_VERSION: 13 # the default compiler
@@ -29,11 +30,11 @@ jobs:
     - :: checkout-action
     - name: install compiler
       run: |
-        if [[ ${{matrix}} == *"32"* ]] ; then
+        if [[ ${{matrix.namesfx}} == *"32"* ]] ; then
            sudo dpkg --add-architecture i386
         fi
         sudo apt-get update
-        if [[ ${{matrix}} == *"32"* ]] ; then
+        if [[ ${{matrix.namesfx}} == *"32"* ]] ; then
           sudo apt-get install -y \
               linux-libc-dev:i386 \
               libc6:i386 \
@@ -45,8 +46,11 @@ jobs:
             cmake \
             git \
             lcov \
-            g++-$GCC_VERSION \
+            g++-$GCC_VERSION
+        if [[ ${{matrix.namesfx}} == *"32"* ]] ; then
+          sudo apt-get install -y \
             g++-$GCC_VERSION-multilib
+        fi
     - name: show info
       run: source .github/setenv.sh && c4_show_info
     - name: configure
@@ -59,7 +63,15 @@ jobs:
             ${{matrix.cmk}}
     - name: build
       run: |
-        cmake --build build/$BUILD_ID --verbose --target ryml-test-build --parallel
+        numprocs=`nproc`
+        if [ -n "${{matrix.halfprocs}}" ] ; then
+            if (( $numprocs > 1 )) ; then
+                numprocs=$(($numprocs / 2))
+            fi
+        fi
+        export CMAKE_BUILD_PARALLEL_LEVEL=$numprocs
+        cmake --build build/$BUILD_ID --verbose --target ryml-test-build \
+            --parallel $numprocs
     - name: run
       run: |
         export CTEST_PARALLEL_LEVEL=`nproc`
@@ -69,8 +81,8 @@ jobs:
       with:
         name: coverage-${{env.BUILD_ID}}
         path: |
-          build/${{env.BUILD_ID}}/lcov
-          build/${{env.BUILD_ID}}/coverage3-final_filtered.lcov
+          build/${{env.BUILD_ID}}/lcov-tmp
+          build/${{env.BUILD_ID}}/lcov-tmp/result.lcov
     - name: upload codecov
       run: |
         cmake --build build/$BUILD_ID --target ryml-coverage-submit-codecov --verbose
@@ -80,7 +92,7 @@ jobs:
     #  with:
     #    github-token: ${{secrets.COVERALLS_REPO_TOKEN}}
     #    parallel: true
-    #    files: build/${{env.BUILD_ID}}/coverage3-final_filtered.lcov
+    #    files: build/${{env.BUILD_ID}}/lcov-tmp/result.lcov
 
   #coveralls_finish:
   #  needs: coverage

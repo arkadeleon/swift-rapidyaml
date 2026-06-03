@@ -126,6 +126,16 @@ squoted_case test_cases_filter[] = {
     sqc(R"(    a aaaa    )",  "    a aaaa    "),
     sqc(R"(     a aaaa     )",  "     a aaaa     "),
     sqc(R"(x\ny:z\tx $%^&*()x)", "x\\ny:z\\tx $%^&*()x"),
+    sqc(R"( ---)",  " ---"),
+    sqc(R"( ...)",  " ..."),
+    // 45
+    sqc(R"( --- )",  " --- "),
+    sqc(R"( ... )",  " ... "),
+    sqc(R"(  ---  )",  "  ---  "),
+    sqc(R"(  ...  )",  "  ...  "),
+    sqc(" ---\n",  " --- "),
+    // 50
+    sqc(" ...\n",  " ... "),
     #undef sqc
 };
 
@@ -151,15 +161,10 @@ string'
   string'
 ---
 - 'quoted
-string'
+ string'
 ---
-'quoted
-  string': 'quoted
-  string'
----
-'quoted
-string': 'quoted
-string'
+'quoted string': 'quoted
+ string'
 )";
     test_check_emit_check(yaml, [](Tree const &t){
         EXPECT_EQ(t.docref(0).val(), "quoted string");
@@ -167,7 +172,6 @@ string'
         EXPECT_EQ(t.docref(2)[0].val(), "quoted string");
         EXPECT_EQ(t.docref(3)[0].val(), "quoted string");
         EXPECT_EQ(t.docref(4)["quoted string"].val(), "quoted string");
-        EXPECT_EQ(t.docref(5)["quoted string"].val(), "quoted string");
     });
 }
 
@@ -177,9 +181,9 @@ TEST(single_quoted, test_suite_R4YG)
     csubstr yaml = R"(
 - '	
 
-detected
+ detected
 
-'
+ '
 
 )";
     test_check_emit_check(yaml, [](Tree const &t){
@@ -320,6 +324,7 @@ void verify_filter_error_is_reported(csubstr case_name, csubstr scalar_, Locatio
 
 TEST(single_quoted, error_on_unmatched_quotes)
 {
+    verify_error_is_reported("doc", R"(')");
     verify_error_is_reported("map block", R"(foo: '"
 bar: '')");
     verify_error_is_reported("seq block", R"(- '"
@@ -330,6 +335,7 @@ bar: '')");
 
 TEST(single_quoted, error_on_unmatched_quotes_with_escapes)
 {
+    verify_error_is_reported("doc", R"(''')");
     verify_error_is_reported("map block", R"(foo: '''"
 bar: '')");
     verify_error_is_reported("seq block", R"(- '''"
@@ -515,13 +521,13 @@ R"('''''''''''')",
 );
 
 ADD_CASE_TO_GROUP("squoted, example 2",
-R"('This is a key
+R"('This is a scalar
 
 that has multiple lines
 
-': and this is its value
+'
 )",
-N(MB, L{N(KS|VP, "This is a key\nthat has multiple lines\n", "and this is its value")})
+N(VS, "This is a scalar\nthat has multiple lines\n")
 );
 
 ADD_CASE_TO_GROUP("squoted indentation, 0",
@@ -533,16 +539,16 @@ R"(' 1st non-empty
 N(VS, " 1st non-empty\n2nd non-empty 3rd non-empty ")
 );
 
-/* FIXME - tab is invalid indentation on line 4 (before 3rd non-empty)
+
 ADD_CASE_TO_GROUP("squoted indentation, 1", EXPECT_PARSE_ERROR,
 R"(- ' 1st non-empty
 
  2nd non-empty
 	3rd non-empty '
 )",
-Location(1,1)
+Location(4,1)
 );
-*/
+
 
 ADD_CASE_TO_GROUP("squoted indentation, 2",
 R"(- ' 1st non-empty
@@ -551,6 +557,119 @@ R"(- ' 1st non-empty
  	3rd non-empty '
 )",
 N(SB, L{N(VS, " 1st non-empty\n2nd non-empty 3rd non-empty ")})
+);
+
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 0", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+bar'
+)",
+  Location(3, 1)
+);
+
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 1", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+ bar'
+)",
+  Location(3, 1)
+);
+
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 2", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+  bar'
+)",
+  Location(3, 1)
+);
+
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 4",
+R"(
+- - 'bar
+   bar'
+)",
+  N(SB, L{N(SB, L{N(VS, "bar bar")})})
+);
+
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 0, empty", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 0, spaces lt indent", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+  
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 0, spaces eq indent", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+   
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 0, spaces gt indent", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+    
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 0, spaces gt indent + tabs", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+      	
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 0, spaces eq indent + tabs 1", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+    	
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 0, spaces eq indent + tabs 2", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+   	
+bar"
+)",
+  Location(4, 1)
+);
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 0, spaces lt indent + tabs 1", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+  	
+bar'
+)",
+  Location(3, 1)
+);
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 0, spaces lt indent + tabs 2", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+ 	
+bar'
+)",
+  Location(3, 1)
+);
+ADD_CASE_TO_GROUP("squoted, invalid indentation JKF3, 0, spaces lt indent + tabs 3", EXPECT_PARSE_ERROR,
+R"(
+- - 'bar
+	
+bar'
+)",
+  Location(3, 1)
 );
 
 }

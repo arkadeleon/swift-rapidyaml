@@ -1021,7 +1021,7 @@ TEST(block_literal, carriage_return)
     });
 }
 
-#ifdef JAVAI
+#ifdef FIXME
 TEST(block_literal, errors_on_tab_indents)
 {
     Tree tree;
@@ -1114,12 +1114,54 @@ TEST(block_literal, indentation_indicator_0)
 TEST(block_literal, indentation_indicator_1)
 {
     {
+        SCOPED_TRACE("here");
+        Tree t;
+        ExpectError::check_error_parse(&t, [&t]{
+            t = parse_in_arena("--- |42949672950");
+        });
+    }
+    {
+        SCOPED_TRACE("here");
+        Tree t;
+        ExpectError::check_error_parse(&t, [&t]{
+            t = parse_in_arena("--- |0zza");
+        });
+    }
+    {
+        SCOPED_TRACE("here");
+        Tree t;
+        ExpectError::check_error_parse(&t, [&t]{
+            t = parse_in_arena("--- |zza");
+        });
+    }
+    {
+        SCOPED_TRACE("here");
+        Tree t;
+        ExpectError::check_error_parse(&t, [&t]{
+            t = parse_in_arena("--- |  zza");
+        });
+    }
+    {
+        SCOPED_TRACE("here");
+        Tree t;
+        ExpectError::check_error_parse(&t, [&t]{
+            t = parse_in_arena("--- |#");
+        });
+    }
+    {
+        SCOPED_TRACE("here");
+        Tree t = parse_in_arena("--- | # comment\n  a");
+        EXPECT_EQ(t.docref(0).val(), "a\n");
+    }
+    {
+        SCOPED_TRACE("here");
         Tree t;
         ExpectError::check_error_parse(&t, [&t]{
             t = parse_in_arena("--- |0");
         });
     }
     {
+        SCOPED_TRACE("here");
         Tree t;
         ExpectError::check_error_parse(&t, [&t]{
             t = parse_in_arena("--- |10");

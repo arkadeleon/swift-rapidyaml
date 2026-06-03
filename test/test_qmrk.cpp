@@ -6,7 +6,7 @@ RYML_DEFINE_TEST_MAIN()
 namespace c4 {
 namespace yml {
 
-TEST(explicit_key, test_suite_5WE3)
+TEST(qmrk, test_suite_5WE3)
 {
     csubstr yaml = R"(
 ? explicit key # Empty value
@@ -25,8 +25,32 @@ TEST(explicit_key, test_suite_5WE3)
         EXPECT_EQ(t["block key\n"][1], csubstr("two"));
     });
 }
+TEST(qmrk, test_suite_5WE3_with_leading_space)
+{
+    csubstr yaml = R"(
+? key
+:   - one # Explicit compact
+    - two # block value
+)";
+    Tree tree = parse_in_arena(yaml);
+    EXPECT_TRUE(tree["key"].is_seq());
+    EXPECT_EQ(tree["key"][0].val(), "one");
+    EXPECT_EQ(tree["key"][1].val(), "two");
+}
+TEST(qmrk, test_suite_5WE3_with_leading_tab)
+{
+    csubstr yaml = R"(
+? key
+: \t - one # Explicit compact
+    - two # block value
+)";
+    Tree tree;
+    ExpectError::check_error_parse(&tree, [&]{
+        parse_in_arena(yaml, &tree);
+    }, Location(4, 5));
+}
 
-TEST(explicit_key, test_suite_652Z)
+TEST(qmrk, test_suite_652Z)
 {
     csubstr yaml = R"(
 ?foo: bar  # not an explicit key in RUNK
@@ -47,7 +71,7 @@ TEST(explicit_key, test_suite_652Z)
 }
 
 
-TEST(explicit_key, test_suite_DFF7_v1)
+TEST(qmrk, test_suite_DFF7_v1)
 {
     csubstr yaml = R"(
 {
@@ -68,7 +92,7 @@ implicit: entry,
     });
 }
 
-TEST(explicit_key, test_suite_DFF7_v2)
+TEST(qmrk, test_suite_DFF7_v2)
 {
     csubstr yaml = R"(
 {
@@ -95,7 +119,7 @@ TEST(explicit_key, test_suite_DFF7_v2)
 }
 
 
-TEST(explicit_key, test_suite_FRK4)
+TEST(qmrk, test_suite_FRK4)
 {
     csubstr yaml = R"(
 {
@@ -118,7 +142,7 @@ TEST(explicit_key, test_suite_FRK4)
 //-----------------------------------------------------------------------------
 
 
-CASE_GROUP(EXPLICIT_KEY)
+CASE_GROUP(QMRK)
 {
 
 ADD_CASE_TO_GROUP("explicit key, last value missing",
@@ -281,7 +305,7 @@ R"(
 a simple key: a value
 ? an explicit key: another value
 )",
-  Location(3, 19)
+  Location(3, 19+1)
 );
 
 ADD_CASE_TO_GROUP("explicit key 1st", HAS_CONTAINER_KEYS,
@@ -289,7 +313,7 @@ R"(
 ? an explicit key: another value
 a simple key: a value
 )",
-  Location(2, 19)
+  Location(2, 19+1)
 );
 
 ADD_CASE_TO_GROUP("explicit key nested in a map, 1st", HAS_CONTAINER_KEYS,
@@ -299,7 +323,7 @@ map:
   a simple key: a value
 ? an explicit key deindented: its value
 )",
-  Location(3, 21)
+  Location(3, 21+1)
 );
 
 ADD_CASE_TO_GROUP("explicit key nested in a seq, 1st", HAS_CONTAINER_KEYS,
@@ -308,7 +332,7 @@ R"(
   a simple key: a value
 - ? another explicit key: its value
 )",
-  Location(2, 21)
+  Location(2, 21+1)
 );
 
 ADD_CASE_TO_GROUP("explicit block key, literal, clip",

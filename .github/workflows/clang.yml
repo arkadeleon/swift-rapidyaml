@@ -53,7 +53,11 @@ jobs:
         submodules: recursive
         fetch-depth: 0
     - run: git config --system --add safe.directory '*'
-    - run: c4core-install ${{matrix.cxx}}
+    - run: |
+        # retry if it fails
+        c4core-install ${{matrix.cxx}} \
+          || c4core-install ${{matrix.cxx}} \
+          || c4core-install ${{matrix.cxx}}
     - name: show info
       run: source .github/setenv.sh && c4_show_info
     - name: shared64-configure---------------------------------------------------
@@ -89,7 +93,6 @@ jobs:
     - name: shared32-pack
       run: source .github/setenv.sh && c4_package shared32
   tabtokens:
-    if: always()
     continue-on-error: false
     name: tabtokens/${{matrix.cxx}}/c++${{matrix.std}}/${{matrix.bt}}
     runs-on: ubuntu-24.04
@@ -124,7 +127,11 @@ jobs:
         submodules: recursive
         fetch-depth: 0
     - run: git config --system --add safe.directory '*'
-    - run: c4core-install ${{matrix.cxx}}
+    - run: |
+        # retry if it fails
+        c4core-install ${{matrix.cxx}} \
+          || c4core-install ${{matrix.cxx}} \
+          || c4core-install ${{matrix.cxx}}
     - name: show info
       run: source .github/setenv.sh && c4_show_info
     - name: shared64-configure---------------------------------------------------
@@ -160,7 +167,6 @@ jobs:
     - name: shared32-pack
       run: source .github/setenv.sh && c4_package shared32
   noexceptions:
-    if: always()
     continue-on-error: false
     name: noexceptions/${{matrix.cxx}}/c++${{matrix.std}}/${{matrix.bt}}
     runs-on: ubuntu-24.04
@@ -195,7 +201,11 @@ jobs:
         submodules: recursive
         fetch-depth: 0
     - run: git config --system --add safe.directory '*'
-    - run: c4core-install ${{matrix.cxx}}
+    - run: |
+        # retry if it fails
+        c4core-install ${{matrix.cxx}} \
+          || c4core-install ${{matrix.cxx}} \
+          || c4core-install ${{matrix.cxx}}
     - name: show info
       run: source .github/setenv.sh && c4_show_info
     - name: shared64-configure---------------------------------------------------
@@ -231,7 +241,6 @@ jobs:
     - name: shared32-pack
       run: source .github/setenv.sh && c4_package shared32
   nocallbacks:
-    if: always()
     continue-on-error: false
     name: nocallbacks/${{matrix.cxx}}/c++${{matrix.std}}/${{matrix.bt}}
     runs-on: ubuntu-24.04
@@ -266,7 +275,11 @@ jobs:
         submodules: recursive
         fetch-depth: 0
     - run: git config --system --add safe.directory '*'
-    - run: c4core-install ${{matrix.cxx}}
+    - run: |
+        # retry if it fails
+        c4core-install ${{matrix.cxx}} \
+          || c4core-install ${{matrix.cxx}} \
+          || c4core-install ${{matrix.cxx}}
     - name: show info
       run: source .github/setenv.sh && c4_show_info
     - name: shared64-configure---------------------------------------------------
@@ -302,7 +315,6 @@ jobs:
     - name: shared32-pack
       run: source .github/setenv.sh && c4_package shared32
   extended:
-    if: always()
     continue-on-error: false
     name: extended/${{matrix.cxx}}/${{matrix.bits}}bit/c++${{matrix.std}}/vg${{matrix.vg}}
     runs-on: ubuntu-24.04
@@ -556,7 +568,11 @@ jobs:
         # show the last commit
         git log --name-status HEAD^..HEAD
     - name: install
-      run: c4core-install clang++-${{matrix.cxx}}
+      run: |
+        # retry if it fails
+        c4core-install clang++-${{matrix.cxx}} \
+        || c4core-install clang++-${{matrix.cxx}} \
+        || c4core-install clang++-${{matrix.cxx}}
     - name: '---------------------------------------------------------'
       run: |
         echo "Debug ::: -m${{matrix.bits}}"
@@ -579,7 +595,17 @@ jobs:
           -DRYML_DBG=OFF
     - name: 'build Debug ::: -m${{matrix.bits}}'
       run: |
-        cmake --build build/Debug --target ryml-test-build --parallel --verbose
+        source .github/setenv.sh
+        numprocs=`_c4getnumcores`
+        if [ -n "0"] ; then
+            if [ "0" == "1" ] ; then
+                if (( $numprocs > 1 )) ; then
+                    numprocs=$(($numprocs / 2))
+                fi
+            fi
+        fi
+        export CMAKE_BUILD_PARALLEL_LEVEL=$numprocs
+        cmake --build build/Debug --target ryml-test-build --parallel $numprocs --verbose
     - name: 'run Debug ::: -m${{matrix.bits}}'
       run: |
         source .github/setenv.sh
@@ -607,7 +633,17 @@ jobs:
           -DRYML_DBG=OFF
     - name: 'build Release ::: -O1 -DNDEBUG -m${{matrix.bits}}'
       run: |
-        cmake --build build/Release --target ryml-test-build --parallel --verbose
+        source .github/setenv.sh
+        numprocs=`_c4getnumcores`
+        if [ -n "0"] ; then
+            if [ "0" == "1" ] ; then
+                if (( $numprocs > 1 )) ; then
+                    numprocs=$(($numprocs / 2))
+                fi
+            fi
+        fi
+        export CMAKE_BUILD_PARALLEL_LEVEL=$numprocs
+        cmake --build build/Release --target ryml-test-build --parallel $numprocs --verbose
     - name: 'run Release ::: -O1 -DNDEBUG -m${{matrix.bits}}'
       run: |
         source .github/setenv.sh
@@ -635,7 +671,17 @@ jobs:
           -DRYML_DBG=OFF
     - name: 'build Release ::: -O2 -DNDEBUG -m${{matrix.bits}}'
       run: |
-        cmake --build build/Release --target ryml-test-build --parallel --verbose
+        source .github/setenv.sh
+        numprocs=`_c4getnumcores`
+        if [ -n "0"] ; then
+            if [ "0" == "1" ] ; then
+                if (( $numprocs > 1 )) ; then
+                    numprocs=$(($numprocs / 2))
+                fi
+            fi
+        fi
+        export CMAKE_BUILD_PARALLEL_LEVEL=$numprocs
+        cmake --build build/Release --target ryml-test-build --parallel $numprocs --verbose
     - name: 'run Release ::: -O2 -DNDEBUG -m${{matrix.bits}}'
       run: |
         source .github/setenv.sh
@@ -663,7 +709,17 @@ jobs:
           -DRYML_DBG=OFF
     - name: 'build Release ::: -O3 -DNDEBUG -m${{matrix.bits}}'
       run: |
-        cmake --build build/Release --target ryml-test-build --parallel --verbose
+        source .github/setenv.sh
+        numprocs=`_c4getnumcores`
+        if [ -n "0"] ; then
+            if [ "0" == "1" ] ; then
+                if (( $numprocs > 1 )) ; then
+                    numprocs=$(($numprocs / 2))
+                fi
+            fi
+        fi
+        export CMAKE_BUILD_PARALLEL_LEVEL=$numprocs
+        cmake --build build/Release --target ryml-test-build --parallel $numprocs --verbose
     - name: 'run Release ::: -O3 -DNDEBUG -m${{matrix.bits}}'
       run: |
         source .github/setenv.sh
@@ -691,14 +747,23 @@ jobs:
           -DRYML_DBG=OFF
     - name: 'build Release ::: -Os -DNDEBUG -m${{matrix.bits}}'
       run: |
-        cmake --build build/Release --target ryml-test-build --parallel --verbose
+        source .github/setenv.sh
+        numprocs=`_c4getnumcores`
+        if [ -n "0"] ; then
+            if [ "0" == "1" ] ; then
+                if (( $numprocs > 1 )) ; then
+                    numprocs=$(($numprocs / 2))
+                fi
+            fi
+        fi
+        export CMAKE_BUILD_PARALLEL_LEVEL=$numprocs
+        cmake --build build/Release --target ryml-test-build --parallel $numprocs --verbose
     - name: 'run Release ::: -Os -DNDEBUG -m${{matrix.bits}}'
       run: |
         source .github/setenv.sh
         export CTEST_PARALLEL_LEVEL=`_c4getnumcores`
         cmake --build build/Release --target ryml-test-run
   clangsan:
-    if: always()
     continue-on-error: false
     name: san/${{matrix.bt}}/c++${{matrix.std}}
     runs-on: ubuntu-24.04
@@ -788,7 +853,11 @@ jobs:
         submodules: recursive
         fetch-depth: 0
     - run: git config --system --add safe.directory '*'
-    - run: c4core-install ${{matrix.cxx}}
+    - run: |
+        # retry if it fails
+        c4core-install ${{matrix.cxx}} \
+          || c4core-install ${{matrix.cxx}} \
+          || c4core-install ${{matrix.cxx}}
     - name: show info
       run: source .github/setenv.sh && c4_show_info
     - name: shared64-configure---------------------------------------------------

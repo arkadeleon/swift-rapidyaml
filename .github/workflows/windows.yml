@@ -58,6 +58,26 @@ jobs:
           os: 2022
           gen: Visual Studio 17 2022
           arch: Win32
+        - std: 11
+          name: vs2026/64
+          os: latest
+          gen: Visual Studio 18 2026
+          arch: x64
+        - std: 11
+          name: vs2026/32
+          os: latest
+          gen: Visual Studio 18 2026
+          arch: Win32
+        - std: 23
+          name: vs2026/64
+          os: latest
+          gen: Visual Studio 18 2026
+          arch: x64
+        - std: 23
+          name: vs2026/32
+          os: latest
+          gen: Visual Studio 18 2026
+          arch: Win32
     steps:
     - name: checkout (action)
       uses: actions/checkout@v4
@@ -189,6 +209,26 @@ jobs:
           name: vs2022/32
           os: 2022
           gen: Visual Studio 17 2022
+          arch: Win32
+        - std: 11
+          name: vs2026/64
+          os: latest
+          gen: Visual Studio 18 2026
+          arch: x64
+        - std: 11
+          name: vs2026/32
+          os: latest
+          gen: Visual Studio 18 2026
+          arch: Win32
+        - std: 23
+          name: vs2026/64
+          os: latest
+          gen: Visual Studio 18 2026
+          arch: x64
+        - std: 23
+          name: vs2026/32
+          os: latest
+          gen: Visual Studio 18 2026
           arch: Win32
     steps:
     - name: checkout (action)
@@ -449,39 +489,75 @@ jobs:
         source .github/setenv.sh
         export CTEST_PARALLEL_LEVEL=`_c4getnumcores`
         cmake --build build/Release --target ryml-test-run --config Release
-  vsclang:
+  othercompilers:
     if: always()
     continue-on-error: false
-    name: vsclang/c++${{matrix.std}}/${{matrix.bt}}
-    runs-on: windows-${{matrix.os}}
+    name: ${{matrix.name}}/${{matrix.bt}}/c++${{matrix.std}}
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         include:
         - std: 11
-          name: vs2022/debug/static
-          os: 2022
-          gen: Visual Studio 17 2022
+          name: clangcl/static
           bt: Debug
           shared: 'OFF'
+          cxx: -G "Visual Studio 18 2026" -T ClangCL
         - std: 11
-          name: vs2022/release/shared
-          os: 2022
-          gen: Visual Studio 17 2022
+          name: clangcl/shared
           bt: Release
           shared: 'ON'
+          cxx: -G "Visual Studio 18 2026" -T ClangCL
         - std: 20
-          name: vs2022/debug/shared
-          os: 2022
-          gen: Visual Studio 17 2022
+          name: clangcl/static
           bt: Debug
           shared: 'OFF'
+          cxx: -G "Visual Studio 18 2026" -T ClangCL
         - std: 20
-          name: vs2022/release/shared
-          os: 2022
-          gen: Visual Studio 17 2022
+          name: clangcl/shared
           bt: Release
           shared: 'ON'
+          cxx: -G "Visual Studio 18 2026" -T ClangCL
+        - std: 11
+          name: clang++/static
+          bt: Debug
+          shared: 'OFF'
+          cxx: -G "Unix Makefiles" -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+        - std: 11
+          name: clang++/shared
+          bt: Release
+          shared: 'ON'
+          cxx: -G "Unix Makefiles" -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+        - std: 20
+          name: clang++/static
+          bt: Debug
+          shared: 'OFF'
+          cxx: -G "Unix Makefiles" -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+        - std: 20
+          name: clang++/shared
+          bt: Release
+          shared: 'ON'
+          cxx: -G "Unix Makefiles" -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+        - std: 11
+          name: g++/static
+          bt: Debug
+          shared: 'OFF'
+          cxx: -G "Unix Makefiles" -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc
+        - std: 11
+          name: g++/shared
+          bt: Debug
+          shared: 'ON'
+          cxx: -G "Unix Makefiles" -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc
+        - std: 20
+          name: g++/static
+          bt: Debug
+          shared: 'OFF'
+          cxx: -G "Unix Makefiles" -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc
+        - std: 20
+          name: g++/shared
+          bt: Debug
+          shared: 'ON'
+          cxx: -G "Unix Makefiles" -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc
     steps:
     - name: checkout (action)
       uses: actions/checkout@v4
@@ -491,12 +567,11 @@ jobs:
     - name: config
       run: |
         cmake -B build/ \
-              -G "${{matrix.gen}}" -T ClangCL \
+              ${{matrix.cxx}} \
               -DCMAKE_BUILD_TYPE=${{matrix.bt}} \
               -DCMAKE_CXX_STANDARD=${{matrix.std}} \
-              -DCMAKE_CXX_FLAGS=' /DWIN32 /D_WINDOWS /W3 /GR /EHsc /D_CRT_SECURE_NO_WARNINGS ' \
-              -DCMAKE_C_FLAGS=' /DWIN32 /D_WINDOWS /W3 /GR /EHsc /D_CRT_SECURE_NO_WARNINGS ' \
               -DBUILD_SHARED_LIBS=${{matrix.shared}} \
+              "${{matrix.extra}}" \
               -DRYML_DEV=ON \
               -DRYML_BUILD_BENCHMARKS=OFF
     - name: build

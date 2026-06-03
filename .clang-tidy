@@ -24,6 +24,7 @@ Checks:
   - -cppcoreguidelines-no-malloc # do not manage memory manually; consider a container or a smart pointer
   - -cppcoreguidelines-owning-memory # initializing non-owner 'void *' with a newly created 'gsl::owner<>'
   - -cppcoreguidelines-pro-bounds-array-to-pointer-decay
+  - -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access # possibly unsafe 'operator[]', consider bounds-safe alternatives
   - -cppcoreguidelines-pro-bounds-constant-array-index # do not use array subscript when the index is not an integer constant expression
   - -cppcoreguidelines-pro-bounds-pointer-arithmetic # do not use pointer arithmetic
   - -cppcoreguidelines-pro-type-cstyle-cast # do not use C-style cast to convert between unrelated types
@@ -59,6 +60,7 @@ Checks:
   - -llvm-header-guard # header guard does not follow preferred style
   - -llvm-include-order # #includes are not sorted properly
   - -llvm-namespace-comment # anonymous namespace not terminated with a closing comment
+  - -llvm-prefer-static-over-anonymous-namespace # function declared in an anonymous namespace; prefer using 'static' for restricting visibility
   - -llvmlibc-callee-namespace # ... must resolve to a function declared within the namespace defined by the ... macro
   - -llvmlibc-implementation-in-namespace # the outermost namespace should be the 'LIBC_NAMESPACE' macro
   - -llvmlibc-inline-function-decl # '_is_idchar' must be tagged with the LIBC_INLINE macro; the macro should be placed at the beginning of the declaration
@@ -95,10 +97,12 @@ Checks:
   - -readability-named-parameter # all parameters should be named in a function
   - -readability-redundant-access-specifiers # redundant access specifier has the same accessibility as the previous access specifier
   - -readability-redundant-member-init # initializer for member 'm_arena' is redundant
+  - -readability-redundant-parentheses # redundant parentheses around expression
   - -readability-simplify-boolean-expr # boolean expression can be simplified by DeMorgan's theorem
   - -readability-suspicious-call-argument # 1st argument 'after' (passed to 'node') looks like it might be swapped with the 2nd, 'node' (passed to 'sib')
   - -readability-uppercase-literal-suffix # integer literal has suffix 'u', which is not uppercase
   - -readability-use-anyofallof # replace loop by 'std::all_of()'
+  - -readability-use-concise-preprocessor-directives # replace loop by 'std::all_of()'
 
 # Turn all the warnings from the checks above into errors.
 WarningsAsErrors: '*'

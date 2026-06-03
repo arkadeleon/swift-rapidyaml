@@ -18,11 +18,11 @@ namespace c4 {
 namespace yml {
 
 // instantiate the template
-template class ParseEngine<extra::EventHandlerInts>;
+template class RYML_EXPORT ParseEngine<extra::EventHandlerInts>;
 
 namespace extra {
 
-int32_t estimate_events_ints_size(csubstr src)
+RYML_EXPORT int32_t estimate_events_ints_size(csubstr src)
 {
     int32_t count = 7; // BSTR + BDOC + =VAL + EDOC + ESTR
     for(size_t i = 0; i < src.len; ++i)
@@ -87,8 +87,8 @@ static_assert((MASK & KEY_) == KEY_, "overflow?");
 static_assert((MASK & VAL_) == VAL_, "overflow?");
 static_assert((MASK & EXPL) == EXPL, "overflow?");
 static_assert((MASK & YAML) == YAML, "overflow?");
-static_assert((MASK & TAGD) == TAGD, "overflow?");
-static_assert((MASK & TAGV) == TAGV, "overflow?");
+static_assert((MASK & TAGH) == TAGH, "overflow?");
+static_assert((MASK & TAGP) == TAGP, "overflow?");
 static_assert((MASK & AREN) == AREN, "overflow?");
 static_assert((MASK & PSTR) == PSTR, "overflow?");
 static_assert((MASK & UNFILT) == UNFILT, "overflow?");

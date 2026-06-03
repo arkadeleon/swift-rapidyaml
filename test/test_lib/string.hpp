@@ -414,6 +414,10 @@ public:
 
 } // namespace extra
 } // namespace yml
+
+template<class T> struct is_string; // fwd-declare
+template<> struct is_string<c4::yml::extra::string> : std::true_type {};
+
 } // namespace c4
 
 C4_SUPPRESS_WARNING_GCC_POP

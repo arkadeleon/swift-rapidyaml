@@ -151,7 +151,7 @@ void test_events_ints_invariants(csubstr parsed_yaml,
         }
         constexpr const ievt::DataType style = ievt::PLAI|ievt::SQUO|ievt::DQUO|ievt::LITL|ievt::FOLD;
         constexpr const ievt::DataType scope = ievt::MAP_|ievt::SEQ_|ievt::DOC_|ievt::STRM;
-        constexpr const ievt::DataType directives = ievt::YAML|ievt::TAGD|ievt::TAGV;
+        constexpr const ievt::DataType directives = ievt::YAML|ievt::TAGH|ievt::TAGP;
         if(evt & (ievt::BEG_|ievt::END_))
         {
             EXPECT_NE(evt & scope, 0);
@@ -183,8 +183,8 @@ void test_events_ints_invariants(csubstr parsed_yaml,
         // now check each flag
         if(evt & ievt::YAML)
         {
-            EXPECT_EQ(evt & ievt::TAGD, 0);
-            EXPECT_EQ(evt & ievt::TAGV, 0);
+            EXPECT_EQ(evt & ievt::TAGH, 0);
+            EXPECT_EQ(evt & ievt::TAGP, 0);
             EXPECT_EQ(evt & ievt::BSTR, 0);
             EXPECT_EQ(evt & ievt::ESTR, 0);
             EXPECT_EQ(evt & ievt::EXPL, 0);
@@ -202,14 +202,14 @@ void test_events_ints_invariants(csubstr parsed_yaml,
             EXPECT_EQ(evt & (ievt::PLAI|ievt::SQUO|ievt::DQUO|ievt::LITL|ievt::FOLD), 0);
             EXPECT_EQ(next & ievt::PSTR, ievt::PSTR);
         }
-        if(evt & ievt::TAGD)
+        if(evt & ievt::TAGH)
         {
             EXPECT_EQ(evt & ievt::YAML, 0);
-            EXPECT_EQ(evt & ievt::TAGV, 0);
+            EXPECT_EQ(evt & ievt::TAGP, 0);
             EXPECT_EQ(evt & ievt::BSTR, 0);
             EXPECT_EQ(evt & ievt::ESTR, 0);
             EXPECT_EQ(evt & ievt::EXPL, 0);
-            EXPECT_EQ(evt & ievt::WSTR, ievt::TAGD);
+            EXPECT_EQ(evt & ievt::WSTR, ievt::TAGH);
             EXPECT_EQ(evt & ievt::SCLR, 0);
             EXPECT_EQ(evt & ievt::ALIA, 0);
             EXPECT_EQ(evt & ievt::ANCH, 0);
@@ -223,14 +223,14 @@ void test_events_ints_invariants(csubstr parsed_yaml,
             EXPECT_EQ(evt & (ievt::PLAI|ievt::SQUO|ievt::DQUO|ievt::LITL|ievt::FOLD), 0);
             EXPECT_EQ(next & ievt::PSTR, ievt::PSTR);
         }
-        if(evt & ievt::TAGV)
+        if(evt & ievt::TAGP)
         {
             EXPECT_EQ(evt & ievt::YAML, 0);
-            EXPECT_EQ(evt & ievt::TAGD, 0);
+            EXPECT_EQ(evt & ievt::TAGH, 0);
             EXPECT_EQ(evt & ievt::BSTR, 0);
             EXPECT_EQ(evt & ievt::ESTR, 0);
             EXPECT_EQ(evt & ievt::EXPL, 0);
-            EXPECT_EQ(evt & ievt::WSTR, ievt::TAGV);
+            EXPECT_EQ(evt & ievt::WSTR, ievt::TAGP);
             EXPECT_EQ(evt & ievt::SCLR, 0);
             EXPECT_EQ(evt & ievt::ALIA, 0);
             EXPECT_EQ(evt & ievt::ANCH, 0);

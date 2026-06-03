@@ -17,6 +17,7 @@
 
 
 C4_SUPPRESS_WARNING_GCC_CLANG_WITH_PUSH("-Wold-style-cast")
+// NOLINTBEGIN(modernize-avoid-c-style-cast)
 
 
 //-----------------------------------------------------------------------------
@@ -44,7 +45,7 @@ using EmitterBuf  = Emitter<WriterBuf>;
 //-----------------------------------------------------------------------------
 
 /** Specifies the type of content to emit */
-typedef enum {
+typedef enum { // NOLINT
     EMIT_YAML = 0, ///< emit YAML
     EMIT_JSON = 1, ///< emit JSON
 } EmitType_e;
@@ -60,7 +61,7 @@ struct EmitOptions
 public:
 
     /** @cond dev */
-    typedef enum : uint32_t {
+    typedef enum : uint32_t { // NOLINT
         EMIT_NONROOT_KEY = 1u << 0u,
         EMIT_NONROOT_DASH = 1u << 1u,
         EMIT_NONROOT_MARKUP = EMIT_NONROOT_KEY|EMIT_NONROOT_DASH,
@@ -329,7 +330,7 @@ private:
 private: // pending whitespace
 
     /// pending whitespace
-    typedef enum : uint32_t { _PWS_NONE, _PWS_SPACE, _PWS_NEWL } Pws_e;
+    typedef enum : uint32_t { _PWS_NONE, _PWS_SPACE, _PWS_NEWL } Pws_e; // NOLINT
 
     /// set pending whitespace, ignoring pending
     C4_ALWAYS_INLINE void _pend_none() noexcept
@@ -377,7 +378,7 @@ private:
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wparentheses"
     #endif
-    enum : type_bits {
+    enum : type_bits { // NOLINT
         _styles_block_key = KEY_LITERAL|KEY_FOLDED,
         _styles_block_val = VAL_LITERAL|VAL_FOLDED,
         _styles_block     = ((type_bits)_styles_block_key) | ((type_bits)_styles_block_val),
@@ -1051,6 +1052,7 @@ RYML_DEPRECATE_EMITRS CharOwningContainer emitrs(ConstNodeRef const& n)
 } // namespace yml
 } // namespace c4
 
+// NOLINTEND(modernize-avoid-c-style-cast)
 C4_SUPPRESS_WARNING_GCC_CLANG_POP
 
 #undef RYML_DEPRECATE_EMIT

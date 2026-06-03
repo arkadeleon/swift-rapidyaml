@@ -12,6 +12,8 @@
 #define _c4dbg_node(...)
 #endif
 
+// NOLINTBEGIN(modernize-avoid-c-style-cast)
+
 namespace c4 {
 namespace yml {
 
@@ -66,11 +68,24 @@ inline char _scalar_code_val(Tree const& p, id_type node)
 }
 inline C4_NO_INLINE id_type print_node(Tree const& p, id_type node, int level, id_type count, bool print_children, bool print_address=false)
 {
+    NodeType type = p.type(node);
+    if(type.is_doc())
+    {
+        TagDirectiveRange tagds = p.m_tag_directives.lookup_range(node);
+        for(TagDirective const& td : tagds)
+        {
+            printf("%%TAG[%zd] %.*s %.*s [doc=%zu]\n",
+                   &td - p.m_tag_directives.m_directives,
+                   (int)td.handle.len, td.handle.str,
+                   (int)td.prefix.len, td.prefix.str,
+                   td.doc_id);
+        }
+    }
     printf("[%zu]%*s[%zu]", (size_t)count, (2*level), "", (size_t)node);
     if(print_address) printf(" %p", (void const*)p.get(node));
     if(p.is_root(node)) printf(" [ROOT]");
     char typebuf[128];
-    csubstr typestr = p.type(node).type_str(typebuf);
+    csubstr typestr = type.type_str_sub(typebuf);
     _RYML_CHECK_BASIC(typestr.str);
     printf(" %.*s", (int)typestr.len, typestr.str);
     if(p.has_key(node))
@@ -83,7 +98,10 @@ inline C4_NO_INLINE id_type print_node(Tree const& p, id_type node, int level, i
         if(p.has_key_tag(node))
         {
             csubstr kt = p.key_tag(node);
-            printf(" <%.*s>", (int)kt.len, kt.str);
+            if(kt.begins_with('<'))
+                printf(" %.*s", (int)kt.len, kt.str);
+            else
+                printf(" <%.*s>", (int)kt.len, kt.str);
         }
         const char code = _scalar_code_key(p, node);
         csubstr k  = p.key(node);
@@ -97,7 +115,10 @@ inline C4_NO_INLINE id_type print_node(Tree const& p, id_type node, int level, i
     if(p.has_val_tag(node))
     {
         csubstr vt = p.val_tag(node);
-        printf(" <%.*s>", (int)vt.len, vt.str);
+        if(vt.begins_with('<'))
+            printf(" %.*s", (int)vt.len, vt.str);
+        else
+            printf(" <%.*s>", (int)vt.len, vt.str);
     }
     if(p.has_val(node))
     {
@@ -179,5 +200,6 @@ C4_SUPPRESS_WARNING_GCC_CLANG_POP
 } /* namespace yml */
 } /* namespace c4 */
 
+// NOLINTEND(modernize-avoid-c-style-cast)
 
 #endif /* C4_YML_DETAIL_PRINT_HPP_ */
