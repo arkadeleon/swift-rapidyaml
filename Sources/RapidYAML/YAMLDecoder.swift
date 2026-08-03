@@ -244,6 +244,10 @@ private struct _YAMLKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContain
         return try decoder(for: key).decodeNil()
     }
 
+    func decode<T>(_ type: T.Type, forKey key: Key) throws -> T where T: Decodable & ScalarConstructible {
+        return try decoder(for: key).decode(type)
+    }
+
     func decode<T>(_ type: T.Type, forKey key: Key) throws -> T where T: Decodable {
         return try decoder(for: key).decode(type)
     }
@@ -313,6 +317,10 @@ private struct _YAMLUnkeyedDecodingContainer: UnkeyedDecodingContainer {
         return try currentDecoder { $0.decodeNil() }
     }
 
+    mutating func decode<T>(_ type: T.Type) throws -> T where T: Decodable & ScalarConstructible {
+        return try currentDecoder { try $0.decode(type) }
+    }
+
     mutating func decode<T>(_ type: T.Type) throws -> T where T: Decodable {
         return try currentDecoder { try $0.decode(type) }
     }
@@ -357,96 +365,96 @@ extension _YAMLDecoder: SingleValueDecodingContainer {
 
     // MARK: - Swift.SingleValueDecodingContainer Methods
 
-    /// - note: Yams asks the `Constructor` here (`node.null == NSNull()`). This is the same test
-    ///         spelled out: the resolver recognises ``, `~`, `null`, `Null` and `NULL`, and only a
-    ///         plain scalar counts, so `key: 'null'` is the string and not nil. Phase 4 replaces
-    ///         this with the constructor call.
-    func decodeNil() -> Bool {
-        guard let scalar = node.scalar, case .plain = scalar.style else { return false }
-        return scalar.resolvedTag.name == .null
-    }
-
-    func decode(_ type: Bool.Type) throws -> Bool {
-        try construct(type) { Bool($0) }
-    }
-
-    func decode(_ type: String.Type) throws -> String {
-        try construct(type) { $0 }
-    }
-
-    func decode(_ type: Double.Type) throws -> Double {
-        try construct(type) { Double($0) }
-    }
-
-    func decode(_ type: Float.Type) throws -> Float {
-        try construct(type) { Float($0) }
-    }
-
-    func decode(_ type: Int.Type) throws -> Int {
-        try construct(type) { Int($0) }
-    }
-
-    func decode(_ type: Int8.Type) throws -> Int8 {
-        try construct(type) { Int8($0) }
-    }
-
-    func decode(_ type: Int16.Type) throws -> Int16 {
-        try construct(type) { Int16($0) }
-    }
-
-    func decode(_ type: Int32.Type) throws -> Int32 {
-        try construct(type) { Int32($0) }
-    }
-
-    func decode(_ type: Int64.Type) throws -> Int64 {
-        try construct(type) { Int64($0) }
-    }
-
-    func decode(_ type: UInt.Type) throws -> UInt {
-        try construct(type) { UInt($0) }
-    }
-
-    func decode(_ type: UInt8.Type) throws -> UInt8 {
-        try construct(type) { UInt8($0) }
-    }
-
-    func decode(_ type: UInt16.Type) throws -> UInt16 {
-        try construct(type) { UInt16($0) }
-    }
-
-    func decode(_ type: UInt32.Type) throws -> UInt32 {
-        try construct(type) { UInt32($0) }
-    }
-
-    func decode(_ type: UInt64.Type) throws -> UInt64 {
-        try construct(type) { UInt64($0) }
-    }
-
-    func decode<T>(_ type: T.Type) throws -> T where T: Decodable {
-        try _decode(type)
-    }
+    func decodeNil() -> Bool { return node.null == NSNull() }
+    func decode<T>(_ type: T.Type) throws -> T where T: Decodable & ScalarConstructible { return try _decode(type) }
+    func decode<T>(_ type: T.Type) throws -> T where T: Decodable { return try _decode(type) }
 
     // MARK: -
 
     private func _decode<T: Decodable>(_ type: T.Type) throws -> T {
-        // `Decimal` and `URL` are `Decodable` through keyed containers, but YAML represents
-        // them as plain scalars, so construct them from the scalar instead.
-        switch type {
-        case is Decimal.Type:
-            return try construct(type) { Decimal(string: $0) as? T }
-        case is URL.Type:
-            return try construct(type) { URL(string: $0) as? T }
-        default:
-            return try type.init(from: self)
+        if let constructibleType = type as? ScalarConstructible.Type {
+            let scalarConstructed = try constructScalar(constructibleType)
+            guard let scalarT = scalarConstructed as? T else {
+                throw _typeMismatch(at: codingPath, expectation: type, reality: scalarConstructed)
+            }
+            return scalarT
         }
+        // not scalar constructable, initialize as Decodable
+        return try type.init(from: self)
     }
 
-    /// construct `T` from the scalar of `node`, or throws `DecodingError.typeMismatch`
-    private func construct<T>(_ type: T.Type, _ closure: (String) -> T?) throws -> T {
-        guard let constructed = closure(try scalar().string) else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
+    /// constuct `T` from `node`
+    private func constructScalar<T: ScalarConstructible>(_ type: T.Type) throws -> T {
+        let scalar = try self.scalar()
+        guard let constructed = type.construct(from: scalar) else {
+            throw _typeMismatch(at: codingPath, expectation: type, reality: scalar)
         }
         return constructed
+    }
+}
+
+// MARK: - ScalarConstructible FixedWidthInteger & SignedInteger Conformance
+
+extension FixedWidthInteger where Self: SignedInteger {
+    /// Construct an instance of `Self`, if possible, from the specified scalar.
+    ///
+    /// - parameter scalar: The `Node.Scalar` from which to extract a value of type `Self`, if possible.
+    ///
+    /// - returns: An instance of `Self`, if one was successfully extracted from the scalar.
+    public static func construct(from scalar: Node.Scalar) -> Self? {
+        return Int64.construct(from: scalar).flatMap(Self.init(exactly:))
+    }
+}
+
+// MARK: - ScalarConstructible FixedWidthInteger & UnsignedInteger Conformance
+
+extension FixedWidthInteger where Self: UnsignedInteger {
+    /// Construct an instance of `Self`, if possible, from the specified scalar.
+    ///
+    /// - parameter scalar: The `Node.Scalar` from which to extract a value of type `Self`, if possible.
+    ///
+    /// - returns: An instance of `Self`, if one was successfully extracted from the scalar.
+    public static func construct(from scalar: Node.Scalar) -> Self? {
+        return UInt64.construct(from: scalar).flatMap(Self.init(exactly:))
+    }
+}
+
+// MARK: - ScalarConstructible Int8 Conformance
+extension Int8: ScalarConstructible {}
+// MARK: - ScalarConstructible Int16 Conformance
+extension Int16: ScalarConstructible {}
+// MARK: - ScalarConstructible Int32 Conformance
+extension Int32: ScalarConstructible {}
+// MARK: - ScalarConstructible UInt8 Conformance
+extension UInt8: ScalarConstructible {}
+// MARK: - ScalarConstructible UInt16 Conformance
+extension UInt16: ScalarConstructible {}
+// MARK: - ScalarConstructible UInt32 Conformance
+extension UInt32: ScalarConstructible {}
+
+// MARK: - ScalarConstructible Decimal Conformance
+
+extension Decimal: ScalarConstructible {
+    /// Construct an instance of `Decimal`, if possible, from the specified scalar.
+    ///
+    /// - parameter scalar: The `Node.Scalar` from which to extract a value of type `Decimal`, if possible.
+    ///
+    /// - returns: An instance of `Decimal`, if one was successfully extracted from the scalar.
+    public static func construct(from scalar: Node.Scalar) -> Decimal? {
+        return Decimal(string: scalar.string)
+    }
+}
+
+// MARK: - ScalarConstructible URL Conformance
+
+extension URL: ScalarConstructible {
+    /// Construct an instance of `URL`, if possible, from the specified scalar.
+    ///
+    /// - parameter scalar: The `Node.Scalar` from which to extract a value of type `URL`, if possible.
+    ///
+    /// - returns: An instance of `URL`, if one was successfully extracted from the scalar.
+    public static func construct(from scalar: Node.Scalar) -> URL? {
+        return URL(string: scalar.string)
     }
 }
 

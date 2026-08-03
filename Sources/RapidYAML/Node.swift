@@ -94,12 +94,49 @@ extension Node {
 
     // MARK: - Typed accessor properties
 
+    /// This node as an `Any`, if convertible.
+    public var any: Any {
+        return tag.constructor.any(from: self)
+    }
+
     /// This node as a `String`, if convertible.
-    ///
-    /// - note: Until Phase 4 lands `ScalarConstructible`, this is the scalar's string as written,
-    ///         and `nil` for every other kind of node.
     public var string: String? {
-        return scalar?.string
+        return String.construct(from: self)
+    }
+
+    /// This node as a `Bool`, if convertible.
+    public var bool: Bool? {
+        return scalar.flatMap(Bool.construct)
+    }
+
+    /// This node as a `Double`, if convertible.
+    public var float: Double? {
+        return scalar.flatMap(Double.construct)
+    }
+
+    /// This node as an `NSNull`, if convertible.
+    public var null: NSNull? {
+        return scalar.flatMap(NSNull.construct)
+    }
+
+    /// This node as an `Int`, if convertible.
+    public var int: Int? {
+        return scalar.flatMap(Int.construct)
+    }
+
+    /// This node as a `Data`, if convertible.
+    public var binary: Data? {
+        return scalar.flatMap(Data.construct)
+    }
+
+    /// This node as a `Date`, if convertible.
+    public var timestamp: Date? {
+        return scalar.flatMap(Date.construct)
+    }
+
+    /// This node as a `UUID`, if convertible.
+    public var uuid: UUID? {
+        return scalar.flatMap(UUID.construct)
     }
 
     // MARK: Typed accessor methods
@@ -108,6 +145,15 @@ extension Node {
     /// empty.
     public func array() -> [Node] {
         return sequence.map(Array.init) ?? []
+    }
+
+    /// Typed Array using type parameter: e.g. `array(of: String.self)`.
+    ///
+    /// - parameter type: Type conforming to `ScalarConstructible`.
+    ///
+    /// - returns: Array of `Type`.
+    public func array<Type: ScalarConstructible>(of type: Type.Type = Type.self) -> [Type] {
+        return sequence?.compactMap { $0.scalar.flatMap(type.construct) } ?? []
     }
 
     /// If the node is a `.sequence` or `.mapping`, set or get the specified `Node`.
@@ -119,7 +165,7 @@ extension Node {
             case let .mapping(mapping):
                 return mapping[node]
             case let .sequence(sequence):
-                guard let index = node.index, sequence.indices ~= index else { return nil }
+                guard let index = node.int, sequence.indices ~= index else { return nil }
                 return sequence[index]
             }
         }
@@ -131,7 +177,7 @@ extension Node {
                 mapping[node] = newValue
                 self = .mapping(mapping)
             case .sequence(var sequence):
-                guard let index = node.index, sequence.indices ~= index else { return }
+                guard let index = node.int, sequence.indices ~= index else { return }
                 sequence[index] = newValue
                 self = .sequence(sequence)
             }
@@ -258,14 +304,6 @@ extension Node {
             return true
         }
         return false
-    }
-
-    /// This node read as a sequence index.
-    ///
-    /// Yams uses `Node.int`, which goes through `ScalarConstructible` and so understands `0x10`,
-    /// `1_000` and the rest of the YAML integer syntax. Phase 4 replaces this with that.
-    var index: Int? {
-        return scalar.flatMap { Int($0.string) }
     }
 
     func setting(anchor: Anchor) -> Self {

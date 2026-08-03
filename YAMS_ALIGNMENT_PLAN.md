@@ -168,12 +168,12 @@ Location tracking is enabled unconditionally in `ParserOptions`, which costs an
 extra pass over the source to build rapidyaml's line accelerator. `Node.mark` is
 part of the public model, so this is not opt-in.
 
-### Still stubbed, pending Phase 4
+### Stubs since filled in
 
-`Tag` gained its `Resolver` in Phase 3 but still carries no `Constructor`, so
-`Node.any`, `Node.bool`, `Node.int` and the other `ScalarConstructible`
-accessors are absent, and `Node.string` is just the scalar's text.
-`Node.Mapping.flatten()` is left for Phase 5.
+`Tag` gained its `Resolver` in Phase 3 and its `Constructor` in Phase 4, which
+also restored the `ScalarConstructible` accessors and `flatten()`. Phase 4 fixed
+one bug this phase introduced: quoted scalars were being resolved by value, so
+`'true'` came out a `Bool`.
 
 ---
 
@@ -204,29 +204,41 @@ file but is only used by `Constructor`. It comes with Phase 4.
 
 ---
 
-## Phase 4 — Constructor / ScalarConstructible
+## Phase 4 — Constructor / ScalarConstructible — **done**
 
 | Target | Yams source |
 |---|---|
 | `Constructor.swift` | `Constructor.swift` (710) |
 
-Also largely pure Swift and portable. This is where today's behavioral gap is
-widest. Phase 3 made the *tags* right; this phase makes the *values* right —
-`"0x1F"` already resolves to `.int`, but decoding it still goes through
-`Int("0x1F")`, which fails.
+Portable as-is. Phase 3 made the *tags* right; this phase made the *values*
+right — `"0x1F"` resolved to `.int` already, but decoding it went through
+`Int("0x1F")` and failed. All of it landed: `Bool` (`yes`/`no`/`on`/`off` and
+case variants), `Int`/`UInt` in every radix with `_` separators and sexagesimal,
+`Double` with `.inf`/`-.inf`/`.nan`, `Data` from base64, `Date` from the YAML
+timestamp formats, `UUID`/`Decimal`/`URL`, the `construct_*` family, the
+`nsMutable*` maps, `Node.any` and `Node.array(of:)`. `Tag` carries its
+`Constructor` again, and the decoder's hand-rolled `Int($0)` closures are gone
+in favour of `ScalarConstructible`.
 
-- `Bool` — `yes`/`no`/`on`/`off` and case variants (currently only `true`/`false`)
-- `Int`/`UInt` — `0x`, `0o`, `0b`, `_` separators, sexagesimal (`SexagesimalConvertible`)
-- `Double` — `.inf`, `-.inf`, `.nan`
-- `Data` — base64 (`!!binary`)
-- `Date` — YAML timestamp formats
-- `UUID`, `Decimal`, `URL`
-- `construct_mapping` / `construct_set` / `construct_omap` / `construct_pairs`
-- `Node.any`, `Node.array(of:)`
-- the `pattern(_:)` helper carried over from `Resolver.swift`
-- `decodeNil` becomes the constructor's `node.null == NSNull()` call
+`node.any` was diffed against Yams over 66 documents — every radix, sexagesimal,
+the infinities, timestamps with fractions and offsets, base64, sets, omaps,
+pairs, merge keys, the `=` value key and empty containers — and agrees on all of
+them.
 
-Highest correctness-per-effort ratio of any phase.
+### The one real bug this surfaced
+
+Quoted scalars were being resolved by value, so `'true'` came out as a `Bool`
+and `'null'` as null. YAML gives a quoted, literal or folded scalar the
+non-specific `!` tag, which means "do not resolve me by value"; libyaml reports
+that to Yams as `quoted_implicit` and Yams tags it `.str`. rapidyaml only
+reports the style, so `Composer.scalarTag` draws the same conclusion from that.
+This is Phase 2's bug, found by the Phase 4 comparison.
+
+### Pulled forward
+
+`Node.Mapping.flatten()`, listed under Phase 5, because `construct_mapping`
+calls it. Merge keys therefore work through `node.any` now; wiring them into
+*decoding* is still Phase 5.
 
 ---
 
@@ -234,9 +246,11 @@ Highest correctness-per-effort ratio of any phase.
 
 Closes the gaps left open in `YAMLDecoder.swift`, on top of Phases 2–4:
 
-- Merge keys (`<<`) — either `mapping.flatten()` as Yams does, or rapidyaml's
-  `Tree::resolve()`, which handles `<<` natively including the
-  `<<: [*A, *B]` form (`src/c4/yml/reference_resolver.cpp:36`).
+- Merge keys (`<<`) in the decoder. `Node.Mapping.flatten()` landed in Phase 4
+  and already serves `node.any`; what is left is `node.mapping?.flatten()` in
+  `container(keyedBy:)`. (rapidyaml's `Tree::resolve()` is the alternative, but
+  with `flatten()` already written and matching Yams, there is no reason to
+  switch.)
 - `AliasDereferencingStrategy.swift` (47) and `YAMLAnchorProviding.swift` (26),
   plus injecting anchor/tag keys into keyed containers. Alias *dereferencing*
   itself already happens during composition (Phase 2); what is left is the
@@ -287,10 +301,10 @@ This suite is the only reliable way to verify the earlier phases.
 
 ## Order of work
 
-Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → 4 → 5 → 6 → 7 → 8**.
+Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → ~~4~~ → 5 → 6 → 7 → 8**.
 
-0.1 through 3 are done. Next up is Phase 4, the `Constructor` — the widest
-behavioral gap left, and the last piece `Tag` is missing.
+0.1 through 4 are done, which is the whole reading path bar merge keys and
+anchors in the decoder. Next up is Phase 5, which closes those.
 
 If the scope ever needs to be cut back to "correct and usable" rather than
 API-equivalent, **0.1 → 3 → 4 → 5 (merge keys)** delivers most of the practical

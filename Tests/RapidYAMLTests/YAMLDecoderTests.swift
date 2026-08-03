@@ -90,6 +90,99 @@ func decodesQuotedNullAsAString(yamlString: String) async throws {
     #expect(try YAMLDecoder().decode(Nullable.self, from: yamlString).name != nil)
 }
 
+/// Decoding used to go through `Int(_:)` and `Bool(_:)`, which only understand base 10 and
+/// `true`/`false`. It goes through `ScalarConstructible` now.
+@Test func decodesTheFullScalarSyntax() async throws {
+    struct Values: Decodable {
+        var hex: Int
+        var octal: Int
+        var binary: Int
+        var separated: Int
+        var sexagesimal: Int
+        var narrow: Int8
+        var unsigned: UInt16
+        var yes: Bool
+        var off: Bool
+        var infinity: Double
+        var notANumber: Double
+        var small: Float
+    }
+
+    let values = try YAMLDecoder().decode(Values.self, from: """
+        hex: 0x1F
+        octal: 0o17
+        binary: 0b1010
+        separated: 1_000_000
+        sexagesimal: 1:30
+        narrow: -128
+        unsigned: 65535
+        yes: yes
+        off: Off
+        infinity: -.inf
+        notANumber: .nan
+        small: 1.5e-3
+        """)
+
+    #expect(values.hex == 31)
+    #expect(values.octal == 15)
+    #expect(values.binary == 10)
+    #expect(values.separated == 1_000_000)
+    #expect(values.sexagesimal == 90)
+    #expect(values.narrow == -128)
+    #expect(values.unsigned == 65535)
+    #expect(values.yes)
+    #expect(!values.off)
+    #expect(values.infinity == -.infinity)
+    #expect(values.notANumber.isNaN)
+    #expect(values.small == 1.5e-3)
+}
+
+@Test func decodesFoundationScalars() async throws {
+    struct Values: Decodable {
+        var date: Date
+        var data: Data
+        var uuid: UUID
+        var decimal: Decimal
+        var url: URL
+    }
+
+    let values = try YAMLDecoder().decode(Values.self, from: """
+        date: 2026-08-03T11:22:33Z
+        data: !!binary aGVsbG8=
+        uuid: E621E1F8-C36C-495A-93FC-0C247A3E6E5F
+        decimal: 1.25
+        url: https://example.com
+        """)
+
+    #expect(values.date == DateComponents(calendar: Calendar(identifier: .gregorian),
+                                          timeZone: TimeZone(secondsFromGMT: 0),
+                                          year: 2026, month: 8, day: 3,
+                                          hour: 11, minute: 22, second: 33).date)
+    #expect(String(data: values.data, encoding: .utf8) == "hello")
+    #expect(values.uuid == UUID(uuidString: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F"))
+    #expect(values.decimal == Decimal(string: "1.25"))
+    #expect(values.url == URL(string: "https://example.com"))
+}
+
+@Test func quotedScalarsDecodeAsStrings() async throws {
+    struct Values: Decodable {
+        var quoted: String
+    }
+
+    // A quoted scalar is never resolved by value, so this is not a type mismatch.
+    #expect(try YAMLDecoder().decode(Values.self, from: "quoted: '42'\n").quoted == "42")
+}
+
+@Test func aScalarThatCannotConstructIsATypeMismatch() async throws {
+    struct Values: Decodable {
+        var count: Int
+    }
+
+    #expect(throws: DecodingError.self) {
+        try YAMLDecoder().decode(Values.self, from: "count: not a number\n")
+    }
+}
+
 @Test func duplicateKeysFailToDecode() async throws {
     #expect(throws: DecodingError.self) {
         try YAMLDecoder().decode(Item.self, from: "Id: 501\nName: Red\nId: 502\n")

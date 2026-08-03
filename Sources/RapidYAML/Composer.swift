@@ -24,24 +24,31 @@ struct Composer {
     /// The resolver every composed node's `Tag` is built with.
     private let resolver: Resolver
 
+    /// The constructor every composed node's `Tag` is built with.
+    private let constructor: Constructor
+
     /// The nodes named so far by an anchor. An alias can only refer to an anchor that has already
     /// been composed, which is what makes a recursive document impossible.
     private var anchors: [Anchor: Node] = [:]
 
-    private init(yaml: String, resolver: Resolver) {
+    private init(yaml: String, resolver: Resolver, constructor: Constructor) {
         self.yaml = yaml
         self.resolver = resolver
+        self.constructor = constructor
     }
 
     /// Parses `yamlString` and composes its first document.
     ///
-    /// - parameter yamlString: The YAML source to parse.
-    /// - parameter resolver:   The `Resolver` to resolve implicit tags with.
+    /// - parameter yamlString:  The YAML source to parse.
+    /// - parameter resolver:    The `Resolver` to resolve implicit tags with.
+    /// - parameter constructor: The `Constructor` the composed nodes should construct values with.
     ///
     /// - returns: The document's root node, or `nil` if the source holds no document.
     ///
     /// - throws: `YAMLError` if the source is not valid YAML, or cannot be composed.
-    static func compose(yaml yamlString: String, resolver: Resolver = .default) throws -> Node? {
+    static func compose(yaml yamlString: String,
+                        resolver: Resolver = .default,
+                        constructor: Constructor = .default) throws -> Node? {
         let root: YAMLNode
         do {
             root = try YAMLNode(yamlString: yamlString)
@@ -50,7 +57,7 @@ struct Composer {
             throw YAMLError(from: error as NSError, with: yamlString)
         }
 
-        var composer = Composer(yaml: yamlString, resolver: resolver)
+        var composer = Composer(yaml: yamlString, resolver: resolver, constructor: constructor)
         return try composer.document(root)
     }
 
@@ -78,7 +85,6 @@ struct Composer {
             return try dereference(alias, at: mark)
         }
 
-        let tag = tag(node.valueTag)
         let anchor = node.valueAnchor.map(Anchor.init(rawValue:))
 
         let composed: Node
@@ -90,13 +96,14 @@ struct Composer {
                 pairs.append((try key(of: child), try value(of: child)))
             }
             try checkDuplicates(in: pairs.map { $0.0 })
-            composed = .mapping(.init(pairs, tag, mappingStyle(node.collectionStyle), mark, anchor))
+            composed = .mapping(.init(pairs, tag(node.valueTag), mappingStyle(node.collectionStyle), mark, anchor))
         case .sequence:
             let nodes = try node.children.map { try value(of: $0) }
-            composed = .sequence(.init(nodes, tag, sequenceStyle(node.collectionStyle), mark, anchor))
+            composed = .sequence(.init(nodes, tag(node.valueTag), sequenceStyle(node.collectionStyle), mark, anchor))
         default:
             // A value that was written but left empty — `key:` — has no scalar of its own.
-            composed = .scalar(.init(node.value ?? "", tag, scalarStyle(node.valueStyle), mark, anchor))
+            let style = scalarStyle(node.valueStyle)
+            composed = .scalar(.init(node.value ?? "", scalarTag(node.valueTag, style: style), style, mark, anchor))
         }
 
         register(anchor, for: composed)
@@ -115,7 +122,8 @@ struct Composer {
         }
 
         let anchor = node.keyAnchor.map(Anchor.init(rawValue:))
-        let composed = Node.scalar(.init(node.key ?? "", tag(node.keyTag), scalarStyle(node.keyStyle), mark, anchor))
+        let style = scalarStyle(node.keyStyle)
+        let composed = Node.scalar(.init(node.key ?? "", scalarTag(node.keyTag, style: style), style, mark, anchor))
 
         register(anchor, for: composed)
         return composed
@@ -154,7 +162,23 @@ struct Composer {
     // MARK: - Conversions
 
     private func tag(_ name: String?) -> Tag {
-        return Tag(name.map(Tag.Name.init(rawValue:)) ?? .implicit, resolver)
+        return Tag(name.map(Tag.Name.init(rawValue:)) ?? .implicit, resolver, constructor)
+    }
+
+    /// The tag for a scalar, honouring the non-specific tag its style implies.
+    ///
+    /// A quoted, literal or folded scalar carries YAML's `!` tag, meaning "do not resolve me by
+    /// value": `'true'` is the string `true`, not a boolean. Only a plain scalar is resolved from
+    /// its contents. libyaml reports this to Yams as `quoted_implicit`, and Yams tags the scalar
+    /// `.str`; rapidyaml only reports the style, so the same conclusion is drawn from that.
+    private func scalarTag(_ name: String?, style: Node.Scalar.Style) -> Tag {
+        guard name == nil else { return tag(name) }
+        switch style {
+        case .singleQuoted, .doubleQuoted, .literal, .folded:
+            return Tag(.str, resolver, constructor)
+        case .plain, .any:
+            return tag(nil)
+        }
     }
 
     private func mark(line: UInt, column: UInt) -> Mark? {

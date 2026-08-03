@@ -155,6 +155,14 @@ extension Resolver.Rule {
     // swiftlint:enable force_try
 }
 
+func pattern(_ string: String) -> NSRegularExpression {
+    do {
+        return try .init(pattern: string, options: [])
+    } catch {
+        fatalError("unreachable")
+    }
+}
+
 private extension NSRegularExpression {
     func matches(in string: String) -> Bool {
         let range = NSRange(location: 0, length: string.utf16.count)

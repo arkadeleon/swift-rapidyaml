@@ -22,12 +22,16 @@ public final class Tag {
         return Tag(.implicit)
     }
 
-    /// Create a `Tag` with the specified name and resolver.
+    /// Create a `Tag` with the specified name, resolver and constructor.
     ///
-    /// - parameter name:     Tag name.
-    /// - parameter resolver: `Resolver` this tag should use, `.default` if omitted.
-    public init(_ name: Name, _ resolver: Resolver = .default) {
+    /// - parameter name:        Tag name.
+    /// - parameter resolver:    `Resolver` this tag should use, `.default` if omitted.
+    /// - parameter constructor: `Constructor` this tag should use, `.default` if omitted.
+    public init(_ name: Name,
+                _ resolver: Resolver = .default,
+                _ constructor: Constructor = .default) {
         self.resolver = resolver
+        self.constructor = constructor
         self.name = name
     }
 
@@ -35,15 +39,17 @@ public final class Tag {
     ///
     /// - note: Omitting or passing nil for a parameter will preserve the current `Tag`'s value in the copy.
     ///
-    /// - parameter name:     Overridden tag name.
-    /// - parameter resolver: Overridden resolver.
+    /// - parameter name:        Overridden tag name.
+    /// - parameter resolver:    Overridden resolver.
+    /// - parameter constructor: Overridden constructor.
     ///
     /// - returns: A copy of the current `Tag` with the specified overridden changes.
-    public func copy(with name: Name? = nil, resolver: Resolver? = nil) -> Tag {
-        return .init(name ?? self.name, resolver ?? self.resolver)
+    public func copy(with name: Name? = nil, resolver: Resolver? = nil, constructor: Constructor? = nil) -> Tag {
+        return .init(name ?? self.name, resolver ?? self.resolver, constructor ?? self.constructor)
     }
 
     // internal
+    let constructor: Constructor
     var name: Name
 
     fileprivate func resolved<T>(with value: T) -> Tag where T: TagResolvable {

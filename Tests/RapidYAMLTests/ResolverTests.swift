@@ -135,9 +135,8 @@ import Testing
         #expect(node["str"]?.tag.name == .str)
         #expect(node["tagged"]?.tag.name == .str, "an explicit tag wins over resolution")
 
-        // A quoted scalar is still resolved by its contents; it is the constructor, in Phase 4,
-        // that refuses to read `'42'` as a number.
-        #expect(node["quoted"]?.tag.name == .int)
+        // A quoted scalar carries YAML's non-specific tag, so it is never resolved by value.
+        #expect(node["quoted"]?.tag.name == .str)
     }
 
     @Test func composedMergeKeysAreTagged() throws {
