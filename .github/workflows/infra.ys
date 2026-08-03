@@ -3,6 +3,7 @@
 :use common: :all
 :: workflow-setup()
 
+
 jobs:
   #log-github-event:
   #  name: log github event
@@ -30,18 +31,52 @@ jobs:
             echo "ERROR: generated workflows are out of date"
           fi
           exit $status
+          make -C proj workflows-check || \
+            ( echo "ERROR: generated workflows are out of date" ; exit 1 )
+
+
+  check_c4core_src:
+    :: setup-job('infra' 'check_c4core_src')
+    runs-on: ubuntu-24.04
+    steps:
+      - :: checkout-action
+      - name: install colordiff
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y colordiff
+      - name: check src list
+        run: |
+          make -C ext c4core-check-list || \
+            ( echo "ERROR: c4core source lists out of date" ; exit 1 )
+      - name: check src sync
+        run: |
+          make -C ext c4core-check-sync || \
+            ( echo "ERROR: c4core source sync out of date" ; exit 1 )
+
+
+  check_src:
+    :: setup-job('infra' 'check_src')
+    runs-on: ubuntu-24.04
+    steps:
+      - :: checkout-action
+      - :: install-python-action
+      - name: install requirements
+        run: pip install -r proj/requirements.txt
+      - name: check source packages
+        run: make -C proj src
+
 
   check_doc:
     :: setup-job('infra' 'check_doxygen')
     runs-on: ubuntu-24.04
     env:
-      DOXY_VERSION: 1.12.0
-      DOXY_DIR: /tmp/doxydir/bin
+      DOXY_DIR: /tmp/doxydir
     steps:
       - :: checkout-action
-      - name: install python
-        uses: actions/setup-python@v5
-        with: {python-version: 3.9}
+      - name: checkout c4core
+        run: |
+          make -C ext c4core
+      - :: install-python-action
       - name: install requirements
         run: pip install -r doc/requirements.txt
       - name: install wget
@@ -50,28 +85,22 @@ jobs:
           sudo apt install -y wget
       - name: install doxygen
         run: |
-          ver=$DOXY_VERSION
-          uver=$(echo $ver | sed "s:\.:_:g")
-          name=$(dirname $DOXY_DIR)
-          dst=$(dirname $name)
-          url="https://github.com/doxygen/doxygen/releases/download/Release_$uver/doxygen-$ver.linux.bin.tar.gz"
-          ( \
-            cd $dst ; \
-            wget $url ; \
-            tar xvfz $(basename $url) ; \
-            ls -lFhp | grep dox ; \
-            mv -v doxygen-$ver $name ; \
-          )
-      - name: doxygen version
-        run: |
-          export PATH=$DOXY_DIR:$PATH
+          set -xe
+          make -C doc doxy_install DOXY_FORCE_VER=1 DOXY_DIR=$DOXY_DIR
+          export PATH=$DOXY_DIR/bin:$PATH
           which doxygen
           doxygen --version
-      - name: check doxygen docs
+      - name: test doxygen docs
         run: |
-          export PATH=$DOXY_DIR:$PATH
-          make -C doc doxy_test
-      - name: check sphinx
+          set -xe
+          export PATH=$DOXY_DIR/bin:$PATH
+          which doxygen
+          doxygen --version
+          make -C doc doxy_test DOXY_FORCE_VER=1 DOXY_DIR=$DOXY_DIR
+      - name: test sphinx
         run: |
-          export PATH=$DOXY_DIR:$PATH
-          make -C doc html
+          set -xe
+          export PATH=$DOXY_DIR/bin:$PATH
+          which doxygen
+          doxygen --version
+          make -C doc html DOXY_FORCE_VER=1 DOXY_DIR=$DOXY_DIR

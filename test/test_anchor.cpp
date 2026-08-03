@@ -6,6 +6,34 @@ RYML_DEFINE_TEST_MAIN()
 namespace c4 {
 namespace yml {
 
+
+TEST(anchors, ReferenceResolver)
+{
+    // verify the resolver receives each tree's callbacks
+    Tree tree1;
+    ReferenceResolver r;
+    r.resolve(&tree1);
+    EXPECT_EQ(r.m_refs.m_callbacks, tree1.callbacks());
+    RYML_EXPECT_ERROR(check_success([&]{
+        Tree tree2;
+        ASSERT_NE(tree2.callbacks(), tree1.callbacks());
+        r.resolve(&tree2);
+        EXPECT_EQ(r.m_refs.m_callbacks, tree2.callbacks());
+    }));
+}
+
+TEST(anchors, err_on_multiple_inheritance_map)
+{
+    Tree tree = parse_in_arena(R"(
+a: &a a
+b: &b b
+c:
+  <<: {map: wrong}
+)");
+    RYML_EXPECT_ERROR(check_error_visit(&tree, [&]{ tree.resolve(); }));
+}
+
+
 TEST(anchors, circular)
 {
     Tree t = parse_in_arena(R"(&x
@@ -132,12 +160,12 @@ TEST(anchors, programatic_key_ref)
     t._rem_flags(t.root_id(), CONTAINER_STYLE);
     t._add_flags(t.root_id(), BLOCK);
     NodeRef r = t.rootref();
-    r["kanchor"] = "2";
+    r["kanchor"].set_val("2");
     r["kanchor"].set_key_anchor("kanchor");
-    r["vanchor"] = "3";
+    r["vanchor"].set_val("3");
     r["vanchor"].set_val_anchor("vanchor");
-    r["*kanchor"] = "4";
-    r["*vanchor"] = "5";
+    r["*kanchor"].set_val("4");
+    r["*vanchor"].set_val("5");
     NodeRef ch = r.append_child();
     ch.set_key_ref("kanchor");
     ch.set_val("6");
@@ -167,9 +195,9 @@ TEST(anchors, programatic_val_ref)
     Tree t = parse_in_arena("{}");
     t._rem_flags(t.root_id(), CONTAINER_STYLE);
     t._add_flags(t.root_id(), BLOCK);
-    t["kanchor"] = "2";
+    t["kanchor"].set_val("2");
     t["kanchor"].set_key_anchor("kanchor");
-    t["vanchor"] = "3";
+    t["vanchor"].set_val("3");
     t["vanchor"].set_val_anchor("vanchor");
     t["kref"].set_val_ref("kanchor");
     t["vref"].set_val_ref("vanchor");
@@ -197,7 +225,7 @@ notref: {}
     t["copy"]["<<"].set_val_ref("orig");
     t["notcopy"]["test"].set_val_ref("orig");
     t["notcopy"]["<<"].set_val_ref("orig");
-    t["notref"]["<<"] = "*orig";
+    t["notref"]["<<"].set_val("*orig");
     _c4dbg_tree(t);
     EXPECT_EQ(emitrs_yaml<std::string>(t), R"(orig: &orig {foo: bar,baz: bat}
 copy: {<<: *orig}
@@ -220,7 +248,7 @@ orig3: &orig3 {and: more}
 copy: {}
 )");
     NodeRef seq = t["copy"]["<<"];
-    seq |= SEQ;
+    seq.set_seq();
     seq.append_child().set_val_ref("orig1");
     seq.append_child().set_val_ref("orig2");
     seq.append_child().set_val_ref("orig3");
@@ -258,8 +286,8 @@ TEST(anchors, set_ref_leading_star_is_optional)
 {
     Tree t = parse_in_arena("{}");
 
-    t["*without"] = "0";
-    t["*with"] = "1";
+    t["*without"].set_val("0");
+    t["*with"].set_val("1");
     EXPECT_EQ(emitrs_yaml<std::string>(t), R"({'*without': 0,'*with': 1})");
 
     t["*without"].set_key_ref("without");
@@ -376,26 +404,26 @@ tpl: &anchor
 
 //-----------------------------------------------------------------------------
 
-Tree github566_make_map(NodeType_e root_style)
+Tree github566_make_map(NodeType root_style)
 {
     Tree tree;
     NodeRef root = tree.rootref();
-    root |= MAP|root_style;
+    root.set_map(root_style);
     root.set_val_anchor("ref0");
-    root["a"] = "1";
+    root["a"].set_val("1");
     NodeRef self = root["self"];
     self.set_val("*ref0");
     self.set_val_ref("ref0");
     return tree;
 }
 
-Tree github566_make_seq(NodeType_e root_style)
+Tree github566_make_seq(NodeType root_style)
 {
     Tree tree;
     NodeRef root = tree.rootref();
-    root |= SEQ|root_style;
+    root.set_seq(root_style);
     root.set_val_anchor("ref0");
-    root[0] = "1";
+    root[0].set_val("1");
     root[1].set_val("*ref0");
     root[1].set_val_ref("ref0");
     return tree;
@@ -412,7 +440,7 @@ void github566_cmp(type_bits mask, Tree const& orig, std::string const& expected
 TEST(anchors, github566_map_NOSTYLE)
 {
     const Tree orig = github566_make_map(NOTYPE);
-    github566_cmp(_TYMASK, orig, R"(&ref0
+    github566_cmp(TYMASK_, orig, R"(&ref0
 a: 1
 self: *ref0
 )");
@@ -427,7 +455,7 @@ self: *ref0
 }
 TEST(anchors, github566_map_FLOW_ML)
 {
-    const Tree orig = github566_make_map(FLOW_ML);
+    const Tree orig = github566_make_map(FLOW_ML1);
     github566_cmp(0xffffffff, orig, R"(&ref0 {
   a: 1,
   self: *ref0
@@ -444,7 +472,7 @@ TEST(anchors, github566_map_FLOW_SL)
 TEST(anchors, github566_seq_NOSTYLE)
 {
     const Tree orig = github566_make_seq(NOTYPE);
-    github566_cmp(_TYMASK, orig, R"(&ref0
+    github566_cmp(TYMASK_, orig, R"(&ref0
 - 1
 - *ref0
 )");
@@ -457,9 +485,9 @@ TEST(anchors, github566_seq_BLOCK)
 - *ref0
 )");
 }
-TEST(anchors, github566_seq_FLOW_ML)
+TEST(anchors, github566_seq_FLOW_ML1)
 {
-    const Tree orig = github566_make_seq(FLOW_ML);
+    const Tree orig = github566_make_seq(FLOW_ML1);
     github566_cmp(0xffffffff, orig, R"(&ref0 [
   1,
   *ref0
@@ -965,7 +993,7 @@ TEST(simple_anchor, key_anchor_error_json)
     Tree tree = parse_in_arena("{&k key: val}");
     EXPECT_EQ(emitrs_json<std::string>(tree), "{\"key\": \"val\"}");
     ExpectError::check_error_visit(&tree, [&]{
-        emitrs_json<std::string>(tree, EmitOptions{}.json_error_flags(EmitOptions::JSON_ERR_ON_ANCHOR));
+        emitrs_json<std::string>(tree, EmitOptions{}.json_err_on_anchor(true));
     });
 }
 
@@ -974,7 +1002,7 @@ TEST(simple_anchor, val_anchor_error_json)
     Tree tree = parse_in_arena("{key: &v val}");
     EXPECT_EQ(emitrs_json<std::string>(tree), "{\"key\": \"val\"}");
     ExpectError::check_error_visit(&tree, [&]{
-        emitrs_json<std::string>(tree, EmitOptions{}.json_error_flags(EmitOptions::JSON_ERR_ON_ANCHOR));
+        emitrs_json<std::string>(tree, EmitOptions{}.json_err_on_anchor(true));
     });
 }
 

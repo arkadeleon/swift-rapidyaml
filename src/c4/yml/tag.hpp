@@ -1,10 +1,10 @@
-#ifndef _C4_YML_TAG_HPP_
-#define _C4_YML_TAG_HPP_
+#ifndef C4_YML_TAG_HPP_
+#define C4_YML_TAG_HPP_
 
-#ifndef _C4_YML_COMMON_HPP_
+#ifndef C4_YML_COMMON_HPP_
 #include <c4/yml/common.hpp>
 #endif
-#ifndef _C4_YML_DETAIL_STACK_HPP_
+#ifndef C4_YML_DETAIL_STACK_HPP_
 #include <c4/yml/detail/stack.hpp>
 #endif
 
@@ -130,10 +130,10 @@ struct RYML_EXPORT TagDirectives
     void clear() noexcept;
     id_type size() const noexcept;
     TagDirective const* lookup(csubstr tag, id_type id) const noexcept;
-    TagDirective * begin() noexcept { return m_directives; };
-    TagDirective * end() noexcept { return m_directives + size(); };
-    TagDirective const* begin() const noexcept { return m_directives; };
-    TagDirective const* end() const noexcept { return m_directives + size(); };
+    TagDirective * begin() noexcept { return m_directives; }
+    TagDirective * end() noexcept { return m_directives + size(); }
+    TagDirective const* begin() const noexcept { return m_directives; }
+    TagDirective const* end() const noexcept { return m_directives + size(); }
     TagDirectiveRange directives() const noexcept { return TagDirectiveRange{m_directives, m_directives + size()}; }
     TagDirectiveRange lookup_range(id_type doc_id) const noexcept;
     /** @note the str member of the return value may be null, meaning
@@ -157,4 +157,4 @@ C4_SUPPRESS_WARNING_MSVC_POP
 } // namespace yml
 } // namespace c4
 
-#endif /* _C4_YML_TAG_HPP_ */
+#endif /* C4_YML_TAG_HPP_ */

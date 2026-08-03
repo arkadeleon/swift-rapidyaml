@@ -1,4 +1,5 @@
 #include "./test_lib/test_engine.hpp"
+C4_SUPPRESS_WARNING_MSVC_WITH_PUSH(4702)
 
 // WARNING: don't use raw string literals -- g++4.8 cannot accept them
 // as macro arguments
@@ -400,7 +401,7 @@ ENGINE_TEST(AnchorMapFlowMultiLine,
     ___(ps.end_stream());
 }
 
-// WATCHOUT: see https://play.yaml.io/main/parser?input=Jm1hcAomcmtleTEgZm9vOiAmcnZhbDEgYmFyCipya2V5MSA6ICpydmFsMQ==
+// WATCHOUT: see https://play.yaml.com/main/parser?input=Jm1hcAomcmtleTEgZm9vOiAmcnZhbDEgYmFyCipya2V5MSA6ICpydmFsMQ==
 ENGINE_TEST(AnchorMapFlowWithRef,
             "&map\n{&rkey1 key1: &rval1 val1,*rkey1 : *rval1}"
             ,
@@ -433,7 +434,7 @@ ENGINE_TEST(AnchorMapFlowWithRef,
     ___(ps.end_stream());
 }
 
-// WATCHOUT: see https://play.yaml.io/main/parser?input=Jm1hcAomcmtleTEgZm9vOiAmcnZhbDEgYmFyCipya2V5MSA6ICpydmFsMQ==
+// WATCHOUT: see https://play.yaml.com/main/parser?input=Jm1hcAomcmtleTEgZm9vOiAmcnZhbDEgYmFyCipya2V5MSA6ICpydmFsMQ==
 ENGINE_TEST(AnchorMapFlowWithRefMultiLine,
             "&map\n{\n&rkey1 key1: &rval1 val1,\n*rkey1 : *rval1\n}"
             ,
@@ -1411,3 +1412,5 @@ Case const* get_case(csubstr /*name*/)
 }
 } // namespace yml
 } // namespace c4
+
+C4_SUPPRESS_WARNING_MSVC_POP

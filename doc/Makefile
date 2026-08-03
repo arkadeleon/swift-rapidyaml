@@ -8,14 +8,26 @@ SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _build
 CLANG         ?= clang++
-DOXYGEN       ?= doxygen #/home/jpmag/proj/doxygen/install/linux-x86_64-gxx14.2-Release/bin/doxygen
-DOXYGEN_OPTS  ?= #-t
+
+DOXYGEN_OPTS   ?= #-t
+DOXY_VERSION   ?= 1.15.0
+DOXY_BASE      ?= /tmp
+DOXY_DIR       ?= $(DOXY_BASE)/doxy-$(DOXY_VERSION)
+DOXY_FORCE_VER ?= 0
+ifeq ($(DOXY_FORCE_VER),0)
+DOXYGEN        ?= doxygen
+else
+DOXYGEN        ?= $(DOXY_DIR)/bin/doxygen
+endif
+WARN_AS_ERR   ?= 1
+
+.PHONY: help Makefile doxy doxy_test _doxy_warnfail _doxy_warnpass doxy_install
+
 
 # Put it first so that "make" without argument is like "make help".
 help:
 	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-.PHONY: help Makefile
 
 # Catch-all target: route all unknown targets to Sphinx using the new
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
@@ -25,25 +37,58 @@ help:
 	@echo "overwrite doxygen files"
 	mkdir -p "$(BUILDDIR)"
 	if [ -d "$(BUILDDIR)/html/doxygen" ] ; then rm -rf "$(BUILDDIR)/html/doxygen" ; fi
-	cp -favr doxygen/html "$(BUILDDIR)/html/doxygen"
+	cp -far doxygen/html "$(BUILDDIR)/html/doxygen"
+	@echo "sphinx:"
+	@echo "    `pwd`/$(BUILDDIR)/html/index.html"
 
-doxy:
-	@# ensure submodules are checked out
-	if [ ! -f $(shell pwd)/../ext/c4core/cmake/c4Project.cmake ] ; then echo "ERROR: submodules not present" ; exit 1 ; fi
-	if [ ! -f $(shell pwd)/../ext/c4core/src/c4/charconv.hpp ] ; then echo "ERROR: submodules not present" ; exit 1 ; fi
-	## use cmake to generate a compile database
-	#cmake -S .. -B "$(BUILDDIR)/proj" -DCMAKE_CXX_COMPILER=$(CLANG) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-	#ln -fs "$(BUILDDIR)/proj/compile_commands.json" .
-	## finally, run doxygen
+
+doxy: doxy_install c4core-clone
+	@## use cmake to generate a compile database
+	@#cmake -S .. -B "$(BUILDDIR)/proj" -DCMAKE_CXX_COMPILER=$(CLANG) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+	@#ln -fs "$(BUILDDIR)/proj/compile_commands.json" .
+	@## finally, run doxygen
+	$(DOXYGEN) --version
 	$(DOXYGEN) $(DOXYGEN_OPTS) Doxyfile
+	@echo "doxygen:"
+	@echo "    `pwd`/doxygen/html/index.html"
+c4core-clone:
+	$(MAKE) -C ../ext c4core-clone
+
 
 doxy_test:
 	$(MAKE) --keep-going _doxy_warnfail doxy _doxy_warnpass
 _doxy_warnfail:
-	sed "s/WARN_AS_ERROR\(.*\)= .*/WARN_AS_ERROR\1= FAIL_ON_WARNINGS_PRINT/g" -i Doxyfile
+	if [ "$(WARN_AS_ERR)" -ne 0 ] ; then \
+	    sed "s/WARN_AS_ERROR\(.*\)= .*/WARN_AS_ERROR\1= FAIL_ON_WARNINGS_PRINT/g" -i Doxyfile ; \
+	fi
 _doxy_warnpass:
-	sed "s/WARN_AS_ERROR\(.*\)= .*/WARN_AS_ERROR\1= NO/g" -i Doxyfile
+	if [ "$(WARN_AS_ERR)" -ne 0 ] ; then \
+	    sed "s/WARN_AS_ERROR\(.*\)= .*/WARN_AS_ERROR\1= NO/g" -i Doxyfile ; \
+	fi
 
 clean:
 	rm -rf doxygen/
 	if [ ! -z "$(BUILDDIR)" ] ; then rm -rf "$(BUILDDIR)" ; fi
+
+ifeq ($(DOXY_FORCE_VER),0)
+doxy_install:
+else
+doxy_install: $(DOXY_DIR)/bin/doxygen
+endif
+doxy_force_install: $(DOXY_DIR)/bin/doxygen
+$(DOXY_DIR)/bin/doxygen:
+	set -xeu ; \
+	name=$(DOXY_DIR) ; \
+	ver=$(DOXY_VERSION) ; \
+	uver=`echo $$ver | sed "s:\.:_:g"` ; \
+	dst=`dirname $$name` ; \
+	url="https://github.com/doxygen/doxygen/releases/download/Release_$$uver/doxygen-$$ver.linux.bin.tar.gz" ; \
+	( \
+	  pwd ; \
+	  cd $$dst ; \
+	  pwd ; \
+	  wget -nv $$url ; \
+	  tar xfz `basename $$url` ; \
+	  ls -lFhp | grep dox ; \
+	  mv -v doxygen-$$ver $$name ; \
+	)

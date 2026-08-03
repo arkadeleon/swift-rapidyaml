@@ -3,13 +3,13 @@
 #include <ryml.hpp>
 #include <ryml_std.hpp>
 #include <c4/fs/fs.hpp>
+#include "c4/yml/file.hpp"
 #include "c4/yml/parse.hpp"
 #include "c4/yml/extra/event_handler_ints.hpp"
 
 #include <vector>
 #include <iostream>
 
-#include <benchmark/benchmark.h>
 
 // warning suppressions for thirdparty code
 #if defined(_MSC_VER)
@@ -35,12 +35,22 @@
 #   if __clang_major__ >= 8
 #       pragma clang diagnostic ignored "-Wimplicit-int-conversion"
 #   endif
+#   if __clang_major__ >= 21
+#       pragma clang diagnostic ignored "-Wnontrivial-memcall"
+#   endif
 #elif defined(__GNUC__)
 #   pragma GCC diagnostic push
+#   if __GNUC__ >= 7
+#   pragma GCC diagnostic ignored "-Wduplicated-branches"
+#   endif
+#   if __GNUC__ >= 6
+#   pragma GCC diagnostic ignored "-Wunused-const-variable"
+#   endif
 #   pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #   pragma GCC diagnostic ignored "-Wshadow"
 #   pragma GCC diagnostic ignored "-Wunused-parameter"
 #   pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#   pragma GCC diagnostic ignored "-Wunused-const-variable"
 #   pragma GCC diagnostic ignored "-Wfloat-equal"
 #   pragma GCC diagnostic ignored "-Wpedantic"
 #   pragma GCC diagnostic ignored "-Wuseless-cast"
@@ -50,7 +60,11 @@
 #   if __GNUC__ >= 8
 #       pragma GCC diagnostic ignored "-Wclass-memaccess" // rapidjson/document.h:1952:24
 #   endif
+#   if __GNUC__ >= 15
+#       pragma GCC diagnostic ignored "-Wunused-const-variable"
+#   endif
 #endif
+#include <benchmark/benchmark.h>
 #include "./libyaml.hpp"
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
@@ -212,13 +226,13 @@ USAGE: bm <case.yml>
         std::cout << "running case: " << bm_name << "/" << filename.basename() << "\n";
         std::cout << "file: " << filename << "\n";
         std::cout << "-----------------------------------\n";
-        c4::fs::file_get_contents(file, &src);
+        ryml::file_get_contents(&src, file);
         if(src.back() != '\0')
         {
             src.push_back('\0');
         }
         in_place = src;
-        _RYML_ASSERT_BASIC_MSG(strlen(in_place.data()) == in_place.size()-1,
+        RYML_ASSERT_BASIC_MSG_(strlen(in_place.data()) == in_place.size()-1,
                                "len=%zu sz=%zu",
                                strlen(in_place.data()), in_place.size());
     }
@@ -242,17 +256,17 @@ USAGE: bm <case.yml>
         }
         if(what & kReserveTree)
         {
-            _RYML_CHECK_BASIC(capacity > 0);
+            RYML_CHECK_BASIC_(capacity > 0);
             ryml_tree.reserve(capacity);
         }
         if(what & kReserveTree)
         {
-            _RYML_CHECK_BASIC(capacity > 0);
+            RYML_CHECK_BASIC_(capacity > 0);
             ryml_tree.reserve(capacity);
         }
         if(what & kResetInPlace)
         {
-            _RYML_ASSERT_BASIC(in_place.size() == src.size());
+            RYML_ASSERT_BASIC_(in_place.size() == src.size());
             memcpy(in_place.data(), src.data(), src.size());
         }
     }

@@ -1,12 +1,17 @@
-#ifndef _C4_YML_COMMON_HPP_
-#define _C4_YML_COMMON_HPP_
+#ifndef C4_YML_COMMON_HPP_
+#define C4_YML_COMMON_HPP_
 
 /** @file common.hpp Common utilities and infrastructure used by ryml. */
 
 #include <cstddef>
+#include <utility> // for std::forward
+
+#ifndef C4_SUBSTR_HPP_
 #include <c4/substr.hpp>
-#include <c4/charconv.hpp>
+#endif
+#ifndef C4_YML_EXPORT_HPP_
 #include <c4/yml/export.hpp>
+#endif
 
 
 //-----------------------------------------------------------------------------
@@ -19,6 +24,12 @@
 #ifndef RYML_DEFAULT_TREE_ARENA_CAPACITY
 /// default capacity for the tree's arena when not set explicitly
 #define RYML_DEFAULT_TREE_ARENA_CAPACITY (0)
+#endif
+
+#ifndef RYML_DEFAULT_TREE_ARENA_CAPACITY_START
+/// default starting capacity for the tree's arena when it is first
+/// allocated. should be larger than @ref RYML_DEFAULT_TREE_ARENA_CAPACITY
+#define RYML_DEFAULT_TREE_ARENA_CAPACITY_START (256)
 #endif
 
 
@@ -43,16 +54,6 @@
 /// the detailed debug log messages when RYML_DBG is defined.
 #define RYML_LOGBUF_SIZE (256)
 #endif
-
-
-#ifndef RYML_LOGBUF_SIZE
-/// size for the buffer used to format individual values to string
-/// while preparing an error message. This is only used for formatting
-/// individual values in the message; final messages will be larger
-/// than this value (see @ref RYML_ERRMSG_SIZE). This size is also
-/// used for the detailed debug log messages when RYML_DBG is defined.
-#define RYML_LOGBUF_SIZE (256)
-#endif
 static_assert(RYML_LOGBUF_SIZE < RYML_ERRMSG_SIZE, "invalid size");
 
 
@@ -64,138 +65,6 @@ static_assert(RYML_LOGBUF_SIZE < RYML_ERRMSG_SIZE, "invalid size");
 /// overflow. If the printed value requires more than
 /// RYML_LOGBUF_SIZE_MAX, the value is silently skipped.
 #define RYML_LOGBUF_SIZE_MAX (1024)
-#endif
-
-
-//-----------------------------------------------------------------------------
-// Specify groups to have a predefined topic order in doxygen:
-
-/** @defgroup doc_quickstart Quickstart
- *
- * Example code for every feature.
- */
-
-/** @defgroup doc_parse Parse utilities
- * @see sample::sample_parse_in_place
- * @see sample::sample_parse_in_arena
- * @see sample::sample_parse_file
- * @see sample::sample_parse_reuse_tree
- * @see sample::sample_parse_reuse_parser
- * @see sample::sample_parse_reuse_tree_and_parser
- * @see sample::sample_location_tracking
- */
-
-/** @defgroup doc_emit Emit utilities
- *
- * Utilities to emit YAML and JSON, either to a memory buffer or to a
- * file or ostream-like class.
- *
- * @see sample::sample_emit_to_container
- * @see sample::sample_emit_to_stream
- * @see sample::sample_emit_to_file
- * @see sample::sample_emit_nested_node
- * @see sample::sample_emit_style
- */
-
-/** @defgroup doc_node_type Node types
- */
-
-/** @defgroup doc_tree Tree utilities
- * @see sample::sample_quick_overview
- * @see sample::sample_iterate_trees
- * @see sample::sample_create_trees
- * @see sample::sample_tree_arena
- *
- * @see sample::sample_static_trees
- * @see sample::sample_location_tracking
- *
- * @see sample::sample_docs
- * @see sample::sample_anchors_and_aliases
- * @see sample::sample_tags
- */
-
-/** @defgroup doc_node_classes Node classes
- *
- * High-level node classes.
- *
- * @see sample::sample_quick_overview
- * @see sample::sample_iterate_trees
- * @see sample::sample_create_trees
- * @see sample::sample_tree_arena
- */
-
-/** @defgroup doc_error_handling Error handling
- *
- * Utilities to report handle errors, and to build and report error
- * messages.
- *
- * @see sample::sample_error_handler
- */
-
-/** @defgroup doc_callbacks Callbacks for errors and allocation
- *
- * Functions called by ryml to allocate/free memory and to report
- * errors.
- *
- * @see sample::sample_error_handler
- * @see sample::sample_global_allocator
- * @see sample::sample_per_tree_allocator
- */
-
-/** @defgroup doc_serialization Serialization/deserialization
- *
- * Contains information on how to serialize and deserialize
- * fundamental types, user scalar types, user container types and
- * interop with std scalar/container types.
- *
- */
-
-/** @defgroup doc_ref_utils Anchor/Reference utilities
- *
- * @see sample::sample_anchors_and_aliases
- * */
-
-/** @defgroup doc_tag_utils Tag utilities
- * @see sample::sample_tags
- */
-
-/** @defgroup doc_preprocessors Preprocessors
- *
- * Functions for preprocessing YAML prior to parsing.
- */
-
-
-//-----------------------------------------------------------------------------
-
-// document macros for doxygen
-#ifdef __DOXYGEN__ // defined in Doxyfile::PREDEFINED
-
-/** define this macro with a boolean value to enable/disable
- * assertions to check preconditions and assumptions throughout the
- * codebase; this causes a slowdown of the code, and larger code
- * size. By default, this macro is defined unless NDEBUG is defined
- * (see C4_USE_ASSERT); as a result, by default this macro is truthy
- * only in debug builds. */
-#   define RYML_USE_ASSERT
-
-/** (Undefined by default) Define this macro to disable ryml's default
- * implementation of the callback functions. See @ref doc_callbacks.  */
-#   define RYML_NO_DEFAULT_CALLBACKS
-
-/** (Undefined by default) When this macro is defined (and
- * @ref RYML_NO_DEFAULT_CALLBACKS is not defined), the default error
- * handler will throw exceptions. See @ref doc_error_handling. */
-#   define RYML_DEFAULT_CALLBACK_USES_EXCEPTIONS
-
-/** Conditionally expands to `noexcept` when @ref RYML_USE_ASSERT is 0 and
- * is empty otherwise. The user is unable to override this macro. */
-#   define RYML_NOEXCEPT
-
-/** (Undefined by default) Use shorter error message from
- * checks/asserts: do not show the check condition in the error
- * message. */
-#   defined RYML_SHORT_CHECK_MSG
-
 #endif
 
 
@@ -214,6 +83,17 @@ static_assert(RYML_LOGBUF_SIZE < RYML_ERRMSG_SIZE, "invalid size");
 #endif
 
 #define RYML_DEPRECATED(msg) C4_DEPRECATED(msg)
+
+#ifdef RYML_WITH_LEGACY_OPERATORS
+#   define RYML_LEGACY_OPERATOR(txt)
+#else
+#   define RYML_LEGACY_OPERATOR(txt) RYML_DEPRECATED(txt ". To avoid this warning, define the symbol RYML_WITH_LEGACY_OPERATORS while compiling")
+#endif
+
+#define RYML_CHECK_TYPE_IS_WRAPPER_LIKE_(type)                          \
+    static_assert(!std::is_fundamental<type>::value,                    \
+                  "did you forget to use '&'? "                         \
+                  "This overload is for wrapper types such as c4::fmt::base64()");
 
 /** @endcond */
 
@@ -273,6 +153,71 @@ typedef enum Encoding_ { // NOLINT
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
+/** A lightweight truthy type, used to enable reporting the offending
+ * node when a deserializing error happens in nested reads. It reports
+ * the innermost node causing the error, or true (empty-initialized)
+ * when there is no error.
+ */
+struct RYML_EXPORT ReadResult
+{
+    id_type node;
+    enum : id_type { VALID = NONE - 1 }; // NOLINT
+
+public:
+
+    /** convert to boolean to signify success/error */
+    operator bool() const noexcept { return node == VALID; }
+
+public:
+
+    /** construct as success */
+    C4_ALWAYS_INLINE ReadResult() noexcept : node(VALID) {}
+
+    /** construct as failure on the given node id */
+    C4_ALWAYS_INLINE explicit ReadResult(id_type node_) noexcept
+        : node(node_) {}
+
+    /** construct as failure on the given parent_, IF node_ is NONE */
+    C4_ALWAYS_INLINE explicit ReadResult(id_type parent_, id_type node_) noexcept
+        : node(node_ != NONE ? VALID : parent_) {}
+
+public:
+
+    // These adapter ctors are used by rapidyaml in the functions
+    // calling read(), and enable working both with legacy and
+    // up-to-date user implementations of read(). See for example
+    // Tree::deserialize().
+
+    /** adapter: will match legacy user code (`%read()`
+     * implementations returning bool). On error, this will report
+     * node_ as the offending node.
+     *
+     * This is an adapter ctor used by rapidyaml in the functions
+     * calling `%read()`, and enables rapidyaml to work both with
+     * legacy and up-to-date user implementations of `%read()`. See
+     * for example @ref Tree::deserialize().
+     */
+    C4_ALWAYS_INLINE explicit ReadResult(bool ok, id_type node_) noexcept
+        : node(ok ? VALID : node_) {}
+
+    /** adapter: will match up-to-date user code (`%read()`
+     * implementations returning @ref ReadResult). On error, this will
+     * report the node in the original @ref ReadResult.
+     *
+     * This is an adapter ctor used by rapidyaml in the functions
+     * calling `%read()`, and enables rapidyaml to work both with
+     * legacy and up-to-date user implementations of `%read()`. See
+     * for example @ref Tree::deserialize().
+     */
+    C4_ALWAYS_INLINE explicit ReadResult(ReadResult result, id_type) noexcept
+        : node(result.node) {}
+};
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
 C4_SUPPRESS_WARNING_MSVC_WITH_PUSH(4251) // csubstr needs to have dll-interface to be used by clients of Location
 
 /** holds a source or yaml file position, for example when an error is
@@ -289,7 +234,7 @@ struct RYML_EXPORT Location
 
     operator bool () const noexcept { return !name.empty() || line != npos || offset != npos || col != npos; }
 
-    C4_NO_INLINE Location() noexcept : offset(npos), line(npos), col(npos), name() {};
+    C4_NO_INLINE Location() noexcept : offset(npos), line(npos), col(npos), name() {}
     C4_NO_INLINE Location(                         size_t l          ) noexcept : offset(npos), line(l), col(npos), name() {}
     C4_NO_INLINE Location(                         size_t l, size_t c) noexcept : offset(npos), line(l), col(c   ), name() {}
     C4_NO_INLINE Location(               size_t b, size_t l, size_t c) noexcept : offset(b   ), line(l), col(c   ), name() {}
@@ -337,118 +282,6 @@ struct RYML_EXPORT ErrorDataVisit
     id_type node;     ///< node where the error was detected
     ErrorDataVisit() noexcept = default;
     ErrorDataVisit(Location const& cpploc_, Tree const *tree_ , id_type node_) noexcept : cpploc(cpploc_), tree(tree_), node(node_) {}
-};
-
-
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-
-/** Options to give to the parser to control its behavior. */
-struct RYML_EXPORT ParserOptions
-{
-private:
-
-    typedef enum : uint32_t { // NOLINT
-        DETECT_FLOW_ML = (1u << 0u),
-        RESOLVE_TAGS = (1u << 1u),
-        RESOLVE_TAGS_ALL = (1u << 2u),
-        SCALAR_FILTERING = (1u << 3u),
-        LOCATIONS = (1u << 4u),
-        DEFAULTS = SCALAR_FILTERING|DETECT_FLOW_ML,
-    } Flags_e;
-
-    uint32_t flags = DEFAULTS;
-
-    ParserOptions& set_flags_(bool enabled, Flags_e f)
-    {
-        if(enabled)
-            flags |= f;
-        else
-            flags &= ~f;
-        return *this;
-    }
-
-public:
-
-    ParserOptions() = default;
-
-public:
-
-    /** @name detection of @ref FLOW_ML container style */
-    /** @{ */
-
-    /** enable/disable detection of @ref FLOW_ML container style. When
-     * enabled, the parser will set @ref FLOW_ML as the style of flow
-     * containers which have the terminating bracket on a line
-     * different from that of the opening bracket. */
-    ParserOptions& detect_flow_ml(bool enabled) noexcept
-    {
-        return set_flags_(enabled, DETECT_FLOW_ML);
-    }
-    /** query status of detection of @ref FLOW_ML container style. */
-    C4_ALWAYS_INLINE bool detect_flow_ml() const noexcept { return (flags & DETECT_FLOW_ML); }
-
-    /** @} */
-
-public:
-
-    /** @name resolution of tags */
-    /** @{ */
-
-    /** enable/disable resolution of YAML tags during parsing. When
-     * enabled, tags are resolved according to existing tag
-     * directives. Disabled by default. See also @ref
-     * ParserOptions::resolve_tags_all(). */
-    ParserOptions& resolve_tags(bool enabled) noexcept
-    {
-        return set_flags_(enabled, RESOLVE_TAGS);
-    }
-    /** query status of tag resolution setting. */
-    C4_ALWAYS_INLINE bool resolve_tags() const noexcept { return (flags & RESOLVE_TAGS); }
-
-    /** When resolve_tags() is enabled, resolve not just prefixed tags
-     * of the form <pre>!handle!tag</pre>, but also non-prefixed tags
-     * (<pre>!!tag</pre> and <pre>!tag!</pre>). Disabled by default. */
-    ParserOptions& resolve_tags_all(bool enabled) noexcept
-    {
-        return set_flags_(enabled, RESOLVE_TAGS_ALL);
-    }
-    /** query status of non-prefixed tag resolution setting. */
-    C4_ALWAYS_INLINE bool resolve_tags_all() const noexcept { return (flags & RESOLVE_TAGS_ALL); }
-
-    /** @} */
-
-public:
-
-    /** @name source location tracking */
-    /** @{ */
-
-    /** enable/disable source location tracking */
-    ParserOptions& locations(bool enabled) noexcept
-    {
-        return set_flags_(enabled, LOCATIONS);
-    }
-    /** query source location tracking status */
-    C4_ALWAYS_INLINE bool locations() const noexcept { return (flags & LOCATIONS); }
-
-    /** @} */
-
-public:
-
-    /** @name scalar filtering status (experimental; disable at your discretion) */
-    /** @{ */
-
-    /** enable/disable scalar filtering while parsing */
-    ParserOptions& scalar_filtering(bool enabled) noexcept
-    {
-        return set_flags_(enabled, SCALAR_FILTERING);
-    }
-    /** query scalar filtering status */
-    C4_ALWAYS_INLINE bool scalar_filtering() const noexcept { return (flags & SCALAR_FILTERING); }
-
-    /** @} */
 };
 
 
@@ -601,7 +434,6 @@ public:
     }
 };
 
-
 /** @} */
 
 
@@ -609,11 +441,44 @@ public:
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
+/** @cond dev */
+
+C4_SUPPRESS_WARNING_PUSH
+C4_SUPPRESS_WARNING_GCC_CLANG("-Wdeprecated")
+C4_SUPPRESS_WARNING_GCC_CLANG("-Wdeprecated-declarations")
+C4_SUPPRESS_WARNING_MSVC(4996) // deprecated
+
+/** A tag type to select the key when building the tree, or when
+ * (de)serializing with operator<< or operator>> */
+template<class K>
+struct RYML_LEGACY_OPERATOR("prefer .set_key() methods in the Tree and node")
+Key
+{
+    K &&k; // NOLINT
+};
+
+/** A tag function to select the key when building the tree, or when
+ * (de)serializing with operator<< or operator>> */
+template<class K>
+RYML_LEGACY_OPERATOR("prefer .set_key() methods in the Tree and node")
+C4_ALWAYS_INLINE Key<K> key(K && k)
+{
+    return Key<K>{std::forward<K>(k)};
+}
+
+C4_SUPPRESS_WARNING_POP
+
+/** @endcond */
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
 /// @cond dev
 
-#define _RYML_CB_ALLOC_HINT(cb, T, num, hint) (T*) (cb).m_allocate((num) * sizeof(T), (hint), (cb).m_user_data)
-#define _RYML_CB_ALLOC(cb, T, num) _RYML_CB_ALLOC_HINT((cb), T, (num), nullptr)
-#define _RYML_CB_FREE(cb, buf, T, num)                              \
+#define RYML_CB_ALLOC_HINT_(cb, T, num, hint) (T*) (cb).m_allocate((num) * sizeof(T), (hint), (cb).m_user_data)
+#define RYML_CB_ALLOC_(cb, T, num) RYML_CB_ALLOC_HINT_((cb), T, (num), nullptr)
+#define RYML_CB_FREE_(cb, buf, T, num)                              \
     do {                                                            \
         (cb).m_free((buf), (num) * sizeof(T), (cb).m_user_data);    \
         (buf) = nullptr;                                            \
@@ -626,7 +491,7 @@ struct _charconstant_t // is there a better way to do this?
                               std::integral_constant<int8_t, static_cast<int8_t>(unsignedval)>,
                               std::integral_constant<uint8_t, unsignedval>>::type
 {};
-#define _RYML_CHCONST(signedval, unsignedval) ::c4::yml::detail::_charconstant_t<INT8_C(signedval), UINT8_C(unsignedval)>::value
+#define RYML_CHCONST_(signedval, unsignedval) ::c4::yml::detail::_charconstant_t<INT8_C(signedval), UINT8_C(unsignedval)>::value
 } // namespace detail
 
 inline csubstr _c4prc(const char &C4_RESTRICT c) // pass by reference!
@@ -645,6 +510,12 @@ inline csubstr _c4prc(const char &C4_RESTRICT c) // pass by reference!
     }
 }
 
+#if C4_CPP >= 17                                  \
+    || (defined(__GNUC__) && __GNUC__ >= 6)       \
+    || (defined(_MSC_VER) && !defined(__clang__))
+#define RYML_HAS_DEPRECATED_ENUMS_
+#endif
+
 /// @endcond
 
 C4_SUPPRESS_WARNING_GCC_POP
@@ -652,4 +523,4 @@ C4_SUPPRESS_WARNING_GCC_POP
 } // namespace yml
 } // namespace c4
 
-#endif /* _C4_YML_COMMON_HPP_ */
+#endif /* C4_YML_COMMON_HPP_ */

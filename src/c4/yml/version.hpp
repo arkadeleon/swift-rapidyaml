@@ -1,11 +1,11 @@
-#ifndef _C4_YML_VERSION_HPP_
-#define _C4_YML_VERSION_HPP_
+#ifndef C4_YML_VERSION_HPP_
+#define C4_YML_VERSION_HPP_
 
 /** @file version.hpp */
 
-#define RYML_VERSION "0.13.0"
+#define RYML_VERSION "0.16.0"
 #define RYML_VERSION_MAJOR 0
-#define RYML_VERSION_MINOR 13
+#define RYML_VERSION_MINOR 16
 #define RYML_VERSION_PATCH 0
 
 #include <c4/substr.hpp>
@@ -22,4 +22,4 @@ RYML_EXPORT int version_patch();
 } // namespace yml
 } // namespace c4
 
-#endif /* _C4_YML_VERSION_HPP_ */
+#endif /* C4_YML_VERSION_HPP_ */

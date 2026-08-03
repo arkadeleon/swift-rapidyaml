@@ -5,7 +5,551 @@
 Changes since latest release: [current.md](https://github.com/biojppm/rapidyaml/blob/master/changelog/current.md)
 
 
+
 ----------------------------
+<a name="v0.16.0"></a>
+## 0.16.0
+
+[Github release: 0.16.2](https://github.com/biojppm/rapidyaml/releases/tag/v0.16.0)
+### TL;DR
+This release focuses on API cleaning and tidying, **in preparation of release 1.0**:
+
+  - improves tracking of nodes causing deserialization errors
+  - adds serialization to/from `Tree` (not just `NodeRef`/`ConstNodeRef`)
+  - deprecates a good number of functions, mostly around serialization and tree/node building
+  - **brings code coverage to 100%** (rounded from >99.5%)
+  - remove the c4core submodule, vendoring-in just the required c4core source code.
+
+Significant effort went into maintaining backward compatibility. Nevertheless the API cleanup introduces a number of deprecations, and some other opt-in but recommended changes: see the migration guide in the next section.
+
+Finally there are other fixes and improvements. For the details refer to this release's [full changelog](#v016changelogsection), below the migration guide.
+
+
+
+### Migration guide
+
+This is the list of migration changes, linking to the relevant section below:
+
+ - [Deprecated `.to_val()` method family for tree building](#toval)
+ - Deprecated operators (but define `RYML_WITH_LEGACY_OPERATORS` to avoid the deprecation):
+    - tree building: [deprecate operators `|=` or `=`](#notequal)
+    - serialization: [deprecate operators `<<` or `>>`](#notshift)
+ - Optional but **recommended**:
+   - [user-implemented `read()` should now return `ReadResult`](#readresult)
+   - [user-implemented `read()`/`write()` should now receive `Tree` and id](#treeid)
+   - [do not use `.load()` (former `>>`) inside `read()`](#noloadinread)
+   - [use `.deserialize_child()` inside `read()`](#deserializechild)
+
+Be sure to also read through the quickstart diff for the full overview on how the new features work. 
+
+> [!TIP]
+> Hint to see what changed in the quickstart: run `git diff v0.15.2...v0.16.0 samples/quickstart.cpp` on an up-to-date repo clone.
+
+
+<a id="toval"></a>
+#### Deprecate `.to_val()` family
+
+For tree building, methods `.to_*()` were deprecated in favour of the newly-added `.set_*()` methods. See next section.
+
+
+<a id="notequal"></a>
+#### Deprecate operators |= and =
+
+For tree building, `operator|=` and `operator=` were deprecated in favour of the newly-added `.set_*()` methods:
+
+@code{c++}
+c4::yml::Tree tree = ...;
+c4::yml::id_type node_id = ...;
+c4::yml::NodeRef node = ...;
+
+// before (deprecated)
+node |= MAP|BLOCK;
+node["key"] = "val";
+node["key"] |= VAL_SQUO;
+node["seq"] |= SEQ|FLOW;
+node["seq2"] |= SEQ;
+node.append_child().to_seq("map");
+
+// now, same as above:
+node.set_map(BLOCK);
+node["key"].set_val("val", VAL_SQUO);
+node["seq"].set_seq(FLOW);
+node["seq2"].set_seq();
+c4::yml::NodeRef child = node.append_child();
+child.set_seq("map");
+
+// or now, same as above, but from the tree:
+// more code, but also more efficient
+tree.set_map(node_id, BLOCK);
+c4::yml::id_type id_key  = tree.append_child(node_id),
+                 id_seq  = tree.append_child(node_id),
+                 id_seq2 = tree.append_child(node_id),
+                 id_map  = tree.append_child(node_id);
+tree.set_key(id_key, "key");
+tree.set_val(id_key, "val", VAL_SQUO);
+tree.set_key(id_seq, "seq");
+tree.set_seq(id_seq, FLOW);
+tree.set_key(id_seq2, "seq2");
+tree.set_seq(id_seq2);
+tree.set_key(id_map, "map");
+tree.set_map(id_map);
+@endcode
+
+If you prefer to keep on using the legacy operators `=`, `|=`, `<<`, `>>`, you can enable the cmake symbol (or define the macro) `RYML_WITH_LEGACY_OPERATORS`.
+
+
+<a id="notshift"></a>
+#### Do not use operators << and >>
+
+For serialization, `operator<<` and `operator>>` were deprecated in favour of `.set_serialized()` and `.deserialize()` (which introduce return on error) or `.save()` and `.load()` (which trigger error callback on error):
+@code{c++}
+c4::yml::Tree tree = ...;
+c4::yml::id_type node_id = ...;
+c4::yml::NodeRef node = ...;
+const T var1 = ...;
+T var2 = ...;
+
+// before (deprecated)
+node << var1;
+node >> var2;
+node << key(var1);
+node >> key(var2);
+
+// now - save() and load() do checks and call error on failure
+node.save(var1);
+node.load(&var2);
+node.save_key(var1);
+node.load_key(&var2);
+// or now, without exceptional flow: use .set_serialized() and .deserialize()
+node.set_serialized(var1);
+if( ! node.deserialize(&var2))
+  ...
+node.set_key_serialized(var1);
+if( ! node.deserialize_key(&var2))
+  ...
+
+// also now possible from tree!
+tree.save(node_id, var1);
+tree.load(node_id, &var2);
+tree.save_key(node_id, var1);
+tree.load_key(node_id, &var2);
+tree.set_serialized(node_id, var1);
+if( ! tree.deserialize(node_id, &var2))
+  ...
+tree.set_key_serialized(node_id, var1);
+if( ! tree.deserialize_key(node_id, &var2))
+  ...
+@endcode
+
+If you prefer to keep on using the legacy operators `=`, `|=`, `<<`, `>>`, you can enable the cmake variable (or define the macro) `RYML_WITH_LEGACY_OPERATORS`.
+
+The rest of the changes are **optional, but recommended**. If you don't do these changes, your code will go on working as before, but the new features and improved behavior will not be available.
+
+
+<a id="readresult"></a>
+#### Optional: user-implemented `read()` should now return `ReadResult`
+
+Your `%read()` functions should now return a `c4::yml::ReadResult`. This enables reporting the exact node on which a deserialization error happens, even if it is nested deep in the tree, which in turn helps tremendously pinpointing troubles in YAML source (especially with location tracking):
+@code{c++}
+// optional: your implementation of read() should be changed from...
+bool read(c4::yml::ConstNodeRef const& node, T *var)
+{
+    bool success = ...;
+    return success;
+}
+// optional: change to this:
+c4::yml::ReadResult read(c4::yml::ConstNodeRef const& node, T *var)
+{
+    bool success = ...;
+    return c4::yml::ReadResult(success, node.id());
+}
+@endcode
+
+If you don't change, rapidyaml will still report the error, but on the node of the outer-most function returning false, instead of the node at the inner-most function.
+
+
+<a id="treeid"></a>
+#### Optional: user-implemented `%read()`/`%write()` should now receive `Tree` and id
+
+If you want to use deserialization from `Tree`, your `%read()` and `%write()` implementations should now be rewritten for `Tree`, instead of `NodeRef`. This will enable using your `%read()`/`%write()` functions **with both the `Tree` and `NodeRef` methods**:
+
+@code{c++}
+// optional: your implementation of write()/read() should be changed from...
+void write(c4::yml::NodeRef *node, T const& var)
+{
+    ...
+}
+c4::yml::ReadResult read(c4::yml::ConstNodeRef const& node, T *var)
+{
+    bool success = ...;
+    return c4::yml::ReadResult(success, node.id());
+}
+
+// optional: change to this to enable serialization from/to both Tree and NodeRef:
+void write(c4::yml::Tree* tree, c4::yml::id_type id, T const& var)
+{
+    ...
+}
+c4::yml::ReadResult read(c4::yml::Tree const* tree, c4::yml::id_type id, T *var)
+{
+    bool success = ...;
+    return c4::yml::ReadResult(success, id);
+}
+@endcode
+If you don't change, you will not be able to serialize to/from `Tree`. That is, **having only the node implementation will not work with the `Tree` methods**. You can also provide both functions, and they would be picked up correctly, but that is pointless. In short, **prefer the Tree** version.
+
+Note also that **inside the tree version, you can still use the node API**. For example:
+@code{c++}
+c4::yml::ReadResult read(c4::yml::Tree const* tree, c4::yml::id_type id, T *var)
+{
+    c4::yml::ConstNodeRef n(tree, id);
+    ... // this way you can keep the function body as before
+        // BUT read next note
+}
+@endcode
+
+
+<a id="noloadinread"></a>
+#### Optional: do not use `.load()` (former `>>`) inside `read()`
+
+Inside your `%write()/%read()` implementation **you should now use the new `.deserialize()` calls**. On error, these methods will play nice when they are called from `.deserialize()` on upper-level objects. On the contrary, `.load()` (formerly `>>`) will interrupt execution immediately, and this will prevent those upper-level calls from successfully receiving the actual [`ReadResult`](@ref c4::yml::ReadResult) and reporting it upwards.
+
+If you want to avoid exceptional flow and write code such as
+@code{c++}
+struct Inner { int foo, bar; };
+struct Outer { Inner inner1, inner2; }
+
+Outer outer;
+if( ! node.deserialize(&outer))
+    ... // we want to enter this branch without triggering an error
+@endcode
+... then your `read(tree,id,Inner*)` implementation should not use `.load()`:
+@code{c++}
+c4::yml::ReadResult read(c4::yml::Tree const* tree, c4::yml::id_type id, Inner *inner)
+{
+    c4::yml::ReadResult result(tree->is_map(id), id);
+    if(result) result = tree->deserialize_child(id, "foo", &inner->foo);
+    if(result) result = tree->deserialize_child(id, "bar", &inner->foo);
+    return result;
+}
+// Likewise for the outer type. Note how an Inner error will be
+// transparently returned:
+c4::yml::ReadResult read(c4::yml::Tree const* tree, c4::yml::id_type id, Outer *outer)
+{
+    c4::yml::ReadResult result(tree->is_map(id), id);
+    if(result) result = tree->deserialize_child(id, "inner1", &outer->inner1);
+    if(result) result = tree->deserialize_child(id, "inner2", &outer->inner2);
+    return result;
+}
+@endcode
+
+In short, implementing `%read()` with `.deserialize()` plays nice with both upper `.deserialize()` and `.load()` calls, whereas implementing `%read()` with `.load()` will only work with upper `.load()` calls.
+
+
+<a id="deserializechild"></a>
+#### Recommended: use new methods `.deserialize_child()` in `read()`
+
+Inside your `read()` implementation, **you should now use the new methods `.deserialize_child()`**.
+
+This release also adds a family of tree and node methods returning `c4::yml::ReadResult` to simplify `%read()` implementations. Each of these returns a `ReadResult` object that is ready to return on error. Consider the following node-based `%read()`, already using `.deserialize()`:
+@code{c++}
+ryml::ReadResult read(ryml::ConstNodeRef const& n, my_type *val)
+{
+    ryml::ReadResult r(n.is_map(), n.id());
+    if(r) r = n["v2"].deserialize(&val->v2); // don't. using [] will throw error if "v2" is not a child
+    if(r) r = n["v3"].deserialize(&val->v3);
+    if(r) r = n["v4"].deserialize(&val->v4);
+    if(r) r = n["seq"].deserialize(&val->seq);
+    if(r) r = n["map"].deserialize(&val->map);
+    return r;
+}
+@endcode
+Note that any of the `operator[]` calls (or more precisely the `.deserialize()` calls on its result) may trigger a visit error when no such node exists. To avoid exceptional flow in case of error, you should now use `.deserialize_child()`. The function below will gracefully return an appropriate error status when any of the child nodes does not exist:
+@code{c++}
+ryml::ReadResult read(ryml::ConstNodeRef const& n, my_type *val)
+{
+    ryml::ReadResult r(n.is_map(), n.id());
+    if(r) r = n.deserialize_child(n, "v2", &val->v2); // there is also a fall-back overload
+                                                      // receiving a default value when
+                                                      // no such child exists
+    if(r) r = n.deserialize_child(n, "v3", &val->v3);
+    if(r) r = n.deserialize_child(n, "v4", &val->v4);
+    if(r) r = n.deserialize_child(n, "seq", &val->seq);
+    if(r) r = n.deserialize_child(n, "map", &val->map);
+    return r;
+}
+@endcode
+Here's the list of new `ReadResult`-returning methods that may be of use in similar scenarios:
+  - `.deserialize_child()`: [Tree](@ref c4::yml::Tree::deserialize_child()), [ConstNodeRef](@ref c4::yml::ConstNodeRef::deserialize_child()), [NodeRef](@ref c4::yml::NodeRef::deserialize_child())
+  - `.child_r()`: [Tree](@ref c4::yml::Tree::child_r()), [ConstNodeRef](@ref c4::yml::ConstNodeRef::child_r()), [NodeRef](@ref c4::yml::NodeRef::child_r())
+  - `.find_child_r()`: [Tree](@ref c4::yml::Tree::find_child_r()), [ConstNodeRef](@ref c4::yml::ConstNodeRef::find_child_r()), [NodeRef](@ref c4::yml::NodeRef::find_child_r())
+  - likewise for sibling: added `sibling_r` and `find_sibling_r()`
+  - The `.get_if()` methods were deprecated in favour of `.deserialize_child()`.
+
+
+<a id="v016changelogsection"></a>
+### Full changelog
+
+- Update c4core to [v0.6.0](https://github.com/biojppm/c4core/releases/tag/v0.6.0)
+- [PR#649](https://github.com/biojppm/rapidyaml/pull/649) commit to ABI stability on patch releases before 0.x, then on minor releases after 1.x
+- [PR#648](https://github.com/biojppm/rapidyaml/pull/648) improve documentation, add benchmark results
+- [PR#647](https://github.com/biojppm/rapidyaml/pull/647) remove support for UTF16 and UTF32 encoded files
+- [PR#646](https://github.com/biojppm/rapidyaml/pull/646) improve Doxygen docs, update yamlscript version
+- [PR#645](https://github.com/biojppm/rapidyaml/pull/645) tools: unify ryml-parse-emit and ryml-yaml-events, remove ryml-yaml-events
+- [PR#644](https://github.com/biojppm/rapidyaml/pull/644) amalgamate: add `--fastfloat_sys` to use fastfloat from system
+- [PR#643](https://github.com/biojppm/rapidyaml/pull/643) reduce source archive size: move large data files used in benchmarks to  [rapidyaml-data](https://github.com/biojppm/rapidyaml-data) repo.
+- [PR#642](https://github.com/biojppm/rapidyaml/pull/642) amalgamate: add option to create single source+header.
+- [PR#641](https://github.com/biojppm/rapidyaml/pull/641): change uses of `C4_LIKELY()` / `C4_UNLIKELY()` to turn into `[[likely]]` / `[[unlikely]]`. No logic changes.
+- [PR#640](https://github.com/biojppm/rapidyaml/pull/640): add `.deserialize_child()` methods to simplify `%read()` implementations
+- [PR#639](https://github.com/biojppm/rapidyaml/pull/639): fix names using leading/double underscore (renames only, no logic changes).
+- [PR#638](https://github.com/biojppm/rapidyaml/pull/638): improve quickstart-ints.
+- [PR#637](https://github.com/biojppm/rapidyaml/pull/637): add cmake option `RYML_SYSTEM_C4CORE` to consume c4core from `find_package()`. Thanks \@uilianries!
+- [PR#636](https://github.com/biojppm/rapidyaml/pull/636) **remove c4core submodule**, and copy c4core files to rapidyaml (and manage sync):
+  - `ext/c4core.src/`: c4core code used in the rapidyaml library 
+  - `ext/c4core.dev/`: c4core code used by tests/benchmarks
+  - `proj/`: project files like cmake files and toolchains
+  - `RYML_STANDALONE` can still be set to `OFF` to compile against an out-of-source c4core (see also the newly added `RYML_SYSTEM_C4CORE`)
+  - the amalgamation tool now adds only the files in `c4core.src` files, and has new option `--c4core-dev` to include the `c4core.dev` files
+  - adds (internal) tools to manage c4core synchronization scenarios. See [ext/README.md](https://github.com/biojppm/rapidyaml/tree/master/ext) for details with this.
+- [PR#635](https://github.com/biojppm/rapidyaml/pull/635) API cleanup: `NodeType` and `extra::ievt::EventFlags`:
+  - On `Tree` and `NodeRef`, overloads taking `NodeType_e` are now receiving `type_bits`.
+  - This saves operator calls on type queries.
+  - Remove bitwise operators, no longer needed.
+  - Rename `NodeType_e` to `NodeTypeBits` (deprecate `NodeType_e`)
+  - Low impact, no changes should be needed on user code, other than renaming unlikely uses of `NodeType_e`.
+  - Also, for int events: rename `extra::ievt::EventFlags` to `extra::ievt::EventBits`
+- [PR#620](https://github.com/biojppm/rapidyaml/pull/620) API cleanup: `Tree` and `NodeRef`:
+  - Deprecate `NodeInit`
+  - `Tree` and `NodeRef`:
+    - deprecate `.to_val()` and friends -- add `.set_val()` and friends.
+    - deprecate `operator=(csubstr)` and friends -- use `.set_val()` instead.
+    - deprecate `operator|=(NodeType)` and `operator=(NodeType)` -- use appropriate overload `.set_*(T, NodeType)`.
+    - You can disable compiler deprecation warnings from use of these operators: by enabling the cmake variable (or defining the macro) `RYML_WITH_LEGACY_OPERATORS`.
+    - deprecate `NodeInit` and `NodeScalar` methods in `Tree` and `NodeRef` (use `.set_*()`)
+    - deprecate single-arg `NodeRef::{duplicate,move}(ConstNodeRef)`
+    - deprecate `NodeRef::visit()` and `NodeRef::visit_stacked()`
+    - add `Tree::arena_rem()`
+    - add `RYML_DEFAULT_TREE_ARENA_CAPACITY_START` with default value of 256
+  - `parse_*()`: internal simplification, no semantic changes
+- [PR#589](https://github.com/biojppm/rapidyaml/pull/589) API cleanup: serialization and tree building
+  - Refactor serialization code:
+    - Deprecate `operator<<`, use `.load()` / `.load_key()` or `.deserialize()` / `.deserialize_key()`
+    - Deprecate `operator>>`, use `.save()` / `.save_key()` or `.set_serialized()` / `.set_key_serialized()`
+    - Deprecate `key()` tag function and `Key` tag type (needed only for the operators above)
+    - Migration of code triggering serialization:
+    - If you don't want to migrate yet, use `RYML_WITH_LEGACY_OPERATORS` to disable compiler deprecation warnings from use of these operators.
+    - Serialization with `Tree` API is now fully implemented, working exactly the same as `NodeRef`
+      - serialization:
+        - `NodeRef` serialized with `%write(NodeRef *, T const&)` and `%write_key()`
+        - `Tree` serialized with `%write(Tree *, id_type, T const&)` and `%write_key()`
+        - No changes in types using `%to_chars()` serialization
+      - deserialization:
+        - `ConstNodeRef` deserialized with `%read(ConstNodeRef const&, T *)` and `%read_key()`
+        - `Tree` deserialized with `%read(Tree const*, id_type, T *)` and `%read_key()` (removed old `%readkey()` approach.)
+        - No changes in types using `%from_chars()` serialization
+      - Enables bypass of `NodeRef` serialization to use the tree API, which is faster to compile.
+      - Organize serialization in layers, ensuring use of free functions to enable the user to override at all levels with ADL, for total control of type behavior (explained in the doxygen documentation).
+      - Added many more unit tests to ensure all scenarios are working.
+  - Move scalar specific code to new top-level headers `c4/yml/scalar_charconv.hpp` and `c4/yml/scalar_style.hpp`
+  - Relax deserialization of nodes with `VALNIL` or `KEYNIL`, such that non-fundamental types can now be null-initialized (eg initialize a string from a null scalar). Fundamental types such as ints or floats will still report an error.
+    @code{c++}
+    Tree tree = parse_in_arena("{empty: }");
+    std::string str;
+    tree["empty"].load(&str); // relaxed: no longer a deserialization error
+    assert(s.empty());
+    int val;
+    tree["empty"].load(&val); // ERROR! as before.
+    @endcode
+- [PR#626](https://github.com/biojppm/rapidyaml/pull/626): ensure accurate reporting of nodes causing deeply nested serialization error. This enables reporting the inner-most node causing the error! To profit from this, `%read()` user functions should now return `ReadResult` instead of `bool`. This change is backwards-compatible with legacy `%read()` functions returning `bool`, but the legacy version will remain less precise: it will report an inner error on the upmost node returning false, possibly the root if all levels are returning bool. See the new `sample_deserialize_error()` on the quickstart, and the [latest doxygen documentation](https://rapidyaml.readthedocs.io/latest/doxygen/group__doc__serialization__user__types.html). The user functions should change (but not mandatory):
+  @code{c++}
+  // before
+  bool read(ryml::ConstNodeRef n, T *var) { ... }
+  // now (should be changed, but not mandatory)
+  ryml::ReadResult read(ryml::ConstNodeRef n, T *var) { ... }
+  @endcode
+- [PR#625](https://github.com/biojppm/rapidyaml/pull/625): Set plain scalar style when serializing arithmetic scalars: improves emit speed of numeric-heavy data payloads.
+- [PR#616](https://github.com/biojppm/rapidyaml/pull/616) API cleanup: emit
+  - `WriterFile` and `WriterOStream` no longer track the number of emitted bytes.
+  - `error_on_excess` is now used in the emit-to-buffer overloads, and no longer in the main `Emitter::emit_as()` driver function.
+- [PR#617](https://github.com/biojppm/rapidyaml/pull/617) API cleanup: emit, part 2
+    - Tidy emit classes among new top-level header files:
+      - `c4/yml/emit_container.hpp`: emit to resizeable contiguous char container (eg `std::string`, `std::vector<char>`)
+      - `c4/yml/emit_buf.hpp`: emit to char buffer (`substr`)
+      - `c4/yml/emit_file.hpp`: emit to C `FILE*`
+      - `c4/yml/emit_ostream.hpp`: emit to STL-like ostreams
+    - The old `c4/yml/emit.hpp` is now a pure umbrella header, including all of the above. For better compilation speed, avoid the umbrella header, and prefer including the concrete header (container, buf, file or stream).
+    - The rest of the emit code was split over these new implementation headers:
+      - `c4/yml/emit_options.hpp`: options to control emitting
+      - `c4/yml/emitter.hpp`: main emitter class
+      - `c4/yml/emitter.def.hpp`: definitions of main emitter class. 
+      - `c4/yml/writer_buf.hpp`: policy class to emit to char buffer (`substr`)
+      - `c4/yml/writer_file.hpp`: policy class to emit to C `FILE*`
+      - `c4/yml/writer_ostream.hpp`: policy class to emit to STL-like ostreams
+    - There are no semantic changes: all the `emit_*()` functions remain the same.
+    - Other changes in this PR:
+      - Added `Tree::root_id_maybe()` which is safe to call on an empty tree.
+      - Deprecate `Emitter::max_depth()`
+      - Deprecate `Emitter::options()` setter
+- [PR#618](https://github.com/biojppm/rapidyaml/pull/618): API cleanup: emit, part 3
+  - Improve handling of `NaN` and `Inf` in json emitting.
+  - Expose scalar style helpers for json emitting:
+    @code{c++}
+    bool scalar_is_plain_number_json();
+    bool scalar_is_special_json();
+    bool scalar_is_inf3();
+    bool scalar_is_nan3();
+    bool scalar_is_inf_or_nan3();
+    @endcode
+  - Writers: add `C4_ALWAYS_INLINE`. Results in ~10-20% emit improvements.
+  - `file_put_contents()`: add `FILE*` overloads
+- [PR#621](https://github.com/biojppm/rapidyaml/pull/621) API cleanup: `NodeRef`:
+  - Simplify internal implementation of `{Const}NodeRef::{iterator,children_view}`.
+  - Stop using SFINAE on Node CRTP to distinguish const vs non const, by duplicating the functions in `NodeRef` vs `ConstNodeRef`. No semantic changes. This should improve compilation speed of code containing many node calls.
+- [PR#622](https://github.com/biojppm/rapidyaml/pull/622) API cleanup: remove preprocess utilities.
+- [PR#623](https://github.com/biojppm/rapidyaml/pull/623): YAML fuzzing fixes, and close to 1 billion fuzz runs without any errors. These were the only two problems found:
+  - Ensure parse error on multiline keys opening YAML:
+    @code{yaml}
+    multiline
+      key: value
+    @endcode
+  - Fix parse error on Byte Order Mark opening containers:
+    @code{yaml}
+    <BOM>- 
+      - a
+    -
+    @endcode
+- [PR#628](https://github.com/biojppm/rapidyaml/pull/628): Add serialization fuzzing. Relax `c4::atof()` / `c4::atod()`, disable redundant assertions that prevent returning false on bad strings.
+- [PR#629](https://github.com/biojppm/rapidyaml/pull/629): int events:
+  - Rename `to_chars(substr,DataType)` to `to_str()` (the existing c4 overload would always win because it's an int)
+  - Do not use c4/bitmask.hpp
+- [PR#633](https://github.com/biojppm/rapidyaml/pull/633): improve coverage to ~99.5%:
+  - Add tests to cover missed lines
+  - Change some errors to assertions; those errors are caught before calling.
+  - `Tree` and `NodeRef`: deprecate `.type_str()`. Use `.type().type_str()`
+  - Tools: add ints parsing to ryml-emit-parse
+- [PR#634](https://github.com/biojppm/rapidyaml/pull/634): int events: add sample containing ints-only library
+- [PR#590](https://github.com/biojppm/rapidyaml/pull/590): minor: prefer calling some predicates from `NodeType`
+
+
+### Thanks
+
+- \@uilianries
+
+
+----------------------------
+<a name="v0.15.2"></a>
+## 0.15.2
+
+[Github release: 0.15.2](https://github.com/biojppm/rapidyaml/releases/tag/v0.15.2)
+
+- Workaround for Doxygen changelog (use of HTML anchors in .md: doxy 1.15 fails but 1.16 succeeds).
+
+
+----------------------------
+<a name="v0.15.1"></a>
+## 0.15.1
+
+[Github release: 0.15.1](https://github.com/biojppm/rapidyaml/releases/tag/v0.15.1)
+
+- [PR#618](https://github.com/biojppm/rapidyaml/pull/618):
+  - JSON emitter now adheres to flow style customization from [PR#615](https://github.com/biojppm/rapidyaml/pull/615)
+  - JSON emitter now tolerates YAML streams (ie a seq of docs), and emits these as a top-level seq. The old behavior of throwing an error on streams can be obtained by using the new option [EmitOptions::json_err_on_stream()](@ref c4::yml::EmitOptions::json_err_on_stream()).
+  - Fix error in [EmitOptions](@ref c4::yml::EmitOptions) where [EmitOptions::emit_nonroot_dash()](@ref c4::yml::EmitOptions::emit_nonroot_dash()) had the same effect as [EmitOptions::json_err_on_tag()](@ref c4::yml::EmitOptions::json_err_on_tag()).
+
+
+----------------------------
+<a name="v0.15.0"></a>
+## 0.15.0
+
+[Github release: 0.15.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.15.0)
+
+- [PR#615](https://github.com/biojppm/rapidyaml/pull/615): add flow style customization:
+  - Add [FLOW_SPC](@ref c4::yml::FLOW_SPC) to force space after comma in flow style containers:
+    @code{c++}
+    c4::yml::Tree tree = c4::yml::parse_in_arena("[0,1,2,3,4,5,6]");
+    CHECK(c4::yml::emitrs_yaml<std::string>(tree), "[0,1,2,3,4,5,6]");
+    // add spaces:
+    tree.rootref().set_container_style(c4::yml::FLOW_SL|c4::yml::FLOW_SPC);
+    CHECK(c4::yml::emitrs_yaml<std::string>(tree), "[0, 1, 2, 3, 4, 5, 6]");
+    @endcode
+  - Add [FLOW_MLN](@ref c4::yml::FLOW_MLN) (flow multiline, multi-values per line, wrapped at max columns). The old `FLOW_ML` was deprecated, and is now known as [FLOW_ML1](@ref c4::yml::FLOW_ML1) (flow multiline, 1 value per line):
+    @code{c++}
+    tree.rootref().set_container_style(c4::yml::FLOW_ML1);
+    CHECK(c4::yml::emitrs_yaml<std::string>(tree),
+          "[\n"
+          "  0,\n"
+          "  1,\n"
+          "  2,\n"
+          "  3,\n"
+          "  4,\n"
+          "  5,\n"
+          "  6\n"
+          "]\n");
+    tree.rootref().set_container_style(c4::yml::FLOW_MLN);
+    CHECK(c4::yml::emitrs_yaml<std::string>(tree),
+          "[\n"
+          "  0,1,2,3,4,5,6\n"
+          "]\n");
+    @endcode
+  - Add [FLOW_MLX](@ref c4::yml::FLOW_MLX) mask to match both [FLOW_ML1](@ref c4::yml::FLOW_ML1) and [FLOW_MLN](@ref c4::yml::FLOW_MLN)
+  - Add [EmitOptions::max_cols()](@ref c4::yml::EmitOptions::max_cols()) to control wrapping of [FLOW_MLN](@ref c4::yml::FLOW_MLN):
+    @code{c++}
+    auto maxcols8 = c4::yml::EmitOptions{}.max_cols(8);
+    CHECK(c4::yml::emitrs_yaml<std::string>(tree, maxcols8),
+          "[\n"
+          "  0,1,2,\n"
+          "  3,4,5,\n"
+          "  6\n"
+          "]\n");
+    @endcode
+  - Add [EmitOptions::force_flow_spc()](@ref c4::yml::EmitOptions::force_flow_spc()) to override all per-node settings of [FLOW_SPC](@ref c4::yml::FLOW_SPC) when emitting:
+    @code{c++}
+    auto force_spaces = c4::yml::EmitOptions{}.force_flow_spc(true);
+    CHECK(c4::yml::emitrs_yaml<std::string>(tree, force_spaces),
+          "[\n"
+          "  0, 1, 2, 3, 4, 5, 6\n"
+          "]\n");
+    @endcode
+  - Add [ParserOptions::flow_ml_style()](@ref c4::yml::ParserOptions::flow_ml_style()) to choose the multiline flow style to assign while parsing. The default value is still [FLOW_ML1](@ref c4::yml::FLOW_ML1) (the old behavior), but this option allows picking any of [FLOW_MLN](@ref c4::yml::FLOW_MLN) or [FLOW_ML1](@ref c4::yml::FLOW_ML1).
+  - See [sample_style_flow_formatting()](@ref sample_style_flow_formatting()) in the quickstart for more info.
+
+
+----------------------------
+<a name="v0.14.0"></a>
+## 0.14.0
+
+[Github release: 0.14.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.14.0)
+
+- [PR#607](https://github.com/biojppm/rapidyaml/pull/607): add file utilities:
+  - [file_put_contents()](@ref c4::yml::file_put_contents())
+  - [file_get_contents()](@ref c4::yml::file_get_contents())
+  - [stdin_get_contents()](@ref c4::yml::stdin_get_contents())
+- [PR#609](https://github.com/biojppm/rapidyaml/pull/609): fix misbuild in gcc 16.
+- [PR#610](https://github.com/biojppm/rapidyaml/pull/610): fix clang warnings: `-Weverything`. Thanks [\@TedLyngmo](https://github.com/TedLyngmo)!
+- [PR#613](https://github.com/biojppm/rapidyaml/pull/613): fix [#612](https://github.com/biojppm/rapidyaml/pull/612): parse error on whitespace-only after block scalar indicators `|` or `>`:
+  @code{yaml}
+  space after: >\space
+  tag after: >\t
+  @endcode
+- [PR#614](https://github.com/biojppm/rapidyaml/pull/614) improve base64 serialization facilities:
+  @code{c++}
+  std::string decoded;
+  tree["node"] >> fmt::base64(decoded); // now possible
+  // also can now obtain the size explicitly:
+  substr buf = ...;
+  size_t required = 0;
+  tree["node"] >> fmt::base64(buf, &required);
+  @endcode
+- Update c4core to [0.4.0](https://github.com/biojppm/c4core/releases/tag/v0.4.0).
+
+
+### Thanks
+
+- [\@TedLyngmo](https://github.com/TedLyngmo)
+
+
+----------------------------
+<a name="v0.13.0"></a>
 ## 0.13.0
 
 [Github release: 0.13.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.13.0)
@@ -18,8 +562,8 @@ Changes since latest release: [current.md](https://github.com/biojppm/rapidyaml/
   - (10,11)
   - also scalars containing [] and {}
   @endcode
-  - [scalar_style_choose()](@ref c4::yml::scalar_style_choose()) was split into [scalar_style_choose_flow()](@ref c4::yml::scalar_style_choose_flow()) and [scalar_style_choose_block()](@ref c4::yml::scalar_style_choose_block())
-  - [scalar_style_query_plain()](@ref c4::yml::scalar_style_query_plain()) was split into [scalar_style_query_plain_flow()](@ref c4::yml::scalar_style_query_plain_flow()) and [scalar_style_query_plain_block()](@ref c4::yml::scalar_style_query_plain_block())
+  - `scalar_style_choose()` was split into [scalar_style_choose_flow()](@ref c4::yml::scalar_style_choose_flow()) and [scalar_style_choose_block()](@ref c4::yml::scalar_style_choose_block())
+  - `scalar_style_query_plain()` was split into [scalar_style_query_plain_flow()](@ref c4::yml::scalar_style_query_plain_flow()) and [scalar_style_query_plain_block()](@ref c4::yml::scalar_style_query_plain_block())
   - [NodeType::type_str_sub()](@ref c4::yml::NodeType::type_str()): remove zero-termination, use common approach of returning required size
   - Add [NodeType::type_str_sub()](@ref c4::yml::NodeType::type_str_sub())
 - [PR#605](https://github.com/biojppm/rapidyaml/pull/605): fix parse errors:
@@ -35,18 +579,19 @@ Changes since latest release: [current.md](https://github.com/biojppm/rapidyaml/
     @endcode
 - [PR#604](https://github.com/biojppm/rapidyaml/pull/604): add string_view and span to the @ref c4/yml/std/std.hpp interop umbrella header.
 - Fix [600](https://github.com/biojppm/rapidyaml/issues/600): shared symbols not exported in clang on Windows ([PR#601](https://github.com/biojppm/rapidyaml/pull/601)).
-- Fix [256](https://github.com/biojppm/rapidyaml/issues/256): installation directory on Linux 64bit ([PR#599](https://github.com/biojppm/rapidyaml/pull/599)). See also original fix at [cmake#16](https://github.com/biojppm/cmake/pull/16). Big thanks to \@GabrielBarrantes and \@musicinmybrain, not just for their fixes but also for all their downstream work!
-- [PR#591](https://github.com/biojppm/rapidyaml/pull/591): Add missing includes to avoid compilation warning. Thanks \@GabrielBarrantes!
+- Fix [256](https://github.com/biojppm/rapidyaml/issues/256): installation directory on Linux 64bit ([PR#599](https://github.com/biojppm/rapidyaml/pull/599)). See also original fix at [cmake#16](https://github.com/biojppm/cmake/pull/16). Big thanks to [\@GabrielBarrantes](https://github.com/GabrielBarrantes) and [\@musicinmybrain](https://github.com/musicinmybrain), not just for their fixes but also for all their downstream work!
+- [PR#591](https://github.com/biojppm/rapidyaml/pull/591): Add missing includes to avoid compilation warning. Thanks [\@GabrielBarrantes](https://github.com/GabrielBarrantes)!
 - Update c4core to [0.3.0](https://github.com/biojppm/c4core/releases/tag/v0.3.0)
 
 
 ### Thanks
 
- - \@GabrielBarrantes
- - \@musicinmybrain
+ - [\@GabrielBarrantes](https://github.com/GabrielBarrantes)
+ - [\@musicinmybrain](https://github.com/musicinmybrain)
 
 
 ----------------------------
+<a name="v0.12.1"></a>
 ## 0.12.1
 
 [Github release: 0.12.1](https://github.com/biojppm/rapidyaml/releases/tag/v0.12.1)
@@ -55,6 +600,7 @@ Changes since latest release: [current.md](https://github.com/biojppm/rapidyaml/
 
 
 ----------------------------
+<a name="v0.12.0"></a>
 ## 0.12.0
 
 [Github release: 0.12.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.12.0)
@@ -282,6 +828,7 @@ Ensure parse errors for **invalid** YAML cases, and improve reported error locat
 
 
 ----------------------------
+<a name="v0.11.1"></a>
 ## 0.11.1
 
 [Github release: 0.11.1](https://github.com/biojppm/rapidyaml/releases/tag/v0.11.1)
@@ -296,7 +843,7 @@ Ensure parse errors for **invalid** YAML cases, and improve reported error locat
   : y
   @endcode
   With this fix, **rapidyaml now has a 100% success rate for valid YAML cases** in the YAML test suite.
-- [PR#580](https://github.com/biojppm/rapidyaml/pull/580): fix compilation error when `RYML_NO_DEFAULT_CALLBACKS` is defined (thanks \@toge)
+- [PR#580](https://github.com/biojppm/rapidyaml/pull/580): fix compilation error when `RYML_NO_DEFAULT_CALLBACKS` is defined (thanks [\@toge](https://github.com/toge))
 - [PR#582](https://github.com/biojppm/rapidyaml/pull/582): fix compilation error with clang-cl
 - Fix [#584](https://github.com/biojppm/rapidyaml/pull/584): install: `RYML_VERSION` was missing from rymlConfig.cmake
 - Update c4core to [0.2.11](https://github.com/biojppm/c4core/releases/tag/v0.2.11)
@@ -309,22 +856,23 @@ Ensure parse errors for **invalid** YAML cases, and improve reported error locat
 
 ### Thanks
 
-- \@toge
+- [\@toge](https://github.com/toge)
 
 
 ----------------------------
+<a name="v0.11.0"></a>
 ## 0.11.0
 
 [Github release: 0.11.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.11.0)
 
 ### New features
 
-- [PR#550](https://github.com/biojppm/rapidyaml/pull/550) - Implement flow multiline style ([FLOW_ML](@ref c4::yml::FLOW_ML)):
+- [PR#550](https://github.com/biojppm/rapidyaml/pull/550) - Implement flow multiline style ([FLOW_ML](@ref c4::yml::FLOW_ML1)):
   - The parser now detects this style automatically for flow seqs or maps when the terminating bracket sits on a line different from the opening bracket.
   - Added [ParserOptions::detect_flow_ml()](@ref c4::yml::ParserOptions::detect_flow_ml()) to enable/disable this behavior
-  - Added [EmitOptions::indent_flow_ml()](@ref c4::yml::EmitOptions::indent_flow_ml()) to control indentation of [FLOW_ML](@ref c4::yml::FLOW_ML) containers
+  - Added [EmitOptions::indent_flow_ml()](@ref c4::yml::EmitOptions::indent_flow_ml()) to control indentation of [FLOW_ML](@ref c4::yml::FLOW_ML1) containers
   - The emit implementation was refactored, and is now significantly cleaner
-  - Emitted YAML will now have anchors emitted before tags, as is customary ([see example](https://play.yaml.io/main/parser?input=LSAhdGFnICZhbmNob3IgfAogIG5vdGUgaG93IHRoZSBhbmNob3IgY29tZXMKICBmaXJzdCBpbiB0aGUgZXZlbnRz)).
+  - Emitted YAML will now have anchors emitted before tags, as is customary ([see example](https://play.yaml.com/main/parser?input=LSAhdGFnICZhbmNob3IgfAogIG5vdGUgaG93IHRoZSBhbmNob3IgY29tZXMKICBmaXJzdCBpbiB0aGUgZXZlbnRz)).
   - Added [ParserOptions](@ref c4::yml::ParserOptions) defaulted argument to temp-parser overloads of `parse_{yaml,json}_in_{place,arena}()`
   - [PR#567](https://github.com/biojppm/rapidyaml/pull/567) (fixes [#566](https://github.com/biojppm/rapidyaml/issues/566)) fixes a regression from this refactor where top-level container anchors were wrongly emitted in the same line if no style was set on the container.
 
@@ -375,7 +923,7 @@ Ensure parse errors for **invalid** YAML cases, and improve reported error locat
   ---
   more data here
   @endcode
-- [PR#576](https://github.com/biojppm/rapidyaml/pull/576) - `extra::events_ints_print()`: Prevent integer overflow in bounds check (thanks \@bytecodesky).
+- [PR#576](https://github.com/biojppm/rapidyaml/pull/576) - `extra::events_ints_print()`: Prevent integer overflow in bounds check (thanks [\@bytecodesky](https://github.com/bytecodesky)).
 
 
 ### JSON emitting changes
@@ -427,11 +975,12 @@ Ensure parse errors for **invalid** YAML cases, and improve reported error locat
 
 ### Thanks
 
-- \@bytecodesky
+- [\@bytecodesky](https://github.com/bytecodesky)
 
 
 
 ----------------------------
+<a name="v0.10.0"></a>
 ## 0.10.0
 
 [Github release: 0.10.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.10.0)
@@ -451,9 +1000,9 @@ This handler is meant for use by other programming languages, and it supports co
 
 ### Fixes
 
-- Fix [#524](https://github.com/biojppm/rapidyaml/issues/524) ([PR#525](https://github.com/biojppm/rapidyaml/pull/525)): problem parsing nested map value in complex map. Kudos to \@MatthewSteel!
-- [PR#542](https://github.com/biojppm/rapidyaml/pull/542): `\x` Unicode sequences were not decoded. Thanks to \@mutativesystems!
-- [PR#541](https://github.com/biojppm/rapidyaml/pull/541): `std::is_trivial` deprecated in c++26. Thanks to \@P3RK4N!
+- Fix [#524](https://github.com/biojppm/rapidyaml/issues/524) ([PR#525](https://github.com/biojppm/rapidyaml/pull/525)): problem parsing nested map value in complex map. Kudos to [\@MatthewSteel](https://github.com/MatthewSteel)!
+- [PR#542](https://github.com/biojppm/rapidyaml/pull/542): `\x` Unicode sequences were not decoded. Thanks to [\@mutativesystems](https://github.com/mutativesystems)!
+- [PR#541](https://github.com/biojppm/rapidyaml/pull/541): `std::is_trivial` deprecated in c++26. Thanks to [\@P3RK4N](https://github.com/P3RK4N)!
 - Fix [#529](https://github.com/biojppm/rapidyaml/issues/529) ([PR#530](https://github.com/biojppm/rapidyaml/pull/530)): double-quoted `"<<"` was mistaken for an inheriting reference.
 - [PR#543](https://github.com/biojppm/rapidyaml/pull/543): improvements to experimental style API:
   - Add getters to [NodeType](@ref c4::yml::NodeType), [Tree](@ref c4::yml::Tree), [NodeRef](@ref c4::yml::NodeRef), and [ConstNodeRef](@ref c4::yml::ConstNodeRef):
@@ -468,12 +1017,13 @@ This handler is meant for use by other programming languages, and it supports co
 
 ### Thanks
 
-- \@MatthewSteel
-- \@mutativesystems
-- \@P3RK4N
+- [\@MatthewSteel](https://github.com/MatthewSteel)
+- [\@mutativesystems](https://github.com/mutativesystems)
+- [\@P3RK4N](https://github.com/P3RK4N)
 
 
 ----------------------------
+<a name="v0.9.0"></a>
 ## 0.9.0
 
 [Github release: 0.9.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.9.0)
@@ -516,10 +1066,11 @@ This handler is meant for use by other programming languages, and it supports co
 
 ### Thanks
 
-- \@davidrudlstorfer
+- [\@davidrudlstorfer](https://github.com/davidrudlstorfer)
 
 
 ----------------------------
+<a name="v0.8.0"></a>
 ## 0.8.0
 
 [Github release: 0.8.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.8.0)
@@ -530,7 +1081,7 @@ This handler is meant for use by other programming languages, and it supports co
   - Deserializing an empty quoted string *will not* cause an error.
   - Deserializing an empty string *will* cause an error: the empty string is read in as an empty scalar.
   - Ensure keys are deserialized using all the rules applying to vals.
-  - Added [KEYNIL](@ref c4::yml::NodeType_e::KEYNIL) and [VALNIL](@ref c4::yml::NodeType_e::VALNIL) to [NodeType_e](@ref c4::yml::NodeType_e), used by the parser to mark the key or val as empty. This changed the values of the [NodeType_e](@ref c4::yml::NodeType_e) enumeration.
+  - Added [KEYNIL](@ref c4::yml::NodeTypeBits::KEYNIL) and [VALNIL](@ref c4::yml::NodeTypeBits::VALNIL) to [NodeType_e](@ref c4::yml::NodeTypeBits), used by the parser to mark the key or val as empty. This changed the values of the [NodeType_e](@ref c4::yml::NodeTypeBits) enumeration.
   - Added `.key_is_null()` and `.val_is_null()`:
     - [NodeType](@ref c4::yml::NodeType): [.key_is_null()](@ref c4::yml::NodeType::key_is_null()) and [.val_is_null()](@ref c4::yml::NodeType::val_is_null())
     - [Tree](@ref c4::yml::Tree): [.key_is_null()](@ref c4::yml::Tree::key_is_null()) and [.val_is_null()](@ref c4::yml::Tree::val_is_null())
@@ -560,7 +1111,7 @@ This handler is meant for use by other programming languages, and it supports co
   : value   # this was not indented
   @endcode
 - [PR#492](https://github.com/biojppm/rapidyaml/pull/492): fix parser reset for full reuse (`m_doc_empty` was not resetted), which would cause problems under specific scenarios in subsequent reuse.
-- [PR#485](https://github.com/biojppm/rapidyaml/pull/485): improve the CI workflows (thanks to \@ingydotnet):
+- [PR#485](https://github.com/biojppm/rapidyaml/pull/485): improve the CI workflows (thanks to [\@ingydotnet](https://github.com/ingydotnet)):
   - amazing code reuse and organization, thanks to the use of YamlScript to generate the final workflows
   - all optimization levels are now covered for gcc, clang and Visual Studio.
 - [PR#499](https://github.com/biojppm/rapidyaml/pull/499): fix warnings with `-Wundef`.
@@ -568,12 +1119,13 @@ This handler is meant for use by other programming languages, and it supports co
 
 ### Thanks
 
-- \@ingydotnet
-- \@perlpunk
-- \@Delian0
+- [\@ingydotnet](https://github.com/ingydotnet)
+- [\@perlpunk](https://github.com/perlpunk)
+- [\@Delian0](https://github.com/Delian0)
 
 
 ---------------------------------------
+<a name="v0.7.2"></a>
 ## 0.7.2
 - [0.7.2](https://github.com/biojppm/rapidyaml/releases/tag/v0.7.2)
 
@@ -584,10 +1136,11 @@ This handler is meant for use by other programming languages, and it supports co
 
 ### Thanks
 
-- \@musicinmybrain
+- [\@musicinmybrain](https://github.com/musicinmybrain)
 
 
 ---------------------------------------
+<a name="v0.7.1"></a>
 ## 0.7.1
 [Github release: 0.7.1](https://github.com/biojppm/rapidyaml/releases/tag/v0.7.1)
 
@@ -615,20 +1168,21 @@ This handler is meant for use by other programming languages, and it supports co
 - Use malloc.h instead of alloca.h on MinGW ([PR#447](https://github.com/biojppm/rapidyaml/pull/447))
 - Fix [#442](https://github.com/biojppm/rapidyaml/issues/442) ([PR#443](https://github.com/biojppm/rapidyaml/pull/443)):
   - Ensure leading `+` is accepted when deserializing numbers.
-  - Ensure numbers are not quoted by fixing the heuristics in [scalar_style_query_plain()](@ref c4::yml::scalar_style_query_plain()) and [scalar_style_choose()](@ref c4::yml::scalar_style_choose()).
+  - Ensure numbers are not quoted by fixing the heuristics in `scalar_style_query_plain()` and `scalar_style_choose()`.
   - Add quickstart sample for overflow detection (only of integral types).
 - Parse engine: cleanup unused macros
 
 
 ### Thanks
 
-- \@marcalff
-- \@toge
-- \@musicinmybrain
-- \@buty4649
+- [\@marcalff](https://github.com/marcalff)
+- [\@toge](https://github.com/toge)
+- [\@musicinmybrain](https://github.com/musicinmybrain)
+- [\@buty4649](https://github.com/buty4649)
 
 
 ---------------------------------------
+<a name="v0.7.0"></a>
 ## 0.7.0
 [Github release: 0.7.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.7.0)
 
@@ -826,6 +1380,7 @@ Emit performance improved everywhere by over 1.5x and as much as 3x-4x for YAML 
 
 
 ---------------------------------------
+<a name="v0.6.0"></a>
 ## 0.6.0
 [Github release: 0.6.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.6.0)
 
@@ -840,7 +1395,7 @@ Emit performance improved everywhere by over 1.5x and as much as 3x-4x for YAML 
 Fix major error handling problem reported in [#389](https://github.com/biojppm/rapidyaml/issues/389) ([PR#411](https://github.com/biojppm/rapidyaml/pull/411)):
 
   - The [NodeRef](@ref c4::yml::NodeRef) and [ConstNodeRef](@ref c4::yml::ConstNodeRef) classes are now conditional `noexcept` using `RYML_NOEXCEPT`, which evaluates either to nothing when assertions are enabled, and to `noexcept` otherwise. The problem was that these classes had many methods explicitly marked `noexcept`, but were doing assertions which could throw exceptions, causing an abort instead of a throw whenever the assertion called an exception-throwing error callback.
-  - This problem was compounded by assertions being enabled in every build type -- despite the intention to have them only in debug builds. There was a problem in the preprocessor code to enable assertions which led to assertions being enabled in release builds even when `RYML_USE_ASSERT` was defined to 0. Thanks to \@jdrouhard for reporting this.
+  - This problem was compounded by assertions being enabled in every build type -- despite the intention to have them only in debug builds. There was a problem in the preprocessor code to enable assertions which led to assertions being enabled in release builds even when `RYML_USE_ASSERT` was defined to 0. Thanks to [\@jdrouhard](https://github.com/jdrouhard) for reporting this.
   - Although the code is and was extensively tested, the testing was addressing mostly the happy path. Tests were added to ensure that the error behavior is as intended.
   - Together with this changeset, a major revision was carried out of the asserting/checking status of each function in the node classes. In most cases, assertions were added to functions that were missing them. So **beware** - some user code that was invalid will now assert or error out. Also, assertions and checks are now directed as much as possible to the callbacks of the closest scope: ie, if a tree has custom callbacks, errors within the tree class should go through those callbacks.
   - Also, the intended assertion behavior is now in place: *no assertions in release builds*. **Beware** as well - user code which was relying on this will now silently succeed and return garbage in release builds. See the next points, which may help.
@@ -902,12 +1457,13 @@ Fix major error handling problem reported in [#389](https://github.com/biojppm/r
 
 ### Thanks
 
-- \@Neko-Box-Coder
-- \@jdrouhard
-- \@dmachaj
+- [\@Neko-Box-Coder](https://github.com/Neko-Box-Coder)
+- [\@jdrouhard](https://github.com/jdrouhard)
+- [\@dmachaj](https://github.com/dmachaj)
 
 
 ---------------------------------------
+<a name="v0.5.0"></a>
 ## 0.5.0
 [Github release: 0.5.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.5.0)
 
@@ -1082,11 +1638,12 @@ Fix major error handling problem reported in [#389](https://github.com/biojppm/r
 
 ### Thanks
 
-- \@NaN-git
-- \@dancingbug
+- [\@NaN-git](https://github.com/NaN-git)
+- [\@dancingbug](https://github.com/dancingbug)
 
 
 ---------------------------------------
+<a name="v0.4.1"></a>
 ## 0.4.1
 [Github release: 0.4.1](https://github.com/biojppm/rapidyaml/releases/tag/v0.4.1)
 
@@ -1096,10 +1653,11 @@ Fix major error handling problem reported in [#389](https://github.com/biojppm/r
 
 
 ---------------------------------------
+<a name="v0.4.0"></a>
 ## 0.4.0
 [Github release: 0.4.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.4.0)
 
-This release improves compliance with the [YAML test suite](https://github.com/yaml/yaml-test-suite/) (thanks \@ingydotnet and \@perlpunk for extensive and helpful cooperation), and adds node location tracking using the parser.
+This release improves compliance with the [YAML test suite](https://github.com/yaml/yaml-test-suite/) (thanks [\@ingydotnet](https://github.com/ingydotnet) and [\@perlpunk](https://github.com/perlpunk) for extensive and helpful cooperation), and adds node location tracking using the parser.
 
 
 ### Breaking changes
@@ -1190,7 +1748,7 @@ As part of the [new feature to track source locations](https://github.com/biojpp
   // NOTE: reusing the parser with a new YAML source buffer
   // will invalidate the accelerator.
   @endcode
-  See more details in the [quickstart sample](https://github.com/biojppm/rapidyaml/blob/bfb073265abf8c58bbeeeed7fb43270e9205c71c/samples/quickstart.cpp#L3759). Thanks to \@cschreib for submitting a working example proving how simple it could be to achieve this.
+  See more details in the [quickstart sample](https://github.com/biojppm/rapidyaml/blob/bfb073265abf8c58bbeeeed7fb43270e9205c71c/samples/quickstart.cpp#L3759). Thanks to [\@cschreib](https://github.com/cschreib) for submitting a working example proving how simple it could be to achieve this.
 - `Parser`:
   - add `source()` and `filename()` to get the latest buffer and filename to be parsed
   - add `callbacks()` to get the parser's callbacks
@@ -1321,16 +1879,17 @@ As part of the [new feature to track source locations](https://github.com/biojpp
 
 ### Thanks
 
-- \@ingydotnet
-- \@perlpunk
-- \@cschreib
-- \@fargies
-- \@Xeonacid
-- \@aviktorov
-- \@xTVaser
+- [\@ingydotnet](https://github.com/ingydotnet
+- [\@perlpunk](https://github.com/perlpunk)
+- [\@cschreib](https://github.com/cschreib)
+- [\@fargies](https://github.com/fargies)
+- [\@Xeonacid](https://github.com/Xeonacid)
+- [\@aviktorov](https://github.com/aviktorov)
+- [\@xTVaser](https://github.com/xTVaser)
 
 
 ---------------------------------------
+<a name="v0.3.0"></a>
 ## 0.3.0
 [Github release: 0.3.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.3.0)
 
@@ -1437,11 +1996,12 @@ ryml::Tree   tree2  = {mr2.callbacks()};
 
 ### Thanks
 
-- \@aviktorov
+- [\@aviktorov](https://github.com/aviktorov)
 
 
 
 ---------------------------------------
+<a name="v0.2.3"></a>
 ## 0.2.3
 [Github release: 0.2.3](https://github.com/biojppm/rapidyaml/releases/tag/v0.2.3)
 
@@ -1727,12 +2287,13 @@ This release is focused on bug fixes and compliance with the [YAML test suite](h
 
 ### Thanks
 
-- \@mbs-c
-- \@simu
-- \@QuellaZhang
+- \@[mbs-c](https://github.com/mbs-c)
+- [\@simu](https://github.com/simu)
+- [\@QuellaZhang](https://github.com/QuellaZhang)
 
 
 ---------------------------------------
+<a name="v0.2.2"></a>
 ## 0.2.2
 [Github release: 0.2.2](https://github.com/biojppm/rapidyaml/releases/tag/v0.2.2)
 
@@ -1740,6 +2301,7 @@ Yank python package 0.2.1, was accidentally created while iterating the PyPI sub
 
 
 ---------------------------------------
+<a name="v0.2.1"></a>
 ## 0.2.1
 [Github release: 0.2.1](https://github.com/biojppm/rapidyaml/releases/tag/v0.2.1)
 
@@ -1976,11 +2538,12 @@ This release is focused on bug fixes and compliance with the [YAML test suite](h
 
 ### Special thanks
 
-- \@Gei0r
+- [\@Gei0r](https://github.com/Gei0r)
 
 
 
 ---------------------------------------
+<a name="v0.2.0"></a>
 ## 0.2.0
 
 [Github release: 0.2.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.2.0)
@@ -2011,12 +2574,13 @@ This release is focused on bug fixes and compliance with the [YAML test suite](h
 - Fix python packaging ([PR #102](https://github.com/biojppm/rapidyaml/pull/102))
 
 ### Special thanks
-- \@Gei0r
-- \@litghost
-- \@costashatz
+- [\@Gei0r](https://github.com/Gei0r)
+- [\@litghost](https://github.com/litghost)
+- [\@costashatz](https://github.com/costashatz)
 
 
 ---------------------------------------
+<a name="v0.1.0"></a>
 ## 0.1.0
 [Github release: 0.1.0](https://github.com/biojppm/rapidyaml/releases/tag/v0.1.0)
 
