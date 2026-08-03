@@ -6,7 +6,7 @@
 //
 
 import Foundation
-internal import YAMLNode
+internal import CRapidYAML
 
 /// Builds a `Node` tree out of a parsed rapidyaml tree.
 ///

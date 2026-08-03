@@ -6,7 +6,7 @@
 //
 
 import Foundation
-internal import YAMLNode
+internal import CRapidYAML
 
 /// A parsed rapidyaml tree, held for as long as anything reads from it.
 ///

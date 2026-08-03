@@ -13,7 +13,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "YAMLNode",
+            name: "CRapidYAML",
             exclude: [
                 "c4core/c4/ext",
             ],
@@ -24,7 +24,7 @@ let package = Package(
         ),
         .target(
             name: "RapidYAML",
-            dependencies: ["YAMLNode"]
+            dependencies: ["CRapidYAML"]
         ),
         .testTarget(
             name: "RapidYAMLTests",

@@ -6,7 +6,7 @@
 //
 
 import Foundation
-internal import YAMLNode
+internal import CRapidYAML
 
 /// Produce a YAML string from objects.
 ///

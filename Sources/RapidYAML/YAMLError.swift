@@ -6,7 +6,7 @@
 //
 
 import Foundation
-internal import YAMLNode
+internal import CRapidYAML
 
 /// Errors thrown by RapidYAML APIs.
 public enum YAMLError: Error, Sendable {
@@ -100,21 +100,21 @@ extension YAMLError {
     /// rapidyaml also has no equivalent of libYAML's error context — the "while parsing a block
     /// mapping" half of the message — so `context` is always `nil`.
     ///
-    /// - parameter error: An `NSError` in `YAMLNodeErrorDomain`.
+    /// - parameter error: An `NSError` in `CRapidYAMLErrorDomain`.
     /// - parameter yaml:  The YAML String being parsed when the error occured.
     init(from error: NSError, with yaml: String) {
-        guard error.domain == YAMLNodeErrorDomain else {
+        guard error.domain == CRapidYAMLErrorDomain else {
             self = .reader(problem: error.localizedDescription, offset: nil, value: -1, yaml: yaml)
             return
         }
 
         let problem = error.localizedDescription
 
-        switch YAMLNodeError.Code(rawValue: error.code) {
+        switch CRapidYAMLError.Code(rawValue: error.code) {
         case .parse:
-            guard let line = error.userInfo[YAMLNodeErrorLineKey] as? Int,
-                  let column = error.userInfo[YAMLNodeErrorColumnKey] as? Int else {
-                let offset = error.userInfo[YAMLNodeErrorOffsetKey] as? Int
+            guard let line = error.userInfo[CRapidYAMLErrorLineKey] as? Int,
+                  let column = error.userInfo[CRapidYAMLErrorColumnKey] as? Int else {
+                let offset = error.userInfo[CRapidYAMLErrorOffsetKey] as? Int
                 self = .reader(problem: problem, offset: offset, value: -1, yaml: yaml)
                 return
             }

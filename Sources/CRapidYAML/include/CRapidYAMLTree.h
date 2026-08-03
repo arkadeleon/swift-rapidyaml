@@ -1,6 +1,6 @@
 //
-//  YAMLNode.h
-//  YAMLNode
+//  CRapidYAMLTree.h
+//  CRapidYAML
 //
 //  Created by Leon Li on 2025/6/12.
 //
@@ -8,33 +8,6 @@
 #import <Foundation/Foundation.h>
 
 NS_ASSUME_NONNULL_BEGIN
-
-/// Domain of the errors reported by the underlying rapidyaml library.
-extern NSErrorDomain const YAMLNodeErrorDomain;
-
-typedef NS_ERROR_ENUM(YAMLNodeErrorDomain, YAMLNodeErrorCode) {
-    /// A general error, not tied to a location in the YAML source.
-    YAMLNodeErrorCodeBasic = 1,
-    /// The YAML source is malformed. The location keys below point at the offending token.
-    YAMLNodeErrorCodeParse = 2,
-    /// An error raised while visiting an already parsed tree.
-    YAMLNodeErrorCodeVisit = 3,
-};
-
-/// One-based line in the YAML source where the error was detected, as an `NSNumber`.
-///
-/// Only present on `YAMLNodeErrorCodeParse` errors.
-extern NSErrorUserInfoKey const YAMLNodeErrorLineKey;
-
-/// One-based column in the YAML source where the error was detected, as an `NSNumber`.
-///
-/// Only present on `YAMLNodeErrorCodeParse` errors.
-extern NSErrorUserInfoKey const YAMLNodeErrorColumnKey;
-
-/// One-based byte offset into the YAML source where the error was detected, as an `NSNumber`.
-///
-/// Only present on `YAMLNodeErrorCodeParse` errors.
-extern NSErrorUserInfoKey const YAMLNodeErrorOffsetKey;
 
 typedef NS_ENUM(NSInteger, YAMLNodeKind) {
     YAMLNodeKindUnknown = 0,
@@ -133,7 +106,7 @@ typedef struct {
 ///
 /// - parameter yaml:   UTF-8 bytes. Copied, so the caller need not keep them.
 /// - parameter length: How many bytes of `yaml` to read.
-/// - parameter error:  Set to a `YAMLNodeErrorDomain` error when the source cannot be parsed.
+/// - parameter error:  Set to a `CRapidYAMLErrorDomain` error when the source cannot be parsed.
 YAMLTree * _Nullable YAMLTreeParse(const char *yaml, size_t length, NSError **error);
 
 /// Releases a tree and everything read out of it.
@@ -157,49 +130,5 @@ YAMLNodeID YAMLTreeNextSibling(const YAMLTree *tree, YAMLNodeID node);
 #if defined(__cplusplus)
 }
 #endif
-
-/// One node of a tree to be emitted.
-///
-/// rapidyaml emits a tree rather than an event stream, so the whole document is described up
-/// front and handed to `YAMLEmitter` in one call.
-@interface YAMLEmitterNode : NSObject
-
-@property (nonatomic) YAMLNodeKind kind;
-
-@property (nonatomic, copy, nullable) NSString *key;
-@property (nonatomic, copy, nullable) NSString *keyTag;
-@property (nonatomic, copy, nullable) NSString *keyAnchor;
-@property (nonatomic) YAMLScalarStyle keyStyle;
-
-@property (nonatomic, copy, nullable) NSString *value;
-@property (nonatomic, copy, nullable) NSString *valueTag;
-@property (nonatomic, copy, nullable) NSString *valueAnchor;
-/// The anchor this node aliases. A node is either an alias or a value, never both.
-@property (nonatomic, copy, nullable) NSString *valueAlias;
-@property (nonatomic) YAMLScalarStyle valueStyle;
-
-@property (nonatomic) YAMLCollectionStyle collectionStyle;
-
-/// Children in the order they should be emitted. A mapping's children are its pairs.
-@property (nonatomic, copy) NSArray<YAMLEmitterNode *> *children;
-
-@end
-
-/// Emits YAML from trees built out of `YAMLEmitterNode`.
-@interface YAMLEmitter : NSObject
-
-/// Emits `documents` as a single YAML stream.
-///
-/// Returns `nil` and populates `error` with a `YAMLNodeErrorDomain` error if the tree could not
-/// be emitted.
-///
-/// - parameter documents:     The documents to emit, in order.
-/// - parameter explicitStart: Whether to write a `---` marker before each document. A stream of
-///                            more than one document always gets markers, whatever this says.
-+ (nullable NSString *)emitDocuments:(NSArray<YAMLEmitterNode *> *)documents
-                       explicitStart:(BOOL)explicitStart
-                               error:(NSError **)error;
-
-@end
 
 NS_ASSUME_NONNULL_END

@@ -6,7 +6,7 @@
 //
 
 import Foundation
-internal import YAMLNode
+internal import CRapidYAML
 
 /// Parse all YAML documents in a String
 /// and produce corresponding Swift objects.
