@@ -67,7 +67,14 @@ public final class Constructor {
 
 extension Constructor {
     /// The default `Constructor` to be used with APIs where none is explicitly provided.
-    public static var `default`: Constructor { .init() }
+    ///
+    /// - note: Yams builds a fresh one on every access. Each costs three dictionaries, and every
+    ///         `Tag` created without an explicit constructor asks for one, so decoding a large
+    ///         document paid for hundreds of thousands of them. A `Constructor` is immutable once
+    ///         built, so one shared instance does the same job. It is `nonisolated(unsafe)`
+    ///         because `Constructor` holds only `let` maps of pure closures — there is nothing to
+    ///         mutate — but the type cannot say so while its maps hold non-`Sendable` closures.
+    public nonisolated(unsafe) static let `default`: Constructor = .init()
 
     /// The default `Tag.Name` to `Node.Scalar` map.
     public static var defaultScalarMap: ScalarMap { [

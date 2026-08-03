@@ -220,18 +220,18 @@ private struct _YAMLKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContain
     init(decoder: _YAMLDecoder, wrapping mapping: Node.Mapping) {
         self.decoder = decoder
 
-        let keys = mapping.keys
-
+        // Yams asks `mapping.keys.contains(...)`, which scans; going through the mapping's own
+        // lookup keeps this off the hot path, since it runs once per decoded value.
         let decodeAnchor: Anchor?
         let decodeTag: Tag?
 
-        if let anchor = mapping.anchor, keys.contains(.anchorKeyNode) == false {
+        if let anchor = mapping.anchor, mapping.index(forKey: .anchorKeyNode) == nil {
             decodeAnchor = anchor
         } else {
             decodeAnchor = nil
         }
 
-        if mapping.tag.name != .implicit && keys.contains(.tagKeyNode) == false {
+        if mapping.tag.name != .implicit && mapping.index(forKey: .tagKeyNode) == nil {
             decodeTag = mapping.tag
         } else {
             decodeTag = nil

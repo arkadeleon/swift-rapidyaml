@@ -151,6 +151,12 @@ extension Node.Mapping {
     /// - note: The decoder does not call this yet — wiring merge keys into decoding is Phase 5.
     ///         `Constructor` needs it, so it lands here.
     func flatten() -> Node.Mapping {
+        // Most mappings have nothing to merge, and rebuilding one costs an array of tuples plus
+        // a second array of pairs. Only pay that when there is something to do.
+        guard contains(where: { $0.key.tag.name == .merge || $0.key.tag.name == .value }) else {
+            return self
+        }
+
         var pairs = Array(self)
         var merge = [(key: Node, value: Node)]()
         var index = pairs.startIndex
@@ -208,7 +214,7 @@ extension Node.Mapping {
     /// Set or get the specified `Node`.
     public subscript(node: Node) -> Node? {
         get {
-            return pairs.reversed().first(where: { $0.key == node })?.value
+            return index(forKey: node).map { pairs[$0].value }
         }
         set {
             if let newValue = newValue {
@@ -226,6 +232,9 @@ extension Node.Mapping {
     }
 
     /// Get the index of the specified `Node`, if it exists in the mapping.
+    ///
+    /// Where a key appears more than once, this is the last of them, which is what makes a
+    /// lookup see the value that was written last.
     public func index(forKey key: Node) -> Index? {
         return pairs.reversed().firstIndex(where: { $0.key == key }).map({ pairs.index(before: $0.base) })
     }
