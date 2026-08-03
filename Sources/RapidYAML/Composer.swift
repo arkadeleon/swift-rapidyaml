@@ -25,12 +25,16 @@ struct Composer {
     /// The constructor every composed node's `Tag` is built with.
     private let constructor: Constructor
 
+    /// The source split into lines, so that a mark costs one line rather than a walk from the top.
+    private let lineIndex: LineIndex
+
     /// The nodes named so far by an anchor. An alias can only refer to an anchor that has already
     /// been composed, which is what makes a recursive document impossible.
     private var anchors: [Anchor: Node] = [:]
 
     init(yaml: String, resolver: Resolver, constructor: Constructor) {
         self.yaml = yaml
+        self.lineIndex = LineIndex(yaml)
         self.resolver = resolver
         self.constructor = constructor
     }
@@ -161,7 +165,7 @@ struct Composer {
 
     private func mark(line: UInt, column: UInt) -> Mark? {
         guard line > 0, column > 0 else { return nil }
-        return yaml.mark(atLine: Int(line), byteColumn: Int(column))
+        return lineIndex.mark(atLine: Int(line), byteColumn: Int(column))
     }
 
     private func scalarStyle(_ style: YAMLNode.ScalarStyle) -> Node.Scalar.Style {

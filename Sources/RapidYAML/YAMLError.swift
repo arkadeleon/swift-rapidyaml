@@ -118,7 +118,7 @@ extension YAMLError {
                 self = .reader(problem: problem, offset: offset, value: -1, yaml: yaml)
                 return
             }
-            self = .parser(context: nil, problem: problem, yaml.mark(atLine: line, byteColumn: column), yaml: yaml)
+            self = .parser(context: nil, problem: problem, LineIndex(yaml).mark(atLine: line, byteColumn: column), yaml: yaml)
         default:
             // Basic and visit errors carry a location in the rapidyaml C++ source rather than in
             // the YAML, so there is no mark to report.

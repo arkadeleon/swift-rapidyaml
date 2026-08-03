@@ -249,6 +249,6 @@ public final class Parser {
         let line = document.hasKey ? document.keyLine : document.valueLine
         let column = document.hasKey ? document.keyColumn : document.valueColumn
         guard line > 0, column > 0 else { return Mark(line: 1, column: 1) }
-        return yaml.mark(atLine: Int(line), byteColumn: Int(column))
+        return LineIndex(yaml).mark(atLine: Int(line), byteColumn: Int(column))
     }
 }

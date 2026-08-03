@@ -78,6 +78,48 @@ extension String {
         }
     }
 
+}
+
+/// A source split into lines once, so that resolving a mark costs the length of one line rather
+/// than a walk from the top of the document.
+///
+/// Composing a document asks for a mark per scalar. Going through `substring(at:)` each time made
+/// that quadratic in the size of the source — 74 KB took 440 ms, against 0.75 ms to parse it.
+struct LineIndex {
+
+    private let yaml: String
+    /// Where each line begins, so a lookup neither walks nor copies the source.
+    private let lineStarts: [String.Index]
+    /// Whether each line is pure ASCII, where a byte column is already a scalar column.
+    private let lineIsASCII: [Bool]
+
+    init(_ yaml: String) {
+        self.yaml = yaml
+
+        // rapidyaml counts lines by `\n`, so this counts them the same way. Scanning scalars
+        // rather than characters keeps this off the grapheme-breaking path.
+        let scalars = yaml.unicodeScalars
+        var starts: [String.Index] = [scalars.startIndex]
+        var isASCII: [Bool] = []
+        var currentIsASCII = true
+        var index = scalars.startIndex
+        while index < scalars.endIndex {
+            let next = scalars.index(after: index)
+            if scalars[index] == "\n" {
+                starts.append(next)
+                isASCII.append(currentIsASCII)
+                currentIsASCII = true
+            } else if !scalars[index].isASCII {
+                currentIsASCII = false
+            }
+            index = next
+        }
+        isASCII.append(currentIsASCII)
+
+        lineStarts = starts
+        lineIsASCII = isASCII
+    }
+
     /// Converts a position reported by rapidyaml into a `Mark`.
     ///
     /// rapidyaml counts columns in bytes, while `Mark` — like libYAML, which Yams is built on —
@@ -87,13 +129,22 @@ extension String {
     /// - parameter line:   Line number starting from 1.
     /// - parameter column: Column number starting from 1, counted in UTF-8 bytes.
     func mark(atLine line: Int, byteColumn column: Int) -> Mark {
-        let contents = substring(at: line - 1)
-        guard let index = contents.utf8
-            .index(contents.utf8.startIndex, offsetBy: column - 1, limitedBy: contents.utf8.endIndex)?
-            .samePosition(in: contents.unicodeScalars) else {
+        guard line >= 1, line <= lineStarts.count else {
             return Mark(line: line, column: column)
         }
-        let scalarColumn = contents.unicodeScalars.distance(from: contents.unicodeScalars.startIndex, to: index)
+
+        // Walking to a column is linear in the column, and a flow sequence written on one line
+        // can run to thousands. Almost all YAML is ASCII, where there is nothing to convert.
+        if lineIsASCII[line - 1] {
+            return Mark(line: line, column: column)
+        }
+
+        let lineStart = lineStarts[line - 1]
+        guard let index = yaml.utf8.index(lineStart, offsetBy: column - 1, limitedBy: yaml.utf8.endIndex),
+              let scalarIndex = index.samePosition(in: yaml.unicodeScalars) else {
+            return Mark(line: line, column: column)
+        }
+        let scalarColumn = yaml.unicodeScalars.distance(from: lineStart, to: scalarIndex)
         return Mark(line: line, column: scalarColumn + 1)
     }
 }
