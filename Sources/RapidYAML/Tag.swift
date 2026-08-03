@@ -22,10 +22,12 @@ public final class Tag {
         return Tag(.implicit)
     }
 
-    /// Create a `Tag` with the specified name.
+    /// Create a `Tag` with the specified name and resolver.
     ///
-    /// - parameter name: Tag name.
-    public init(_ name: Name) {
+    /// - parameter name:     Tag name.
+    /// - parameter resolver: `Resolver` this tag should use, `.default` if omitted.
+    public init(_ name: Name, _ resolver: Resolver = .default) {
+        self.resolver = resolver
         self.name = name
     }
 
@@ -33,11 +35,12 @@ public final class Tag {
     ///
     /// - note: Omitting or passing nil for a parameter will preserve the current `Tag`'s value in the copy.
     ///
-    /// - parameter name: Overridden tag name.
+    /// - parameter name:     Overridden tag name.
+    /// - parameter resolver: Overridden resolver.
     ///
     /// - returns: A copy of the current `Tag` with the specified overridden changes.
-    public func copy(with name: Name? = nil) -> Tag {
-        return .init(name ?? self.name)
+    public func copy(with name: Name? = nil, resolver: Resolver? = nil) -> Tag {
+        return .init(name ?? self.name, resolver ?? self.resolver)
     }
 
     // internal
@@ -45,12 +48,15 @@ public final class Tag {
 
     fileprivate func resolved<T>(with value: T) -> Tag where T: TagResolvable {
         if name == .implicit {
-            name = value.resolveTag()
+            name = resolver.resolveTag(of: value)
         } else if name == .nonSpecific {
             name = T.defaultTagName
         }
         return self
     }
+
+    // private
+    private let resolver: Resolver
 }
 
 extension Tag: CustomStringConvertible {
@@ -146,15 +152,10 @@ extension Tag.Name {
 }
 
 /// A node that can have its tag resolved from its contents.
-///
-/// - note: Yams passes a `Resolver` through `resolveTag(using:)`, which infers a tag from a scalar's
-///         contents — `"true"` becomes `.bool`, `"1"` becomes `.int`, and so on. Until Phase 3 lands
-///         the resolver, an implicit tag resolves to the failsafe schema only: `.str` for scalars,
-///         `.seq` for sequences and `.map` for mappings.
 protocol TagResolvable {
     var tag: Tag { get }
     static var defaultTagName: Tag.Name { get }
-    func resolveTag() -> Tag.Name
+    func resolveTag(using resolver: Resolver) -> Tag.Name
 }
 
 extension TagResolvable {
@@ -162,7 +163,7 @@ extension TagResolvable {
         return tag.resolved(with: self)
     }
 
-    func resolveTag() -> Tag.Name {
+    func resolveTag(using resolver: Resolver) -> Tag.Name {
         return tag.name == .implicit ? Self.defaultTagName : tag.name
     }
 }

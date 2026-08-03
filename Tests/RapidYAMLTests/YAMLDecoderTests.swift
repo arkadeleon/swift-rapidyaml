@@ -74,15 +74,20 @@ struct Item: Decodable {
     #expect(potions.also.name == "Red Potion")
 }
 
-@Test func decodesAnEmptyValueAsNil() async throws {
-    struct Optional: Decodable {
-        var id: Int
-        var name: String?
-    }
+struct Nullable: Decodable {
+    var name: String?
+}
 
-    let decoded = try YAMLDecoder().decode(Optional.self, from: "id: 501\nname:\n")
-    #expect(decoded.id == 501)
-    #expect(decoded.name == nil)
+/// The resolver's null rule is what makes `~` and `null` decode as nil, not just an empty value.
+@Test(arguments: ["name:\n", "name: ~\n", "name: null\n", "name: Null\n", "name: NULL\n"])
+func decodesNullAsNil(yamlString: String) async throws {
+    #expect(try YAMLDecoder().decode(Nullable.self, from: yamlString).name == nil)
+}
+
+/// Only a plain scalar is null — quoting it makes it the string, as in Yams.
+@Test(arguments: ["name: 'null'\n", "name: \"~\"\n"])
+func decodesQuotedNullAsAString(yamlString: String) async throws {
+    #expect(try YAMLDecoder().decode(Nullable.self, from: yamlString).name != nil)
 }
 
 @Test func duplicateKeysFailToDecode() async throws {

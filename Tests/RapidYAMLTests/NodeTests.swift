@@ -103,14 +103,22 @@ import Testing
         #expect(Node.Alias("a") < Node.Alias("b"))
     }
 
-    @Test func tagsResolveToTheFailsafeSchema() {
-        // Phase 3's `Resolver` is what makes `"1"` resolve to `.int`; until then an implicit tag
-        // only ever resolves to the kind's default.
-        #expect(Node("1").tag.name == .str)
+    @Test func implicitTagsAreResolvedFromContents() {
+        #expect(Node("1").tag.name == .int)
         #expect(Node(["1"]).tag.name == .seq)
         #expect(Node([(Node("a"), Node("1"))]).tag.name == .map)
-        #expect(Node("1", Tag(.nonSpecific)).tag.name == .str)
         #expect(Node("1", Tag(.int)).tag.name == .int, "an explicit tag is left alone")
+    }
+
+    @Test func nonSpecificTagsResolveToTheFailsafeSchema() {
+        // `!` means "do not resolve me by value".
+        #expect(Node("1", Tag(.nonSpecific)).tag.name == .str)
+        #expect(Node(["1"], Tag(.nonSpecific)).tag.name == .seq)
+    }
+
+    @Test func aResolverWithoutRulesLeavesEverythingAString() {
+        #expect(Node("1", Tag(.implicit, .basic)).tag.name == .str)
+        #expect(Node("true", Tag(.implicit, .basic)).tag.name == .str)
     }
 }
 

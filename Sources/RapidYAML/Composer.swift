@@ -21,20 +21,27 @@ struct Composer {
     /// The YAML source, carried only so that a failure can report it.
     private let yaml: String
 
+    /// The resolver every composed node's `Tag` is built with.
+    private let resolver: Resolver
+
     /// The nodes named so far by an anchor. An alias can only refer to an anchor that has already
     /// been composed, which is what makes a recursive document impossible.
     private var anchors: [Anchor: Node] = [:]
 
-    private init(yaml: String) {
+    private init(yaml: String, resolver: Resolver) {
         self.yaml = yaml
+        self.resolver = resolver
     }
 
     /// Parses `yamlString` and composes its first document.
     ///
+    /// - parameter yamlString: The YAML source to parse.
+    /// - parameter resolver:   The `Resolver` to resolve implicit tags with.
+    ///
     /// - returns: The document's root node, or `nil` if the source holds no document.
     ///
     /// - throws: `YAMLError` if the source is not valid YAML, or cannot be composed.
-    static func compose(yaml yamlString: String) throws -> Node? {
+    static func compose(yaml yamlString: String, resolver: Resolver = .default) throws -> Node? {
         let root: YAMLNode
         do {
             root = try YAMLNode(yamlString: yamlString)
@@ -43,7 +50,7 @@ struct Composer {
             throw YAMLError(from: error as NSError, with: yamlString)
         }
 
-        var composer = Composer(yaml: yamlString)
+        var composer = Composer(yaml: yamlString, resolver: resolver)
         return try composer.document(root)
     }
 
@@ -147,7 +154,7 @@ struct Composer {
     // MARK: - Conversions
 
     private func tag(_ name: String?) -> Tag {
-        return Tag(name.map(Tag.Name.init(rawValue:)) ?? .implicit)
+        return Tag(name.map(Tag.Name.init(rawValue:)) ?? .implicit, resolver)
     }
 
     private func mark(line: UInt, column: UInt) -> Mark? {

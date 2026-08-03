@@ -357,10 +357,13 @@ extension _YAMLDecoder: SingleValueDecodingContainer {
 
     // MARK: - Swift.SingleValueDecodingContainer Methods
 
-    /// - note: Yams asks the `Constructor` here (`node.null == NSNull()`), which also treats
-    ///         `~`, `null`, `Null` and `NULL` as nil. Phase 4 replaces this.
+    /// - note: Yams asks the `Constructor` here (`node.null == NSNull()`). This is the same test
+    ///         spelled out: the resolver recognises ``, `~`, `null`, `Null` and `NULL`, and only a
+    ///         plain scalar counts, so `key: 'null'` is the string and not nil. Phase 4 replaces
+    ///         this with the constructor call.
     func decodeNil() -> Bool {
-        node.scalar?.string.isEmpty ?? false
+        guard let scalar = node.scalar, case .plain = scalar.style else { return false }
+        return scalar.resolvedTag.name == .null
     }
 
     func decode(_ type: Bool.Type) throws -> Bool {

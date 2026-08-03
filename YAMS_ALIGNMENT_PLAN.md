@@ -168,26 +168,39 @@ Location tracking is enabled unconditionally in `ParserOptions`, which costs an
 extra pass over the source to build rapidyaml's line accelerator. `Node.mark` is
 part of the public model, so this is not opt-in.
 
-### Still stubbed, pending Phases 3 and 4
+### Still stubbed, pending Phase 4
 
-`Tag` carries no `Resolver` or `Constructor` yet, so its initializer takes a
-name only, and an implicit tag resolves to the failsafe schema — `.str` for
-scalars, `.seq` and `.map` for containers. `"1"` is therefore `.str` and not
-`.int` today. For the same reason `Node.any`, `Node.bool`, `Node.int` and the
-other `ScalarConstructible` accessors are absent, `Node.string` is just the
-scalar's text, and `Node.Mapping.flatten()` is left for Phase 5 — it cannot
-recognise a `<<` key until the resolver exists.
+`Tag` gained its `Resolver` in Phase 3 but still carries no `Constructor`, so
+`Node.any`, `Node.bool`, `Node.int` and the other `ScalarConstructible`
+accessors are absent, and `Node.string` is just the scalar's text.
+`Node.Mapping.flatten()` is left for Phase 5.
 
 ---
 
-## Phase 3 — Resolver
+## Phase 3 — Resolver — **done**
 
 | Target | Yams source |
 |---|---|
 | `Resolver.swift` | `Resolver.swift` (175) |
 
-Pure Swift regex, no libyaml dependency — portable nearly as-is.
-Seven rules: `bool`, `int`, `float`, `null`, `timestamp`, `merge`, `value`.
+Portable as-is, as expected. All seven rules — `bool`, `int`, `float`, `merge`,
+`null`, `timestamp`, `value` — plus `basic` / `default`, and the
+`appending` / `replacing` / `removing` lenses. Resolution was diffed against
+Yams over 70 scalars, including the near-misses (`TrUe`, `0o8`, `1e3.5`,
+`2026-13`), and agrees on every one.
+
+This retires the tag stubs Phase 2 left behind. `Tag` carries a `Resolver`
+again, `Tag.init` and `copy(with:)` take one, and `Node.Scalar.resolveTag`
+resolves from contents, so `"1"` is `.int` and `"yes"` is `.bool`. `Composer`
+threads a resolver through, defaulting to `.default`; Phase 6 will expose it as
+a `Parser` option.
+
+`decodeNil` also moved onto the resolver — `~`, `null`, `Null` and `NULL` now
+decode as nil, and only for plain scalars, so `key: 'null'` stays a string. That
+is Yams' rule; Phase 4 replaces the hand-written test with the constructor call.
+
+The one thing left out is Yams' free `pattern(_:)` helper, which lives in this
+file but is only used by `Constructor`. It comes with Phase 4.
 
 ---
 
@@ -198,7 +211,9 @@ Seven rules: `bool`, `int`, `float`, `null`, `timestamp`, `merge`, `value`.
 | `Constructor.swift` | `Constructor.swift` (710) |
 
 Also largely pure Swift and portable. This is where today's behavioral gap is
-widest:
+widest. Phase 3 made the *tags* right; this phase makes the *values* right —
+`"0x1F"` already resolves to `.int`, but decoding it still goes through
+`Int("0x1F")`, which fails.
 
 - `Bool` — `yes`/`no`/`on`/`off` and case variants (currently only `true`/`false`)
 - `Int`/`UInt` — `0x`, `0o`, `0b`, `_` separators, sexagesimal (`SexagesimalConvertible`)
@@ -208,6 +223,8 @@ widest:
 - `UUID`, `Decimal`, `URL`
 - `construct_mapping` / `construct_set` / `construct_omap` / `construct_pairs`
 - `Node.any`, `Node.array(of:)`
+- the `pattern(_:)` helper carried over from `Resolver.swift`
+- `decodeNil` becomes the constructor's `node.null == NSNull()` call
 
 Highest correctness-per-effort ratio of any phase.
 
@@ -270,10 +287,10 @@ This suite is the only reliable way to verify the earlier phases.
 
 ## Order of work
 
-Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → 3 → 4 → 5 → 6 → 7 → 8**.
+Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → 4 → 5 → 6 → 7 → 8**.
 
-0.1, 1 and 2 are done. Next up is Phase 3, the `Resolver` — small, self-contained,
-and what unblocks the tag stubs Phase 2 left behind.
+0.1 through 3 are done. Next up is Phase 4, the `Constructor` — the widest
+behavioral gap left, and the last piece `Tag` is missing.
 
 If the scope ever needs to be cut back to "correct and usable" rather than
 API-equivalent, **0.1 → 3 → 4 → 5 (merge keys)** delivers most of the practical

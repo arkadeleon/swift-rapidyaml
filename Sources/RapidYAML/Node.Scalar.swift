@@ -121,4 +121,7 @@ extension Node.Scalar: Hashable {
 
 extension Node.Scalar: TagResolvable {
     static let defaultTagName = Tag.Name.str
+    func resolveTag(using resolver: Resolver) -> Tag.Name {
+        return tag.name == .implicit ? resolver.resolveTag(from: string) : tag.name
+    }
 }
