@@ -1,0 +1,168 @@
+//
+//  Tag.swift
+//  RapidYAML
+//
+//  Created by Leon Li on 2026/8/3.
+//
+
+/// Tags describe the the _type_ of a Node.
+public final class Tag {
+    /// Tag name.
+    public struct Name: RawRepresentable, Hashable, Sendable {
+        /// This `Tag.Name`'s raw string value.
+        public let rawValue: String
+        /// Create a `Tag.Name` with a raw string value.
+        public init(rawValue: String) {
+            self.rawValue = rawValue
+        }
+    }
+
+    /// Shorthand accessor for `Tag(.implicit)`.
+    public static var implicit: Tag {
+        return Tag(.implicit)
+    }
+
+    /// Create a `Tag` with the specified name.
+    ///
+    /// - parameter name: Tag name.
+    public init(_ name: Name) {
+        self.name = name
+    }
+
+    /// Lens returning a copy of the current `Tag` with the specified overridden changes.
+    ///
+    /// - note: Omitting or passing nil for a parameter will preserve the current `Tag`'s value in the copy.
+    ///
+    /// - parameter name: Overridden tag name.
+    ///
+    /// - returns: A copy of the current `Tag` with the specified overridden changes.
+    public func copy(with name: Name? = nil) -> Tag {
+        return .init(name ?? self.name)
+    }
+
+    // internal
+    var name: Name
+
+    fileprivate func resolved<T>(with value: T) -> Tag where T: TagResolvable {
+        if name == .implicit {
+            name = value.resolveTag()
+        } else if name == .nonSpecific {
+            name = T.defaultTagName
+        }
+        return self
+    }
+}
+
+extension Tag: CustomStringConvertible {
+    /// A textual representation of this tag.
+    public var description: String {
+        return name.rawValue
+    }
+}
+
+extension Tag: Hashable {
+    /// :nodoc:
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+    }
+
+    /// :nodoc:
+    public static func == (lhs: Tag, rhs: Tag) -> Bool {
+        return lhs.name == rhs.name
+    }
+}
+
+extension Tag: RawRepresentable {
+    /// :nodoc:
+    public convenience init?(rawValue: String) {
+        self.init(stringLiteral: rawValue)
+    }
+
+    /// :nodoc:
+    public var rawValue: String {
+        name.rawValue
+    }
+}
+
+extension Tag: Codable {}
+
+extension Tag: ExpressibleByStringLiteral {
+    /// :nodoc:
+    public convenience init(stringLiteral value: String) {
+        self.init(.init(rawValue: value))
+    }
+}
+
+extension Tag.Name: ExpressibleByStringLiteral {
+    /// :nodoc:
+    public init(stringLiteral value: String) {
+        self.rawValue = value
+    }
+}
+
+extension Tag.Name: Codable {}
+
+// http://www.yaml.org/spec/1.2/spec.html#Schema
+extension Tag.Name {
+    // Special
+    /// Tag should be resolved by value.
+    public static let implicit: Tag.Name = ""
+    /// Tag should not be resolved by value, and be resolved as .str, .seq or .map.
+    public static let nonSpecific: Tag.Name = "!"
+
+    // Failsafe Schema
+    /// "tag:yaml.org,2002:str" <http://yaml.org/type/str.html>
+    public static let str: Tag.Name = "tag:yaml.org,2002:str"
+    /// "tag:yaml.org,2002:seq" <http://yaml.org/type/seq.html>
+    public static let seq: Tag.Name  = "tag:yaml.org,2002:seq"
+    /// "tag:yaml.org,2002:map" <http://yaml.org/type/map.html>
+    public static let map: Tag.Name  = "tag:yaml.org,2002:map"
+    // JSON Schema
+    /// "tag:yaml.org,2002:bool" <http://yaml.org/type/bool.html>
+    public static let bool: Tag.Name  = "tag:yaml.org,2002:bool"
+    /// "tag:yaml.org,2002:float" <http://yaml.org/type/float.html>
+    public static let float: Tag.Name  =  "tag:yaml.org,2002:float"
+    /// "tag:yaml.org,2002:null" <http://yaml.org/type/null.html>
+    public static let null: Tag.Name  = "tag:yaml.org,2002:null"
+    /// "tag:yaml.org,2002:int" <http://yaml.org/type/int.html>
+    public static let int: Tag.Name  = "tag:yaml.org,2002:int"
+    // http://yaml.org/type/index.html
+    /// "tag:yaml.org,2002:binary" <http://yaml.org/type/binary.html>
+    public static let binary: Tag.Name  = "tag:yaml.org,2002:binary"
+    /// "tag:yaml.org,2002:merge" <http://yaml.org/type/merge.html>
+    public static let merge: Tag.Name  = "tag:yaml.org,2002:merge"
+    /// "tag:yaml.org,2002:omap" <http://yaml.org/type/omap.html>
+    public static let omap: Tag.Name  = "tag:yaml.org,2002:omap"
+    /// "tag:yaml.org,2002:pairs" <http://yaml.org/type/pairs.html>
+    public static let pairs: Tag.Name  = "tag:yaml.org,2002:pairs"
+    /// "tag:yaml.org,2002:set". <http://yaml.org/type/set.html>
+    public static let set: Tag.Name  = "tag:yaml.org,2002:set"
+    /// "tag:yaml.org,2002:timestamp" <http://yaml.org/type/timestamp.html>
+    public static let timestamp: Tag.Name  = "tag:yaml.org,2002:timestamp"
+    /// "tag:yaml.org,2002:value" <http://yaml.org/type/value.html>
+    public static let value: Tag.Name  = "tag:yaml.org,2002:value"
+    /// "tag:yaml.org,2002:yaml" <http://yaml.org/type/yaml.html> We don't support this.
+    public static let yaml: Tag.Name  = "tag:yaml.org,2002:yaml"
+}
+
+/// A node that can have its tag resolved from its contents.
+///
+/// - note: Yams passes a `Resolver` through `resolveTag(using:)`, which infers a tag from a scalar's
+///         contents — `"true"` becomes `.bool`, `"1"` becomes `.int`, and so on. Until Phase 3 lands
+///         the resolver, an implicit tag resolves to the failsafe schema only: `.str` for scalars,
+///         `.seq` for sequences and `.map` for mappings.
+protocol TagResolvable {
+    var tag: Tag { get }
+    static var defaultTagName: Tag.Name { get }
+    func resolveTag() -> Tag.Name
+}
+
+extension TagResolvable {
+    var resolvedTag: Tag {
+        return tag.resolved(with: self)
+    }
+
+    func resolveTag() -> Tag.Name {
+        return tag.name == .implicit ? Self.defaultTagName : tag.name
+    }
+}

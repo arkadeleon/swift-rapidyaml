@@ -1,5 +1,5 @@
 //
-//  RapidYAMLTests.swift
+//  YAMLDecoderTests.swift
 //  RapidYAMLTests
 //
 //  Created by Leon Li on 2025/6/12.
@@ -47,6 +47,48 @@ struct Item: Decodable {
     #expect(items[0].name == "Red Potion")
     #expect(items[1].id == 502)
     #expect(items[1].name == "Orange Potion")
+}
+
+@Test func decodesFromANode() async throws {
+    let node = try #require(try Composer.compose(yaml: "Id: 501\nName: Red Potion\n"))
+    let item = try YAMLDecoder().decode(Item.self, from: node)
+
+    #expect(item.id == 501)
+    #expect(item.name == "Red Potion")
+}
+
+@Test func decodesThroughAliases() async throws {
+    struct Potions: Decodable {
+        var red: Item
+        var also: Item
+    }
+
+    let potions = try YAMLDecoder().decode(Potions.self, from: """
+        red: &potion
+          Id: 501
+          Name: Red Potion
+        also: *potion
+        """)
+
+    #expect(potions.also.id == 501)
+    #expect(potions.also.name == "Red Potion")
+}
+
+@Test func decodesAnEmptyValueAsNil() async throws {
+    struct Optional: Decodable {
+        var id: Int
+        var name: String?
+    }
+
+    let decoded = try YAMLDecoder().decode(Optional.self, from: "id: 501\nname:\n")
+    #expect(decoded.id == 501)
+    #expect(decoded.name == nil)
+}
+
+@Test func duplicateKeysFailToDecode() async throws {
+    #expect(throws: DecodingError.self) {
+        try YAMLDecoder().decode(Item.self, from: "Id: 501\nName: Red\nId: 502\n")
+    }
 }
 
 /// Malformed YAML used to abort the process inside rapidyaml's default error callbacks.

@@ -104,12 +104,26 @@ static NSString * _Nullable NSStringFromSubstr(c4::csubstr substr) {
     return string;
 }
 
+/// Converts a tag as written into its long form, so that `!!str` and `!<tag:yaml.org,2002:str>`
+/// both arrive in Swift as `tag:yaml.org,2002:str` — the form libyaml hands to Yams. Tags that are
+/// not from the YAML schema, such as `!foo`, are passed through unchanged.
+static NSString * _Nullable NSStringFromTag(c4::csubstr tag) {
+    if (tag.str == nullptr) {
+        return nil;
+    }
+
+    c4::csubstr normalized = ryml::normalize_tag_long(tag);
+    if (normalized.len >= 2 && normalized.begins_with('<') && normalized.ends_with('>')) {
+        normalized = normalized.range(1, normalized.len - 1);
+    }
+    return NSStringFromSubstr(normalized);
+}
+
 static YAMLNodeKind YAMLNodeKindFromNode(ryml::ConstNodeRef node) {
+    // A document node also carries the type of its contents — `---\na: 1` is a DOCMAP — so the
+    // container checks have to come before the document check.
     if (node.is_stream()) {
         return YAMLNodeKindStream;
-    }
-    if (node.is_doc()) {
-        return YAMLNodeKindDocument;
     }
     if (node.is_map()) {
         return YAMLNodeKindMapping;
@@ -120,8 +134,97 @@ static YAMLNodeKind YAMLNodeKindFromNode(ryml::ConstNodeRef node) {
     if (node.has_val()) {
         return YAMLNodeKindScalar;
     }
+    if (node.is_doc()) {
+        return YAMLNodeKindDocument;
+    }
     return YAMLNodeKindUnknown;
 }
+
+static YAMLScalarStyle YAMLKeyStyleFromNode(ryml::ConstNodeRef node) {
+    if (!node.has_key()) {
+        return YAMLScalarStyleAny;
+    }
+    if (node.is_key_literal()) {
+        return YAMLScalarStyleLiteral;
+    }
+    if (node.is_key_folded()) {
+        return YAMLScalarStyleFolded;
+    }
+    if (node.is_key_squo()) {
+        return YAMLScalarStyleSingleQuoted;
+    }
+    if (node.is_key_dquo()) {
+        return YAMLScalarStyleDoubleQuoted;
+    }
+    if (node.is_key_plain()) {
+        return YAMLScalarStylePlain;
+    }
+    return YAMLScalarStyleAny;
+}
+
+static YAMLScalarStyle YAMLValueStyleFromNode(ryml::ConstNodeRef node) {
+    if (!node.has_val()) {
+        return YAMLScalarStyleAny;
+    }
+    if (node.is_val_literal()) {
+        return YAMLScalarStyleLiteral;
+    }
+    if (node.is_val_folded()) {
+        return YAMLScalarStyleFolded;
+    }
+    if (node.is_val_squo()) {
+        return YAMLScalarStyleSingleQuoted;
+    }
+    if (node.is_val_dquo()) {
+        return YAMLScalarStyleDoubleQuoted;
+    }
+    if (node.is_val_plain()) {
+        return YAMLScalarStylePlain;
+    }
+    return YAMLScalarStyleAny;
+}
+
+static YAMLCollectionStyle YAMLCollectionStyleFromNode(ryml::ConstNodeRef node) {
+    if (!node.is_container()) {
+        return YAMLCollectionStyleAny;
+    }
+    if (node.type().is_flow()) {
+        return YAMLCollectionStyleFlow;
+    }
+    if (node.type().is_block()) {
+        return YAMLCollectionStyleBlock;
+    }
+    return YAMLCollectionStyleAny;
+}
+
+/// Resolves the one-based line and column of `scalar` in the parsed source.
+///
+/// `Tree::location()` would do this, but it assumes every scalar still points into the source
+/// buffer. Scalars that had to be filtered — some escapes, and block scalars that grow — are
+/// relocated into the tree's arena, and looking those up trips a check inside rapidyaml. Only
+/// scalars that really are substrings of the source get a location; the rest report 0.
+static void YAMLLocationOfScalar(c4::csubstr scalar, ryml::Parser const& parser, NSUInteger *line, NSUInteger *column) {
+    *line = 0;
+    *column = 0;
+
+    if (scalar.str == nullptr || !scalar.is_sub(parser.source())) {
+        return;
+    }
+
+    ryml::Location location = parser.val_location(scalar.str);
+    if (location.line != ryml::npos) {
+        *line = location.line + 1;
+    }
+    if (location.col != ryml::npos) {
+        *column = location.col + 1;
+    }
+}
+
+@interface YAMLNode ()
+
+- (instancetype)initWithNode:(ryml::ConstNodeRef)node parser:(ryml::Parser const&)parser;
+
+@end
 
 @implementation YAMLNode
 
@@ -129,8 +232,12 @@ static YAMLNodeKind YAMLNodeKindFromNode(ryml::ConstNodeRef node) {
     InstallThrowingErrorCallbacks();
 
     try {
-        ryml::Tree tree = ryml::parse_in_arena([yamlString UTF8String]);
-        return [self initWithNode:tree.rootref() parent:nil];
+        // Locations are opt-in because tracking them costs an extra pass over the source. `Mark`
+        // is part of the public model, so they are always on.
+        ryml::EventHandlerTree eventHandler = {};
+        ryml::Parser parser(&eventHandler, ryml::ParserOptions().locations(true));
+        ryml::Tree tree = ryml::parse_in_arena(&parser, [yamlString UTF8String]);
+        return [self initWithNode:tree.rootref() parser:parser];
     } catch (YAMLNodeException const& exception) {
         if (error != NULL) {
             *error = NSErrorFromException(exception);
@@ -139,99 +246,57 @@ static YAMLNodeKind YAMLNodeKindFromNode(ryml::ConstNodeRef node) {
     }
 }
 
-- (instancetype)initWithNode:(ryml::ConstNodeRef)node parent:(nullable YAMLNode *)parent {
+- (instancetype)initWithNode:(ryml::ConstNodeRef)node parser:(ryml::Parser const&)parser {
     self = [super init];
     if (self) {
-        _parent = parent;
         _kind = YAMLNodeKindFromNode(node);
-        _typeBits = static_cast<uint32_t>(node.type().m_bits);
-        _typeString = [NSString stringWithUTF8String:node.type().type_str()];
+        _collectionStyle = YAMLCollectionStyleFromNode(node);
 
-        _isStream = node.is_stream();
-        _isDoc = node.is_doc();
-        _isMap = node.is_map();
-        _isSeq = node.is_seq();
-        _isContainer = node.is_container();
         _hasKey = node.has_key();
-        _hasValue = node.has_val();
-        _isNull = node.has_val() && node.val_is_null();
-        _isRef = node.is_ref();
-        _hasAnchor = node.has_anchor();
-
         if (node.has_key()) {
             _key = NSStringFromSubstr(node.key());
-        }
-        if (node.has_val()) {
-            _value = NSStringFromSubstr(node.val());
+            _keyStyle = YAMLKeyStyleFromNode(node);
+            YAMLLocationOfScalar(node.key(), parser, &_keyLine, &_keyColumn);
         }
         if (node.has_key_tag()) {
-            _keyTag = NSStringFromSubstr(node.key_tag());
-        }
-        if (node.has_val_tag()) {
-            _valueTag = NSStringFromSubstr(node.val_tag());
+            _keyTag = NSStringFromTag(node.key_tag());
         }
         if (node.has_key_anchor()) {
             _keyAnchor = NSStringFromSubstr(node.key_anchor());
         }
+        if (node.is_key_ref()) {
+            _keyAlias = NSStringFromSubstr(node.key_ref());
+        }
+
+        if (node.has_val()) {
+            _value = NSStringFromSubstr(node.val());
+            _valueStyle = YAMLValueStyleFromNode(node);
+            YAMLLocationOfScalar(node.val(), parser, &_valueLine, &_valueColumn);
+        }
+        if (node.has_val_tag()) {
+            _valueTag = NSStringFromTag(node.val_tag());
+        }
         if (node.has_val_anchor()) {
             _valueAnchor = NSStringFromSubstr(node.val_anchor());
         }
-        if (node.is_key_ref()) {
-            _keyReference = NSStringFromSubstr(node.key_ref());
-        }
         if (node.is_val_ref()) {
-            _valueReference = NSStringFromSubstr(node.val_ref());
+            _valueAlias = NSStringFromSubstr(node.val_ref());
         }
 
-        NSMutableArray<YAMLNode *> *children = [NSMutableArray array];
-        size_t childCount = node.num_children();
-        for (size_t pos = 0; pos < childCount; pos++) {
-            auto child = node.child(pos);
-            YAMLNode *childNode = [[YAMLNode alloc] initWithNode:child parent:self];
-            [children addObject:childNode];
+        NSMutableArray<YAMLNode *> *children = [NSMutableArray arrayWithCapacity:node.num_children()];
+        for (ryml::ConstNodeRef child : node.children()) {
+            [children addObject:[[YAMLNode alloc] initWithNode:child parser:parser]];
         }
         _children = [children copy];
-        _childCount = _children.count;
 
-        if (node.is_map()) {
-            NSMutableDictionary<NSString *, YAMLNode *> *mapping = [NSMutableDictionary dictionary];
-            for (YAMLNode *child in _children) {
-                if (child.key != nil) {
-                    mapping[child.key] = child;
-                }
-            }
-            _mapping = [mapping copy];
-        }
-
-        if (node.is_seq()) {
-            _sequence = _children;
-        }
-
-        if (!node.is_container() && node.has_val() && !node.val_is_null()) {
-            _scalar = NSStringFromSubstr(node.val());
-        }
-
-        if (_children == nil) {
-            _children = @[];
+        // A container has no scalar to point at, so stand in the position of its first child.
+        if (_valueLine == 0 && _children.count > 0) {
+            YAMLNode *first = _children.firstObject;
+            _valueLine = first.hasKey ? first.keyLine : first.valueLine;
+            _valueColumn = first.hasKey ? first.keyColumn : first.valueColumn;
         }
     }
     return self;
-}
-
-- (nullable YAMLNode *)childAtIndex:(NSUInteger)index {
-    if (index >= self.children.count) {
-        return nil;
-    }
-    return self.children[index];
-}
-
-- (nullable YAMLNode *)childForKey:(NSString *)key {
-    for (YAMLNode *child in self.children) {
-        if ([child.key isEqualToString:key]) {
-            return child;
-        }
-    }
-    return nil;
 }
 
 @end
