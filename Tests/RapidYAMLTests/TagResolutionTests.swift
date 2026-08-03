@@ -1,5 +1,5 @@
 //
-//  ResolverTests.swift
+//  TagResolutionTests.swift
 //  RapidYAMLTests
 //
 //  Created by Leon Li on 2026/8/3.
@@ -9,7 +9,7 @@ import Foundation
 import Testing
 @testable import RapidYAML
 
-@Suite struct ResolverTests {
+@Suite struct TagResolutionTests {
 
     // MARK: Default rules
 

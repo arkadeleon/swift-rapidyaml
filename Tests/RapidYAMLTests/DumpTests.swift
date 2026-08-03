@@ -1,5 +1,5 @@
 //
-//  EmitterTests.swift
+//  DumpTests.swift
 //  RapidYAMLTests
 //
 //  Created by Leon Li on 2026/8/3.
@@ -9,7 +9,7 @@ import Foundation
 import Testing
 @testable import RapidYAML
 
-@Suite struct RepresenterTests {
+@Suite struct NodeRepresentationTests {
 
     @Test func representsScalars() throws {
         #expect(try 42.represented() == Node("42", RapidYAML.Tag(.int)))

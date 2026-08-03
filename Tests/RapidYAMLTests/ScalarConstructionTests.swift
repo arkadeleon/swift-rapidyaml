@@ -1,5 +1,5 @@
 //
-//  ConstructorTests.swift
+//  ScalarConstructionTests.swift
 //  RapidYAMLTests
 //
 //  Created by Leon Li on 2026/8/3.
@@ -9,7 +9,7 @@ import Foundation
 import Testing
 @testable import RapidYAML
 
-@Suite struct ConstructorTests {
+@Suite struct ScalarConstructionTests {
 
     /// The `v` value of a one-key document, which is how most of these cases are written.
     private func value(_ yaml: String) throws -> Node {

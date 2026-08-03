@@ -11,7 +11,7 @@ Drafted 2026-08-03.
 ## Current state
 
 This section describes the state the plan was drafted against. Phases 0.1
-through 7 have since landed; see each phase for what changed.
+through 7, and part of 8, have since landed; see each phase for what changed.
 
 | | |
 |---|---|
@@ -394,24 +394,89 @@ anchors in both libraries.
 
 ---
 
-## Phase 8 — Tests
+## Phase 8 — Tests — **partly done**
 
-Port Yams' suite (5968 lines), including `SpecTests.swift` (951) which runs the
-YAML spec fixtures.
+Ported so far, into `Tests/RapidYAMLTests/Ported/`, kept as XCTest to stay close
+to the source (87 tests, all passing):
 
-Suggested order: `ConstructorTests` → `NodeTests` → `SpecTests` → `EncoderTests`.
-This suite is the only reliable way to verify the earlier phases.
+| Yams file | lines | notes |
+|---|---|---|
+| `TestHelper.swift` | 154 | `YamsAssertEqual` → `AssertYAMLEqual` |
+| `ConstructorTests.swift` | 586 | one case narrowed, see below |
+| `SpecTests.swift` | 951 | dump assertions became round trips |
+| `NodeTests.swift` | 240 | as-is |
+| `ResolverTests.swift` | 140 | as-is |
+| `YamlErrorTests.swift` | 208 | rewritten to our messages |
+| `MarkTests.swift` | 69 | one expectation adjusted |
+| `StringTests.swift` | 67 | as-is |
+| `NodeDecoderTests.swift` | 84 | as-is |
+| `TopLevelDecoderTests.swift` | 82 | one fixture reindented |
+| `DecodableWithConfigurationTests.swift` | 94 | as-is |
+| `AliasingStrategyTests.swift` | 52 | as-is |
+| `NodeInternalHelpersTests.swift` | 32 | as-is |
+
+**Not yet ported**: `EncoderTests` (1193), `AnchorCodingTests` (518),
+`ClassReferenceDecodingTests` (322), `TagCodingTests` (260),
+`EmitterTests` (185), `TagTolerancesTests` (180), `AnchorTolerancesTests` (163),
+`RepresenterTests` (160). `PerformanceTests` (228) is deliberately out of scope —
+it measures rather than verifies. The encoding-side files are the ones that
+assert byte-exact emitter output, so they need the same per-case treatment
+`SpecTests` got.
+
+### What the port found
+
+Two bugs in our own code, both crashes:
+
+- **A location lookup could fail the parse.** `parser.val_location()` rejects a
+  position past the last recorded newline — a scalar on the final line of a
+  source with no trailing newline. It now falls back to no mark rather than
+  propagating; a mark is never worth a failed parse.
+- **The emitter could terminate the process.** rapidyaml's
+  `scalar_style_choose_block()` is `noexcept` yet asserts when a scalar can be
+  neither plain nor single-quoted, and the assert routes through our throwing
+  callbacks — so `dump` of a multi-line string with indented continuation lines
+  called `std::terminate`. The bridge now picks the style itself with
+  `scalar_style_choose_flow()`, which falls back to double-quoting instead.
+
+And three rapidyaml limitations, each pinned in `RapidYAMLLimitationTests` so a
+future upgrade that fixes one shows up as a failing test:
+
+- **A flow container may not close at column 0** when nested under a mapping
+  key: `json: {\n  "a": 1\n}` is a parse error, though indenting the `}` is
+  fine. This is how embedded JSON is normally written, so it is the one most
+  likely to be hit.
+- **An explicit-key block cannot be followed by a sibling**: `a:\n  ? x\nb: 1`
+  is "invalid indentation". `? key` blocks otherwise work.
+- **A block scalar always ends with a newline**, even when the source has none.
+  Explicit chomping indicators (`-`, `+`) behave correctly.
+
+### Adjustments made to ported tests
+
+Each is annotated in place with why:
+
+- `SpecTests` asserts a round trip where Yams asserts libyaml's exact bytes. The
+  `expectedYaml` literals are left in as a record of what libyaml produces.
+- Four block-scalar expectations gained a trailing newline.
+- Two fixtures were reindented for the column-0 limitation.
+- `ConstructorTests.testSet` keeps the flow half of its example; the block half
+  hits the explicit-key limitation.
+- `YamlErrorTests` was rewritten to our messages — rapidyaml has no scanner
+  stage, no error context, and accepts the control character that is the only
+  thing producing a `.reader` error in Yams.
+- One `MarkTests` expectation reflects container marks pointing at the first
+  child.
 
 ---
 
 ## Order of work
 
-Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → ~~4~~ → ~~5~~ → ~~6~~ → ~~7~~ → 8**.
+Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → ~~4~~ → ~~5~~ → ~~6~~ → ~~7~~ → 8 (partly)**.
 
-0.1 through 7 are done. Reading matches Yams; writing produces equivalent YAML
-that round-trips, but not byte-identical output — see Phase 7 for why. What is
-left is Phase 8, porting Yams' own test suite, which is also the thing that
-would tell us how much the emitter differences actually matter.
+0.1 through 7 are done, and about half of Phase 8. Reading matches Yams;
+writing produces equivalent YAML that round-trips, but not byte-identical
+output — see Phase 7. What is left is the second half of the test port, listed
+under Phase 8: the encoding-side files, which are the ones that pin exact
+emitter output.
 
 The "correct and usable" subset — 0.1, 3, 4 and merge keys — is already covered
 by what has landed, so everything from here on is API surface rather than

@@ -214,12 +214,20 @@ static void YAMLLocationOfScalar(c4::csubstr scalar, ryml::Parser const& parser,
         return;
     }
 
-    ryml::Location location = parser.val_location(scalar.str);
-    if (location.line != ryml::npos) {
-        *line = location.line + 1;
-    }
-    if (location.col != ryml::npos) {
-        *column = location.col + 1;
+    try {
+        ryml::Location location = parser.val_location(scalar.str);
+        if (location.line != ryml::npos) {
+            *line = location.line + 1;
+        }
+        if (location.col != ryml::npos) {
+            *column = location.col + 1;
+        }
+    } catch (YAMLNodeException const&) {
+        // rapidyaml's line accelerator cannot resolve every position — a scalar on the last line
+        // of a source with no trailing newline sits past the last recorded newline, and the
+        // lookup fails. A node without a mark beats a parse that does not happen.
+        *line = 0;
+        *column = 0;
     }
 }
 
@@ -392,6 +400,15 @@ void BuildNode(ryml::Tree &tree, ryml::id_type id, YAMLEmitterNode *description)
         }
     } else {
         ryml::type_bits style = ValueStyleBits(description.valueStyle);
+        if (style == 0) {
+            // Left to itself, rapidyaml picks a block style, and `scalar_style_choose_block()`
+            // asserts rather than falling back when a scalar can be neither plain nor
+            // single-quoted — a multi-line string with indented continuation lines, say. The
+            // assert routes through the error callbacks, and since that function is `noexcept`
+            // the throw would terminate the process. Choosing here avoids the whole path, and
+            // picks what libyaml picks: plain, else single-quoted, else double-quoted.
+            style = static_cast<ryml::type_bits>(ryml::scalar_style_choose_flow(tree.val(id))) & ryml::VAL_STYLE;
+        }
         if (style != 0) {
             tree.set_val_style(id, style);
         }
