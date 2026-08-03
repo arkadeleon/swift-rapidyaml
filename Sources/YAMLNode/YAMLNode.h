@@ -9,6 +9,33 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Domain of the errors reported by the underlying rapidyaml library.
+extern NSErrorDomain const YAMLNodeErrorDomain;
+
+typedef NS_ERROR_ENUM(YAMLNodeErrorDomain, YAMLNodeErrorCode) {
+    /// A general error, not tied to a location in the YAML source.
+    YAMLNodeErrorCodeBasic = 1,
+    /// The YAML source is malformed. The location keys below point at the offending token.
+    YAMLNodeErrorCodeParse = 2,
+    /// An error raised while visiting an already parsed tree.
+    YAMLNodeErrorCodeVisit = 3,
+};
+
+/// One-based line in the YAML source where the error was detected, as an `NSNumber`.
+///
+/// Only present on `YAMLNodeErrorCodeParse` errors.
+extern NSErrorUserInfoKey const YAMLNodeErrorLineKey;
+
+/// One-based column in the YAML source where the error was detected, as an `NSNumber`.
+///
+/// Only present on `YAMLNodeErrorCodeParse` errors.
+extern NSErrorUserInfoKey const YAMLNodeErrorColumnKey;
+
+/// Zero-based byte offset into the YAML source where the error was detected, as an `NSNumber`.
+///
+/// Only present on `YAMLNodeErrorCodeParse` errors.
+extern NSErrorUserInfoKey const YAMLNodeErrorOffsetKey;
+
 typedef NS_ENUM(NSInteger, YAMLNodeKind) {
     YAMLNodeKindUnknown = 0,
     YAMLNodeKindStream,
@@ -53,7 +80,12 @@ typedef NS_ENUM(NSInteger, YAMLNodeKind) {
 @property (nonatomic, readonly, copy, nullable) NSString *scalar;
 
 - (instancetype)init NS_UNAVAILABLE;
-- (instancetype)initWithYAMLString:(NSString *)yamlString;
+
+/// Parses `yamlString` and returns the root node of the resulting tree.
+///
+/// Returns `nil` and populates `error` with a `YAMLNodeErrorDomain` error if the source
+/// could not be parsed.
+- (nullable instancetype)initWithYAMLString:(NSString *)yamlString error:(NSError **)error;
 
 - (nullable YAMLNode *)childAtIndex:(NSUInteger)index NS_SWIFT_NAME(child(at:));
 - (nullable YAMLNode *)childForKey:(NSString *)key NS_SWIFT_NAME(child(forKey:));

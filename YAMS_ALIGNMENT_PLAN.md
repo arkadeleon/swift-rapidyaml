@@ -44,20 +44,25 @@ rejected. Phases 2 onwards assume B.
 
 ## Phase 0 — Prerequisites
 
-### 0.1 Parse errors must throw instead of aborting
+### 0.1 Parse errors must throw instead of aborting — **done**
 
 rapidyaml's three default error callbacks all call `abort()`
-(`src/c4/yml/common.cpp:45` onwards). Malformed YAML currently kills the
-process, and the `catch` in `processYAMLNode` is dead code.
+(`src/c4/yml/common.cpp:45` onwards). Malformed YAML used to kill the process,
+and the `catch` in `processYAMLNode` was dead code.
 
-- Install callbacks via `ryml::set_callbacks()` that throw a C++ exception:
-  `pfn_error_basic`, `pfn_error_parse`, `pfn_error_visit`.
-- Catch in `YAMLNode.mm`, convert to `NSError **`.
-- `parse_in_arena` is not `noexcept`, so the exception propagates correctly.
-- `ErrorDataParse` carries source location — feed it into Phase 1's `Context`.
+`YAMLNode.mm` now installs throwing callbacks via `ryml::set_callbacks()`
+(`pfn_error_basic` / `pfn_error_parse` / `pfn_error_visit`, installed once on
+first parse), catches the exception, and converts it to an `NSError` in
+`YAMLNodeErrorDomain`. `initWithYAMLString:` became
+`initWithYAMLString:error:`, which Swift imports as `init(yamlString:) throws`,
+so `processYAMLNode`'s `catch` now runs and yields
+`DecodingError.dataCorrupted`.
 
-This is the only hard blocker: `YAMLError`, `Mark`, and the multi-document APIs
-all depend on it. It is also independent of the Node-model decision.
+Parse errors carry `ErrorDataParse::ymlloc` in the `NSError` user info under
+`YAMLNodeErrorLineKey` / `YAMLNodeErrorColumnKey` / `YAMLNodeErrorOffsetKey`
+(line and column are one-based, offset zero-based) — this is what Phase 1's
+`Context` and Phase 2's `Mark` consume. Basic and visit errors carry only the
+message; their locations point into the rapidyaml C++ source, not the YAML.
 
 ---
 
@@ -186,10 +191,10 @@ This suite is the only reliable way to verify the earlier phases.
 
 ## Order of work
 
-Full alignment: **0.1 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8**.
+Full alignment: **~~0.1~~ → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8**.
 
-Start with 0.1 — it is the only process-crashing defect and is independent of
-everything else.
+0.1 is done — it was the only process-crashing defect and was independent of
+everything else. Next up is Phase 1.
 
 If the scope ever needs to be cut back to "correct and usable" rather than
 API-equivalent, **0.1 → 3 → 4 → 5 (merge keys)** delivers most of the practical

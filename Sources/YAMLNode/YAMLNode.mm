@@ -8,6 +8,92 @@
 #import "YAMLNode.h"
 #import "ryml/ryml.hpp"
 
+#include <string>
+
+NSErrorDomain const YAMLNodeErrorDomain = @"YAMLNodeErrorDomain";
+
+NSErrorUserInfoKey const YAMLNodeErrorLineKey = @"YAMLNodeErrorLine";
+NSErrorUserInfoKey const YAMLNodeErrorColumnKey = @"YAMLNodeErrorColumn";
+NSErrorUserInfoKey const YAMLNodeErrorOffsetKey = @"YAMLNodeErrorOffset";
+
+namespace {
+
+/// The exception thrown by the error callbacks installed below.
+///
+/// rapidyaml's error callbacks must not return: if one does, the caller may loop forever or
+/// crash. The library's own default callbacks call `abort()`, which would take the whole
+/// process down on malformed input, so they are replaced with callbacks that throw this.
+struct YAMLNodeException {
+    YAMLNodeErrorCode code;
+    std::string message;
+    /// Location in the YAML source. Only meaningful for parse errors; the other error kinds
+    /// only carry a location in the rapidyaml C++ source, which is of no use to a caller.
+    bool hasLocation;
+    size_t offset;
+    size_t line;
+    size_t col;
+};
+
+[[noreturn]] void ThrowBasicError(c4::csubstr msg, ryml::ErrorDataBasic const&, void *) {
+    throw YAMLNodeException{YAMLNodeErrorCodeBasic, std::string(msg.str, msg.len), false, 0, 0, 0};
+}
+
+[[noreturn]] void ThrowParseError(c4::csubstr msg, ryml::ErrorDataParse const& errdata, void *) {
+    ryml::Location const& loc = errdata.ymlloc;
+    throw YAMLNodeException{
+        YAMLNodeErrorCodeParse,
+        std::string(msg.str, msg.len),
+        static_cast<bool>(loc),
+        loc.offset,
+        loc.line,
+        loc.col,
+    };
+}
+
+[[noreturn]] void ThrowVisitError(c4::csubstr msg, ryml::ErrorDataVisit const&, void *) {
+    throw YAMLNodeException{YAMLNodeErrorCodeVisit, std::string(msg.str, msg.len), false, 0, 0, 0};
+}
+
+/// Installs the throwing error callbacks. rapidyaml keeps them in global state, and objects
+/// copy them from there at construction time, so this must run before the first parse.
+void InstallThrowingErrorCallbacks() {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        ryml::Callbacks callbacks;
+        callbacks.set_error_basic(ThrowBasicError);
+        callbacks.set_error_parse(ThrowParseError);
+        callbacks.set_error_visit(ThrowVisitError);
+        ryml::set_callbacks(callbacks);
+    });
+}
+
+NSError *NSErrorFromException(YAMLNodeException const& exception) {
+    NSMutableDictionary<NSErrorUserInfoKey, id> *userInfo = [NSMutableDictionary dictionary];
+
+    NSString *message = [[NSString alloc] initWithBytes:exception.message.data()
+                                                 length:exception.message.size()
+                                               encoding:NSUTF8StringEncoding];
+    if (message != nil) {
+        userInfo[NSLocalizedDescriptionKey] = message;
+    }
+
+    if (exception.hasLocation) {
+        if (exception.offset != ryml::npos) {
+            userInfo[YAMLNodeErrorOffsetKey] = @(exception.offset);
+        }
+        if (exception.line != ryml::npos) {
+            userInfo[YAMLNodeErrorLineKey] = @(exception.line);
+        }
+        if (exception.col != ryml::npos) {
+            userInfo[YAMLNodeErrorColumnKey] = @(exception.col);
+        }
+    }
+
+    return [NSError errorWithDomain:YAMLNodeErrorDomain code:exception.code userInfo:userInfo];
+}
+
+}
+
 static NSString * _Nullable NSStringFromSubstr(c4::csubstr substr) {
     if (substr.str == nullptr) {
         return nil;
@@ -39,9 +125,18 @@ static YAMLNodeKind YAMLNodeKindFromNode(ryml::ConstNodeRef node) {
 
 @implementation YAMLNode
 
-- (instancetype)initWithYAMLString:(NSString *)yamlString {
-    ryml::Tree tree = ryml::parse_in_arena([yamlString UTF8String]);
-    return [self initWithNode:tree.rootref() parent:nil];
+- (nullable instancetype)initWithYAMLString:(NSString *)yamlString error:(NSError **)error {
+    InstallThrowingErrorCallbacks();
+
+    try {
+        ryml::Tree tree = ryml::parse_in_arena([yamlString UTF8String]);
+        return [self initWithNode:tree.rootref() parent:nil];
+    } catch (YAMLNodeException const& exception) {
+        if (error != NULL) {
+            *error = NSErrorFromException(exception);
+        }
+        return nil;
+    }
 }
 
 - (instancetype)initWithNode:(ryml::ConstNodeRef)node parent:(nullable YAMLNode *)parent {

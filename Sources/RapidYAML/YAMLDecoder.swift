@@ -133,7 +133,7 @@ extension YAMLDecoder {
         with block: (_ yamlNode: YAMLNode) throws -> T
     ) throws -> T {
         do {
-            let yamlNode = YAMLNode(yamlString: yamlString)
+            let yamlNode = try YAMLNode(yamlString: yamlString)
             return try block(yamlNode)
         } catch let error as DecodingError {
             throw error
