@@ -12,10 +12,8 @@ internal import YAMLNode
 ///
 /// This mirrors the composition half of Yams' `Parser`: aliases are dereferenced to the node
 /// their anchor names, rather than surfacing as `Node.alias`, and duplicate mapping keys are
-/// rejected.
-///
-/// Phase 6 puts the public `load` / `compose` API on top of this; for now it only serves the
-/// decoder, and only the first document of a stream is reachable.
+/// rejected. `Parser` owns one of these for the length of a stream, so anchors carry from one
+/// document to the next, as they do in Yams.
 struct Composer {
 
     /// The YAML source, carried only so that a failure can report it.
@@ -31,46 +29,26 @@ struct Composer {
     /// been composed, which is what makes a recursive document impossible.
     private var anchors: [Anchor: Node] = [:]
 
-    private init(yaml: String, resolver: Resolver, constructor: Constructor) {
+    init(yaml: String, resolver: Resolver, constructor: Constructor) {
         self.yaml = yaml
         self.resolver = resolver
         self.constructor = constructor
     }
 
-    /// Parses `yamlString` and composes its first document.
+    /// Composes one document of the stream.
     ///
-    /// - parameter yamlString:  The YAML source to parse.
-    /// - parameter resolver:    The `Resolver` to resolve implicit tags with.
-    /// - parameter constructor: The `Constructor` the composed nodes should construct values with.
+    /// - parameter document: The bridged root of a single document.
     ///
-    /// - returns: The document's root node, or `nil` if the source holds no document.
+    /// - returns: The document's root node. A document with no contents composes to an empty
+    ///            scalar, which is what libyaml's empty scalar event gives Yams.
     ///
-    /// - throws: `YAMLError` if the source is not valid YAML, or cannot be composed.
-    static func compose(yaml yamlString: String,
-                        resolver: Resolver = .default,
-                        constructor: Constructor = .default) throws -> Node? {
-        let root: YAMLNode
-        do {
-            root = try YAMLNode(yamlString: yamlString)
-        } catch {
-            // The bridge reports failures as an NSError; YAMLError is what callers expect.
-            throw YAMLError(from: error as NSError, with: yamlString)
-        }
-
-        var composer = Composer(yaml: yamlString, resolver: resolver, constructor: constructor)
-        return try composer.document(root)
-    }
-
-    private mutating func document(_ node: YAMLNode) throws -> Node? {
-        switch node.kind {
-        case .stream:
-            guard let first = node.children.first else { return nil }
-            return try document(first)
-        case .document, .unknown:
-            // A document with no contents, or an empty source.
-            return nil
+    /// - throws: `YAMLError` if the document cannot be composed.
+    mutating func compose(_ document: YAMLNode) throws -> Node {
+        switch document.kind {
+        case .document, .unknown, .stream:
+            return .scalar(.init(""))
         default:
-            return try value(of: node)
+            return try value(of: document)
         }
     }
 

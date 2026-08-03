@@ -13,7 +13,7 @@ import Testing
 
     /// The `v` value of a one-key document, which is how most of these cases are written.
     private func value(_ yaml: String) throws -> Node {
-        let node = try Composer.compose(yaml: yaml)
+        let node = try RapidYAML.compose(yaml: yaml)
         let root = try #require(node)
         return try #require(root["v"])
     }
@@ -152,7 +152,7 @@ import Testing
     // MARK: any
 
     @Test func anyConstructsWholeTrees() throws {
-        let composed = try Composer.compose(yaml: "a: 1\nb: [x, 2.5]\nc: {d: true}\n")
+        let composed = try RapidYAML.compose(yaml: "a: 1\nb: [x, 2.5]\nc: {d: true}\n")
         let node = try #require(composed)
         let any = try #require(node.any as? [AnyHashable: Any])
 
@@ -211,7 +211,7 @@ import Testing
         let constructor = Constructor(Constructor.defaultScalarMap,
                                       Constructor.nsMutableMappingMap,
                                       Constructor.nsMutableSequenceMap)
-        let composed = try Composer.compose(yaml: "a: 1\nb: [x]\n", constructor: constructor)
+        let composed = try RapidYAML.compose(yaml: "a: 1\nb: [x]\n", .default, constructor)
         let node = try #require(composed)
 
         let any = try #require(node.any as? NSMutableDictionary)
@@ -238,7 +238,7 @@ import Testing
         scalarMap[.int] = { scalar in Int(scalar.string).map { $0 * 2 } }
         let constructor = Constructor(scalarMap)
 
-        let composed = try Composer.compose(yaml: "v: 21\n", constructor: constructor)
+        let composed = try RapidYAML.compose(yaml: "v: 21\n", .default, constructor)
         let node = try #require(composed)
         #expect(node["v"]?.any as? Int == 42)
     }

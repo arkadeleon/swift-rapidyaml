@@ -125,7 +125,7 @@ import Testing
 @Suite struct ComposerTests {
 
     private func compose(_ yaml: String) throws -> Node {
-        let node = try Composer.compose(yaml: yaml)
+        let node = try RapidYAML.compose(yaml: yaml)
         return try #require(node)
     }
 
@@ -145,14 +145,22 @@ import Testing
     }
 
     @Test func emptySourceComposesToNothing() throws {
-        let node = try Composer.compose(yaml: "")
+        let node = try RapidYAML.compose(yaml: "")
         #expect(node == nil)
     }
 
-    @Test func composesTheFirstDocumentOfAStream() throws {
-        // Phase 6 adds `load_all` for the rest of the stream.
-        let node = try compose("---\na: 1\n---\nb: 2\n")
-        #expect(node.mapping?.keys.map { $0.string } == ["a"])
+    @Test func composeRejectsAStreamOfSeveralDocuments() throws {
+        // `compose_all` is how you read the whole stream.
+        let error = #expect(throws: YAMLError.self) {
+            try RapidYAML.compose(yaml: "---\na: 1\n---\nb: 2\n")
+        }
+
+        guard case .composer(let context, let problem, _, _) = try #require(error) else {
+            Issue.record("expected a composer error, got \(String(describing: error))")
+            return
+        }
+        #expect(context?.text == "expected a single document in the stream")
+        #expect(problem == "but found another document")
     }
 
     @Test func emptyValueComposesToAnEmptyScalar() throws {
@@ -178,7 +186,7 @@ import Testing
 
     @Test func undefinedAliasIsAComposerError() throws {
         let error = #expect(throws: YAMLError.self) {
-            try Composer.compose(yaml: "a: *missing\n")
+            try RapidYAML.compose(yaml: "a: *missing\n")
         }
 
         guard case .composer(_, let problem, let mark, _) = try #require(error) else {
@@ -199,7 +207,7 @@ import Testing
 
     @Test func duplicateKeysAreRejected() throws {
         let error = #expect(throws: YAMLError.self) {
-            try Composer.compose(yaml: "a: 1\nb: 2\na: 3\n")
+            try RapidYAML.compose(yaml: "a: 1\nb: 2\na: 3\n")
         }
 
         guard case .duplicatedKeysInMapping(let duplicates, _) = try #require(error) else {

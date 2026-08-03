@@ -11,7 +11,7 @@ Drafted 2026-08-03.
 ## Current state
 
 This section describes the state the plan was drafted against. Phases 0.1
-through 5 have since landed; see each phase for what changed.
+through 6 have since landed; see each phase for what changed.
 
 | | |
 |---|---|
@@ -146,6 +146,9 @@ side (Phase 7) and is never produced by parsing — same as in Yams.
   carry one. rapidyaml reports the actual style, and we pass it through.
 - **`Anchor.is_cyamlAlpha` is `Anchor.isPermitted`.** The Yams name refers to
   libyaml, which is not what backs this.
+- **Types Yams spells `Yaml*` are spelled `YAML*`** — `YAMLSequence`,
+  `YAMLAnchorProviding`, `YAMLTagProviding` — matching `YAMLDecoder` and
+  `YAMLError`, which this project already had.
 
 ### Known gaps against Yams
 
@@ -273,17 +276,55 @@ for everyone else.
 
 ---
 
-## Phase 6 — Parser / top-level loading API
+## Phase 6 — Parser / top-level loading API — **done**
 
 | Target | Yams source |
 |---|---|
 | `Parser.swift` | `Parser.swift` (486) |
 
-`load`, `load_all`, `compose`, `compose_all`, `YamlSequence`, the `Parser` class,
-and multi-document streams.
+`load`, `load_all`, `compose`, `compose_all`, `YAMLSequence`, the `Parser`
+class, and multi-document streams. As predicted, rapidyaml's STREAM root made
+this a child walk rather than an event loop: `Parser` holds the document list
+and an index, and `nextRoot()` composes one document at a time. `Composer` is
+now owned by the `Parser` for the length of the stream, so anchors carry from
+one document to the next — not what the spec says, but what Yams does, since
+its anchor map is never cleared between documents.
 
-rapidyaml gives a STREAM root node for multi-document input, so this is a child
-walk rather than libyaml's event stream — simpler than the Yams implementation.
+`YAMLDecoder` now goes through `Parser.singleRoot() ?? ""`, exactly as Yams
+does, which fixes two things: a source with no document decodes as an empty
+scalar rather than throwing, and a source with *several* documents is now
+rejected instead of silently decoding the first.
+
+56 outcomes across 14 sources — `compose` / `compose_all` / `load` / `load_all`
+over single documents, streams, empty sources, empty documents, and anchors
+spanning documents — were diffed against Yams. 40 match exactly; the 16 that
+differ are the two limitations below.
+
+### Where this differs from Yams
+
+- **The stream is parsed up front.** rapidyaml builds the whole tree in one
+  pass, where libyaml is an event stream, so a malformed *later* document fails
+  the whole call: `Parser.init` throws, rather than `compose_all` yielding the
+  earlier documents and then reporting the error through
+  `YAMLSequence.error`. This is inherent to the parser, not a porting choice.
+- **"but found another document" points at the next document's first scalar**,
+  where Yams points at its `---` marker. rapidyaml does not record the marker's
+  position — the same limitation as the container marks in Phase 2. It only
+  affects the text of that one error message.
+
+### On `Parser.Encoding`
+
+Kept for API parity, but it is close to vestigial: rapidyaml only reads UTF-8,
+and a `String` is handed to it as UTF-8 whatever the value says, so it has an
+effect only on the `Data` initializer, where it picks how bytes become a
+`String`. `.default` is plainly `.utf8` — Yams' `.default` reads a
+`YAMS_DEFAULT_ENCODING` environment variable and *prints* to stdout when it
+fires, which is a debugging affordance for libyaml's two input encodings and
+not something worth reproducing.
+
+`YAMLDecoder.Options.encoding` stays `String.Encoding`, this project's existing
+public API, rather than switching to `Parser.Encoding`; it is strictly more
+capable and used for the same job.
 
 ---
 
@@ -314,11 +355,11 @@ This suite is the only reliable way to verify the earlier phases.
 
 ## Order of work
 
-Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → ~~4~~ → ~~5~~ → 6 → 7 → 8**.
+Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → ~~4~~ → ~~5~~ → ~~6~~ → 7 → 8**.
 
-0.1 through 5 are done: decoding is complete and matches Yams. What is left is
-the public loading API (Phase 6), the whole encoding side (Phase 7), and the
-ported test suite (Phase 8).
+0.1 through 6 are done: the whole reading side is complete and matches Yams.
+What is left is the encoding side (Phase 7) and the ported test suite
+(Phase 8).
 
 The "correct and usable" subset — 0.1, 3, 4 and merge keys — is already covered
 by what has landed, so everything from here on is API surface rather than

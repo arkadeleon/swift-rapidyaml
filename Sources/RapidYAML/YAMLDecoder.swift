@@ -138,7 +138,11 @@ extension YAMLDecoder {
         with block: (_ node: Node) throws -> T
     ) throws -> T {
         do {
-            let node = try node(from: yamlString)
+            // Yams decodes with `Resolver([.merge])`: the constructors key off a scalar's style
+            // rather than its tag, so the only rule decoding actually needs is the one that
+            // finds `<<`.
+            let parser = try Parser(yaml: yamlString, resolver: Resolver([.merge]))
+            let node = try parser.singleRoot() ?? ""
             return try block(node)
         } catch let error as DecodingError {
             throw error
@@ -150,26 +154,6 @@ extension YAMLDecoder {
             )
             throw DecodingError.dataCorrupted(context)
         }
-    }
-
-    /// Parses and composes `yamlString`, reporting a parse failure as a `YAMLError` rather than as
-    /// the `NSError` produced by the Objective-C++ bridge.
-    ///
-    /// - parameter yamlString: The YAML object `String` to parse.
-    ///
-    /// - returns: The root node of the first document.
-    ///
-    /// - throws: `YAMLError` if the string is not valid YAML.
-    private func node(from yamlString: String) throws -> Node {
-        // Yams decodes with `Resolver([.merge])`: the constructors key off a scalar's style rather
-        // than its tag, so the only rule decoding actually needs is the one that finds `<<`.
-        guard let node = try Composer.compose(yaml: yamlString, resolver: Resolver([.merge])) else {
-            throw YAMLError.composer(context: nil,
-                                     problem: "expected a document",
-                                     Mark(line: 1, column: 1),
-                                     yaml: yamlString)
-        }
-        return node
     }
 }
 

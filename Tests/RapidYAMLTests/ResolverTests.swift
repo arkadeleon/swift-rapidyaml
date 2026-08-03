@@ -118,7 +118,7 @@ import Testing
     // MARK: Composition
 
     @Test func composedScalarsCarryResolvedTags() throws {
-        let node = try #require(try Composer.compose(yaml: """
+        let node = try #require(try RapidYAML.compose(yaml: """
             int: 42
             float: 1.5
             bool: yes
@@ -141,14 +141,14 @@ import Testing
 
     @Test func composedMergeKeysAreTagged() throws {
         // Phase 5 acts on this; for now it only has to be recognised.
-        let node = try #require(try Composer.compose(yaml: "base: &b {a: 1}\nchild:\n  <<: *b\n"))
+        let node = try #require(try RapidYAML.compose(yaml: "base: &b {a: 1}\nchild:\n  <<: *b\n"))
         let child = try #require(node["child"]?.mapping)
         #expect(child.keys.first?.tag.name == .merge)
     }
 
     @Test func resolutionMakesScalarsOfDifferentTypesUnequal() throws {
         // Both are the text `1`, but one is tagged a string.
-        let node = try #require(try Composer.compose(yaml: "a: 1\nb: !!str 1\n"))
+        let node = try #require(try RapidYAML.compose(yaml: "a: 1\nb: !!str 1\n"))
         #expect(node["a"] != node["b"])
     }
 }

@@ -50,7 +50,7 @@ struct Item: Decodable {
 }
 
 @Test func decodesFromANode() async throws {
-    let node = try #require(try Composer.compose(yaml: "Id: 501\nName: Red Potion\n"))
+    let node = try #require(try RapidYAML.compose(yaml: "Id: 501\nName: Red Potion\n"))
     let item = try YAMLDecoder().decode(Item.self, from: node)
 
     #expect(item.id == 501)
