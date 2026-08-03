@@ -15,12 +15,17 @@ public class YAMLDecoder {
     public struct Options {
 
         /// Create `YAMLDecoder.Options` with the specified values.
-        public init(encoding: String.Encoding = .utf8) {
+        public init(encoding: String.Encoding = .utf8,
+                    aliasDereferencingStrategy: AliasDereferencingStrategy? = nil) {
             self.encoding = encoding
+            self.aliasDereferencingStrategy = aliasDereferencingStrategy
         }
 
         /// String encoding used when decoding from `Data`.
         public var encoding: String.Encoding = .utf8
+
+        /// Alias dereferencing strategy to use when decoding. Defaults to nil
+        public var aliasDereferencingStrategy: AliasDereferencingStrategy?
     }
 
     /// Options to use when decoding from YAML.
@@ -110,7 +115,12 @@ extension YAMLDecoder {
     /// - note: This is a single `_YAMLDecoder` constructor for decoding `Decodable`
     ///         and `DecodableWithConfiguration` objects.
     private func _decoder(from node: Node, userInfo: [CodingUserInfoKey: Any]) -> _YAMLDecoder {
-        return _YAMLDecoder(referencing: node, userInfo: userInfo)
+        var finalUserInfo = userInfo
+        if let dealiasingStrategy = options.aliasDereferencingStrategy {
+            finalUserInfo[.aliasDereferencingStrategy] = dealiasingStrategy
+        }
+
+        return _YAMLDecoder(referencing: node, userInfo: finalUserInfo)
     }
 
     /// Returns a value of the type you specify, decoded from a YAML object.
@@ -151,7 +161,9 @@ extension YAMLDecoder {
     ///
     /// - throws: `YAMLError` if the string is not valid YAML.
     private func node(from yamlString: String) throws -> Node {
-        guard let node = try Composer.compose(yaml: yamlString) else {
+        // Yams decodes with `Resolver([.merge])`: the constructors key off a scalar's style rather
+        // than its tag, so the only rule decoding actually needs is the one that finds `<<`.
+        guard let node = try Composer.compose(yaml: yamlString, resolver: Resolver([.merge])) else {
             throw YAMLError.composer(context: nil,
                                      problem: "expected a document",
                                      Mark(line: 1, column: 1),
@@ -177,7 +189,7 @@ private struct _YAMLDecoder: Decoder {
     let userInfo: [CodingUserInfoKey: Any]
 
     func container<Key>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
-        guard let mapping = node.mapping else {
+        guard let mapping = node.mapping?.flatten() else {
             throw _typeMismatch(at: codingPath, expectation: Node.Mapping.self, reality: node)
         }
         return .init(_YAMLKeyedDecodingContainer<Key>(decoder: self, wrapping: mapping))
@@ -223,7 +235,41 @@ private struct _YAMLKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContain
 
     init(decoder: _YAMLDecoder, wrapping mapping: Node.Mapping) {
         self.decoder = decoder
-        self.mapping = mapping
+
+        let keys = mapping.keys
+
+        let decodeAnchor: Anchor?
+        let decodeTag: Tag?
+
+        if let anchor = mapping.anchor, keys.contains(.anchorKeyNode) == false {
+            decodeAnchor = anchor
+        } else {
+            decodeAnchor = nil
+        }
+
+        if mapping.tag.name != .implicit && keys.contains(.tagKeyNode) == false {
+            decodeTag = mapping.tag
+        } else {
+            decodeTag = nil
+        }
+
+        switch (decodeAnchor, decodeTag) {
+        case (nil, nil):
+            self.mapping = mapping
+        case (let anchor?, nil):
+            var mutableMapping = mapping
+            mutableMapping[.anchorKeyNode] = .scalar(.init(anchor.rawValue))
+            self.mapping = mutableMapping
+        case (nil, let tag?):
+            var mutableMapping = mapping
+            mutableMapping[.tagKeyNode] = .scalar(.init(tag.name.rawValue))
+            self.mapping = mutableMapping
+        case let (anchor?, tag?):
+            var mutableMapping = mapping
+            mutableMapping[.anchorKeyNode] = .scalar(.init(anchor.rawValue))
+            mutableMapping[.tagKeyNode] = .scalar(.init(tag.name.rawValue))
+            self.mapping = mutableMapping
+        }
     }
 
     // MARK: - Swift.KeyedDecodingContainerProtocol Methods
@@ -233,7 +279,9 @@ private struct _YAMLKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContain
     }
 
     var allKeys: [Key] {
-        mapping.keys.compactMap({ $0.string.flatMap(Key.init(stringValue:)) })
+        mapping.keys
+            .filter { $0 != .anchorKeyNode && $0 != .tagKeyNode }
+            .compactMap { $0.string.flatMap(Key.init(stringValue:)) }
     }
 
     func contains(_ key: Key) -> Bool {
@@ -372,6 +420,25 @@ extension _YAMLDecoder: SingleValueDecodingContainer {
     // MARK: -
 
     private func _decode<T: Decodable>(_ type: T.Type) throws -> T {
+        if let dereferenced = dereferenceAnchor(type) {
+            return dereferenced
+        }
+
+        var constructed = try _construct(type)
+
+        if var anchorCoding = constructed as? YAMLAnchorCoding,
+           anchorCoding.yamlAnchor == nil,
+           let anchor = self.node.anchor {
+            anchorCoding.yamlAnchor = anchor
+            constructed = anchorCoding as! T // swiftlint:disable:this force_cast
+        }
+
+        recordAnchor(constructed)
+
+        return constructed
+    }
+
+    private func _construct<T: Decodable>(_ type: T.Type) throws -> T {
         if let constructibleType = type as? ScalarConstructible.Type {
             let scalarConstructed = try constructScalar(constructibleType)
             guard let scalarT = scalarConstructed as? T else {
@@ -390,6 +457,43 @@ extension _YAMLDecoder: SingleValueDecodingContainer {
             throw _typeMismatch(at: codingPath, expectation: type, reality: scalar)
         }
         return constructed
+    }
+
+    private func dereferenceAnchor<T>(_ type: T.Type) -> T? {
+        guard let anchor = self.node.anchor else {
+            return nil
+        }
+
+        guard let strategy = userInfo[.aliasDereferencingStrategy] as? any AliasDereferencingStrategy else {
+            return nil
+        }
+
+        guard let existing = strategy[anchor] as? T else {
+            return nil
+        }
+
+        return existing
+    }
+
+    private func recordAnchor<T: Decodable>(_ constructed: T) {
+        guard let anchor = self.node.anchor else {
+            return
+        }
+
+        guard let strategy = userInfo[.aliasDereferencingStrategy] as? any AliasDereferencingStrategy else {
+            return
+        }
+
+        return strategy[anchor] = constructed
+    }
+}
+
+// MARK: Decoder.mark
+
+extension Decoder {
+    /// The `Mark` for the underlying `Node` that has been decoded.
+    public var mark: Mark? {
+        return (self as? _YAMLDecoder)?.node.mark
     }
 }
 

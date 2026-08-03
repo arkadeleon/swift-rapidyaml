@@ -10,8 +10,8 @@ Drafted 2026-08-03.
 
 ## Current state
 
-This section describes the state the plan was drafted against. Phases 0.1, 1 and
-2 have since landed; see each phase for what changed.
+This section describes the state the plan was drafted against. Phases 0.1
+through 5 have since landed; see each phase for what changed.
 
 | | |
 |---|---|
@@ -27,11 +27,10 @@ public entry points, `Options`, `_decoder(from:userInfo:)` /
 `scalar()` / `construct()` helpers, `Decimal` + `URL` scalar decoding, and
 mapping/sequence types as `typeMismatch` expectations.
 
-Still missing from that file, pending the phases below: Yams' scalar parsing
-semantics (Phase 4), and merge keys and anchor injection (Phase 5).
-
-`YAMLError` moved out of `YAMLDecoder.swift` into its own file in Phase 1, and
-the decoder was retargeted from `YAMLNode` onto `Node` in Phase 2.
+`YAMLError` moved out of `YAMLDecoder.swift` into its own file in Phase 1, the
+decoder was retargeted from `YAMLNode` onto `Node` in Phase 2, gained Yams'
+scalar parsing semantics in Phase 4, and merge keys and anchor injection in
+Phase 5. It is now complete.
 
 ## Architecture decision
 
@@ -242,21 +241,35 @@ calls it. Merge keys therefore work through `node.any` now; wiring them into
 
 ---
 
-## Phase 5 — Decoder completion
+## Phase 5 — Decoder completion — **done**
 
-Closes the gaps left open in `YAMLDecoder.swift`, on top of Phases 2–4:
+| Target | Yams source |
+|---|---|
+| `AliasDereferencingStrategy.swift` | (47) |
+| `YAMLAnchorProviding.swift` | `YamlAnchorProviding.swift` (26) |
+| `YAMLTagProviding.swift` | `YamlTagProviding.swift` (26) |
+| `YAMLDecoder.swift` | the rest of `Decoder.swift` |
 
-- Merge keys (`<<`) in the decoder. `Node.Mapping.flatten()` landed in Phase 4
-  and already serves `node.any`; what is left is `node.mapping?.flatten()` in
-  `container(keyedBy:)`. (rapidyaml's `Tree::resolve()` is the alternative, but
-  with `flatten()` already written and matching Yams, there is no reason to
-  switch.)
-- `AliasDereferencingStrategy.swift` (47) and `YAMLAnchorProviding.swift` (26),
-  plus injecting anchor/tag keys into keyed containers. Alias *dereferencing*
-  itself already happens during composition (Phase 2); what is left is the
-  caching strategy that coalesces class instances.
-- `YAMLTagProviding.swift` (26).
-- `Decoder.mark`.
+Everything the phase called for landed, and all of it was diffed against Yams:
+
+- **Merge keys** — `container(keyedBy:)` calls `node.mapping?.flatten()`, so
+  `<<: *base`, `<<: [*x, *y]` and nested merges all decode, with own keys
+  winning over merged ones and `<<` absent from `allKeys`.
+- **Anchor and tag injection** — a mapping's anchor and explicit tag are
+  injected as the `yamlAnchor` / `yamlTag` keys, so a `YAMLAnchorCoding` type
+  reads them; a key written in the source wins over the injected one, and
+  neither appears in `allKeys`.
+- **`AliasDereferencingStrategy`** — `YAMLDecoder.Options` carries one, and with
+  `BasicAliasDereferencingStrategy` two aliases of the same anchor decode to the
+  same class instance instead of two.
+- **`Decoder.mark`**.
+
+One thing this surfaced that is easy to miss: Yams decodes with
+`Resolver([.merge])`, not `.default`. Its constructors key off a scalar's
+*style* rather than its tag, so the only rule decoding needs is the one that
+finds `<<` — and resolving seven regexes per scalar would be waste. The decoder
+now passes that resolver to `Composer`; `compose` still defaults to `.default`
+for everyone else.
 
 ---
 
@@ -301,11 +314,12 @@ This suite is the only reliable way to verify the earlier phases.
 
 ## Order of work
 
-Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → ~~4~~ → 5 → 6 → 7 → 8**.
+Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → ~~4~~ → ~~5~~ → 6 → 7 → 8**.
 
-0.1 through 4 are done, which is the whole reading path bar merge keys and
-anchors in the decoder. Next up is Phase 5, which closes those.
+0.1 through 5 are done: decoding is complete and matches Yams. What is left is
+the public loading API (Phase 6), the whole encoding side (Phase 7), and the
+ported test suite (Phase 8).
 
-If the scope ever needs to be cut back to "correct and usable" rather than
-API-equivalent, **0.1 → 3 → 4 → 5 (merge keys)** delivers most of the practical
-value without touching the Node model.
+The "correct and usable" subset — 0.1, 3, 4 and merge keys — is already covered
+by what has landed, so everything from here on is API surface rather than
+correctness.
