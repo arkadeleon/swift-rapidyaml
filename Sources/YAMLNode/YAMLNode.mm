@@ -206,7 +206,7 @@ static YAMLCollectionStyle YAMLCollectionStyleFromNode(ryml::ConstNodeRef node) 
 /// buffer. Scalars that had to be filtered — some escapes, and block scalars that grow — are
 /// relocated into the tree's arena, and looking those up trips a check inside rapidyaml. Only
 /// scalars that really are substrings of the source get a location; the rest report 0.
-static void YAMLLocationOfScalar(c4::csubstr scalar, ryml::Parser const& parser, NSUInteger *line, NSUInteger *column) {
+static void YAMLLocationOfScalar(c4::csubstr scalar, ryml::Parser const& parser, size_t *line, size_t *column) {
     *line = 0;
     *column = 0;
 
@@ -231,86 +231,121 @@ static void YAMLLocationOfScalar(c4::csubstr scalar, ryml::Parser const& parser,
     }
 }
 
-@interface YAMLNode ()
+extern "C" const YAMLNodeID YAMLTreeNoNode = (YAMLNodeID)-1;
 
-- (instancetype)initWithNode:(ryml::ConstNodeRef)node parser:(ryml::Parser const&)parser;
+/// A parsed tree, with the parser it came from.
+///
+/// The parser has to outlive the tree: it owns the line accelerator that resolves a scalar's
+/// position, and `YAMLTreeRead` asks for one on every node.
+struct YAMLTree {
+    ryml::EventHandlerTree eventHandler;
+    ryml::Parser parser;
+    ryml::Tree tree;
 
-@end
+    YAMLTree() : eventHandler(), parser(&eventHandler, ryml::ParserOptions().locations(true)), tree() {}
+};
 
-@implementation YAMLNode
+static YAMLStringRef YAMLStringRefFromSubstr(c4::csubstr substr) {
+    return YAMLStringRef{substr.str, substr.len};
+}
 
-- (nullable instancetype)initWithYAMLString:(NSString *)yamlString error:(NSError **)error {
+/// Converts a tag as written into its long form, so that `!!str` and `!<tag:yaml.org,2002:str>`
+/// both arrive in Swift as `tag:yaml.org,2002:str` — the form libyaml hands to Yams. Tags that are
+/// not from the YAML schema, such as `!foo`, are passed through unchanged.
+static YAMLStringRef YAMLStringRefFromTag(c4::csubstr tag) {
+    if (tag.str == nullptr) {
+        return YAMLStringRef{nullptr, 0};
+    }
+
+    c4::csubstr normalized = ryml::normalize_tag_long(tag);
+    if (normalized.len >= 2 && normalized.begins_with('<') && normalized.ends_with('>')) {
+        normalized = normalized.range(1, normalized.len - 1);
+    }
+    return YAMLStringRefFromSubstr(normalized);
+}
+
+extern "C" YAMLTree * _Nullable YAMLTreeParse(const char *yaml, size_t length, NSError **error) {
     InstallThrowingErrorCallbacks();
 
+    YAMLTree *handle = new YAMLTree();
     try {
         // Locations are opt-in because tracking them costs an extra pass over the source. `Mark`
         // is part of the public model, so they are always on.
-        ryml::EventHandlerTree eventHandler = {};
-        ryml::Parser parser(&eventHandler, ryml::ParserOptions().locations(true));
-        ryml::Tree tree = ryml::parse_in_arena(&parser, [yamlString UTF8String]);
-        return [self initWithNode:tree.rootref() parser:parser];
+        ryml::parse_in_arena(&handle->parser, c4::csubstr(yaml, length), &handle->tree);
+        return handle;
     } catch (YAMLNodeException const& exception) {
+        delete handle;
         if (error != NULL) {
             *error = NSErrorFromException(exception);
         }
-        return nil;
+        return nullptr;
     }
 }
 
-- (instancetype)initWithNode:(ryml::ConstNodeRef)node parser:(ryml::Parser const&)parser {
-    self = [super init];
-    if (self) {
-        _kind = YAMLNodeKindFromNode(node);
-        _collectionStyle = YAMLCollectionStyleFromNode(node);
-
-        _hasKey = node.has_key();
-        if (node.has_key()) {
-            _key = NSStringFromSubstr(node.key());
-            _keyStyle = YAMLKeyStyleFromNode(node);
-            YAMLLocationOfScalar(node.key(), parser, &_keyLine, &_keyColumn);
-        }
-        if (node.has_key_tag()) {
-            _keyTag = NSStringFromTag(node.key_tag());
-        }
-        if (node.has_key_anchor()) {
-            _keyAnchor = NSStringFromSubstr(node.key_anchor());
-        }
-        if (node.is_key_ref()) {
-            _keyAlias = NSStringFromSubstr(node.key_ref());
-        }
-
-        if (node.has_val()) {
-            _value = NSStringFromSubstr(node.val());
-            _valueStyle = YAMLValueStyleFromNode(node);
-            YAMLLocationOfScalar(node.val(), parser, &_valueLine, &_valueColumn);
-        }
-        if (node.has_val_tag()) {
-            _valueTag = NSStringFromTag(node.val_tag());
-        }
-        if (node.has_val_anchor()) {
-            _valueAnchor = NSStringFromSubstr(node.val_anchor());
-        }
-        if (node.is_val_ref()) {
-            _valueAlias = NSStringFromSubstr(node.val_ref());
-        }
-
-        NSMutableArray<YAMLNode *> *children = [NSMutableArray arrayWithCapacity:node.num_children()];
-        for (ryml::ConstNodeRef child : node.children()) {
-            [children addObject:[[YAMLNode alloc] initWithNode:child parser:parser]];
-        }
-        _children = [children copy];
-
-        // A container has no scalar to point at, so stand in the position of its first child.
-        if (_valueLine == 0 && _children.count > 0) {
-            YAMLNode *first = _children.firstObject;
-            _valueLine = first.hasKey ? first.keyLine : first.valueLine;
-            _valueColumn = first.hasKey ? first.keyColumn : first.valueColumn;
-        }
-    }
-    return self;
+extern "C" void YAMLTreeFree(YAMLTree * _Nullable tree) {
+    delete tree;
 }
 
-@end
+extern "C" YAMLNodeID YAMLTreeRoot(const YAMLTree *tree) {
+    return tree->tree.root_id();
+}
+
+extern "C" YAMLNodeID YAMLTreeFirstChild(const YAMLTree *tree, YAMLNodeID node) {
+    ryml::id_type child = tree->tree.first_child(node);
+    return child == ryml::NONE ? YAMLTreeNoNode : child;
+}
+
+extern "C" YAMLNodeID YAMLTreeNextSibling(const YAMLTree *tree, YAMLNodeID node) {
+    ryml::id_type sibling = tree->tree.next_sibling(node);
+    return sibling == ryml::NONE ? YAMLTreeNoNode : sibling;
+}
+
+extern "C" void YAMLTreeRead(const YAMLTree *handle, YAMLNodeID node, YAMLNodeRecord *record) {
+    ryml::ConstNodeRef ref = handle->tree.cref(node);
+
+    *record = YAMLNodeRecord{};
+    record->kind = YAMLNodeKindFromNode(ref);
+    record->childCount = ref.num_children();
+    record->collectionStyle = YAMLCollectionStyleFromNode(ref);
+
+    record->hasKey = ref.has_key();
+    if (ref.has_key()) {
+        record->key = YAMLStringRefFromSubstr(ref.key());
+        record->keyStyle = YAMLKeyStyleFromNode(ref);
+        YAMLLocationOfScalar(ref.key(), handle->parser, &record->keyLine, &record->keyColumn);
+    }
+    if (ref.has_key_tag()) {
+        record->keyTag = YAMLStringRefFromTag(ref.key_tag());
+    }
+    if (ref.has_key_anchor()) {
+        record->keyAnchor = YAMLStringRefFromSubstr(ref.key_anchor());
+    }
+    if (ref.is_key_ref()) {
+        record->keyAlias = YAMLStringRefFromSubstr(ref.key_ref());
+    }
+
+    if (ref.has_val()) {
+        record->value = YAMLStringRefFromSubstr(ref.val());
+        record->valueStyle = YAMLValueStyleFromNode(ref);
+        YAMLLocationOfScalar(ref.val(), handle->parser, &record->valueLine, &record->valueColumn);
+    }
+    if (ref.has_val_tag()) {
+        record->valueTag = YAMLStringRefFromTag(ref.val_tag());
+    }
+    if (ref.has_val_anchor()) {
+        record->valueAnchor = YAMLStringRefFromSubstr(ref.val_anchor());
+    }
+    if (ref.is_val_ref()) {
+        record->valueAlias = YAMLStringRefFromSubstr(ref.val_ref());
+    }
+
+    // A container has no scalar to point at, so stand in the position of its first child.
+    if (record->valueLine == 0 && record->childCount > 0) {
+        ryml::ConstNodeRef first = ref.child(0);
+        c4::csubstr scalar = first.has_key() ? first.key() : (first.has_val() ? first.val() : c4::csubstr{});
+        YAMLLocationOfScalar(scalar, handle->parser, &record->valueLine, &record->valueColumn);
+    }
+}
 
 #pragma mark - Emitting
 

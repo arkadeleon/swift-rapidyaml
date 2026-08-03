@@ -28,12 +28,16 @@ struct Composer {
     /// The source split into lines, so that a mark costs one line rather than a walk from the top.
     private let lineIndex: LineIndex
 
+    /// The tree being read. Held so that the scalars the records point at stay alive.
+    private let tree: ParsedTree
+
     /// The nodes named so far by an anchor. An alias can only refer to an anchor that has already
     /// been composed, which is what makes a recursive document impossible.
     private var anchors: [Anchor: Node] = [:]
 
-    init(yaml: String, resolver: Resolver, constructor: Constructor) {
+    init(yaml: String, tree: ParsedTree, resolver: Resolver, constructor: Constructor) {
         self.yaml = yaml
+        self.tree = tree
         self.lineIndex = LineIndex(yaml)
         self.resolver = resolver
         self.constructor = constructor
@@ -47,12 +51,13 @@ struct Composer {
     ///            scalar, which is what libyaml's empty scalar event gives Yams.
     ///
     /// - throws: `YAMLError` if the document cannot be composed.
-    mutating func compose(_ document: YAMLNode) throws -> Node {
-        switch document.kind {
+    mutating func compose(_ document: YAMLNodeID) throws -> Node {
+        let record = tree.read(document)
+        switch record.kind {
         case .document, .unknown, .stream:
             return .scalar(.init(""))
         default:
-            return try value(of: document)
+            return try value(of: document, record)
         }
     }
 
@@ -60,32 +65,44 @@ struct Composer {
 
     /// Composes the node on the value side of `node` — the whole node, unless it is a child of a
     /// mapping, in which case this is the pair's value.
-    private mutating func value(of node: YAMLNode) throws -> Node {
-        let mark = mark(line: node.valueLine, column: node.valueColumn)
+    private mutating func value(of node: YAMLNodeID, _ record: YAMLNodeRecord) throws -> Node {
+        let mark = mark(line: record.valueLine, column: record.valueColumn)
 
-        if let alias = node.valueAlias {
+        if let alias = record.valueAlias.string {
             return try dereference(alias, at: mark)
         }
 
-        let anchor = node.valueAnchor.map(Anchor.init(rawValue:))
+        let anchor = record.valueAnchor.string.map(Anchor.init(rawValue:))
 
         let composed: Node
-        switch node.kind {
+        switch record.kind {
         case .mapping:
             var pairs: [(Node, Node)] = []
-            pairs.reserveCapacity(node.children.count)
-            for child in node.children {
-                pairs.append((try key(of: child), try value(of: child)))
+            pairs.reserveCapacity(record.childCount)
+            var child = tree.firstChild(of: node)
+            while let current = child {
+                let childRecord = tree.read(current)
+                pairs.append((try key(of: childRecord), try value(of: current, childRecord)))
+                child = tree.nextSibling(of: current)
             }
             try checkDuplicates(in: pairs.map { $0.0 })
-            composed = .mapping(.init(pairs, tag(node.valueTag), mappingStyle(node.collectionStyle), mark, anchor))
+            composed = .mapping(.init(pairs, tag(record.valueTag.string),
+                                      mappingStyle(record.collectionStyle), mark, anchor))
         case .sequence:
-            let nodes = try node.children.map { try value(of: $0) }
-            composed = .sequence(.init(nodes, tag(node.valueTag), sequenceStyle(node.collectionStyle), mark, anchor))
+            var nodes: [Node] = []
+            nodes.reserveCapacity(record.childCount)
+            var child = tree.firstChild(of: node)
+            while let current = child {
+                nodes.append(try value(of: current, tree.read(current)))
+                child = tree.nextSibling(of: current)
+            }
+            composed = .sequence(.init(nodes, tag(record.valueTag.string),
+                                       sequenceStyle(record.collectionStyle), mark, anchor))
         default:
             // A value that was written but left empty — `key:` — has no scalar of its own.
-            let style = scalarStyle(node.valueStyle)
-            composed = .scalar(.init(node.value ?? "", scalarTag(node.valueTag, style: style), style, mark, anchor))
+            let style = scalarStyle(record.valueStyle)
+            composed = .scalar(.init(record.value.string ?? "",
+                                     scalarTag(record.valueTag.string, style: style), style, mark, anchor))
         }
 
         register(anchor, for: composed)
@@ -96,16 +113,17 @@ struct Composer {
     ///
     /// - note: rapidyaml stores a key as a scalar, so a complex key — `? [a, b]` — cannot be
     ///         represented. Yams supports those through libyaml's event stream.
-    private mutating func key(of node: YAMLNode) throws -> Node {
-        let mark = mark(line: node.keyLine, column: node.keyColumn)
+    private mutating func key(of record: YAMLNodeRecord) throws -> Node {
+        let mark = mark(line: record.keyLine, column: record.keyColumn)
 
-        if let alias = node.keyAlias {
+        if let alias = record.keyAlias.string {
             return try dereference(alias, at: mark)
         }
 
-        let anchor = node.keyAnchor.map(Anchor.init(rawValue:))
-        let style = scalarStyle(node.keyStyle)
-        let composed = Node.scalar(.init(node.key ?? "", scalarTag(node.keyTag, style: style), style, mark, anchor))
+        let anchor = record.keyAnchor.string.map(Anchor.init(rawValue:))
+        let style = scalarStyle(record.keyStyle)
+        let composed = Node.scalar(.init(record.key.string ?? "",
+                                         scalarTag(record.keyTag.string, style: style), style, mark, anchor))
 
         register(anchor, for: composed)
         return composed
@@ -163,38 +181,35 @@ struct Composer {
         }
     }
 
-    private func mark(line: UInt, column: UInt) -> Mark? {
+    private func mark(line: Int, column: Int) -> Mark? {
         guard line > 0, column > 0 else { return nil }
         return lineIndex.mark(atLine: Int(line), byteColumn: Int(column))
     }
 
-    private func scalarStyle(_ style: YAMLNode.ScalarStyle) -> Node.Scalar.Style {
+    private func scalarStyle(_ style: YAMLScalarStyle) -> Node.Scalar.Style {
         switch style {
         case .plain: return .plain
         case .singleQuoted: return .singleQuoted
         case .doubleQuoted: return .doubleQuoted
         case .literal: return .literal
         case .folded: return .folded
-        case .any: return .any
-        @unknown default: return .any
+        default: return .any
         }
     }
 
-    private func mappingStyle(_ style: YAMLNode.CollectionStyle) -> Node.Mapping.Style {
+    private func mappingStyle(_ style: YAMLCollectionStyle) -> Node.Mapping.Style {
         switch style {
         case .block: return .block
         case .flow: return .flow
-        case .any: return .any
-        @unknown default: return .any
+        default: return .any
         }
     }
 
-    private func sequenceStyle(_ style: YAMLNode.CollectionStyle) -> Node.Sequence.Style {
+    private func sequenceStyle(_ style: YAMLCollectionStyle) -> Node.Sequence.Style {
         switch style {
         case .block: return .block
         case .flow: return .flow
-        case .any: return .any
-        @unknown default: return .any
+        default: return .any
         }
     }
 }

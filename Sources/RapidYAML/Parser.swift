@@ -159,21 +159,24 @@ public final class Parser {
         self.resolver = resolver
         self.constructor = constructor
         self.encoding = encoding
-        self.composer = Composer(yaml: string, resolver: resolver, constructor: constructor)
 
-        let root: YAMLNode
-        do {
-            root = try YAMLNode(yamlString: string)
-        } catch {
-            // The bridge reports failures as an NSError; YAMLError is what callers expect.
-            throw YAMLError(from: error as NSError, with: string)
-        }
+        let tree = try ParsedTree(yaml: string)
+        self.tree = tree
+        self.composer = Composer(yaml: string, tree: tree, resolver: resolver, constructor: constructor)
 
         // rapidyaml only builds a STREAM root when the source holds more than one document;
         // a lone document is its own root, and an empty source has no document at all.
-        switch root.kind {
+        let root = tree.root
+        let record = tree.read(root)
+        switch record.kind {
         case .stream:
-            documents = root.children
+            var ids: [YAMLNodeID] = []
+            var child = tree.firstChild(of: root)
+            while let current = child {
+                ids.append(current)
+                child = tree.nextSibling(of: current)
+            }
+            documents = ids
         case .unknown:
             documents = []
         default:
@@ -236,8 +239,11 @@ public final class Parser {
 
     // MARK: - Private Members
 
+    /// The tree every document is read out of, held for as long as this parser is.
+    private let tree: ParsedTree
+
     /// The documents of the stream, in source order.
-    private let documents: [YAMLNode]
+    private let documents: [YAMLNodeID]
 
     /// How far `nextRoot()` has read.
     private var index = 0
@@ -245,10 +251,11 @@ public final class Parser {
     /// Held for the length of the stream, so that anchors carry across documents as in Yams.
     private var composer: Composer
 
-    private func startMark(of document: YAMLNode) -> Mark {
-        let line = document.hasKey ? document.keyLine : document.valueLine
-        let column = document.hasKey ? document.keyColumn : document.valueColumn
+    private func startMark(of document: YAMLNodeID) -> Mark {
+        let record = tree.read(document)
+        let line = record.hasKey ? record.keyLine : record.valueLine
+        let column = record.hasKey ? record.keyColumn : record.valueColumn
         guard line > 0, column > 0 else { return Mark(line: 1, column: 1) }
-        return LineIndex(yaml).mark(atLine: Int(line), byteColumn: Int(column))
+        return LineIndex(yaml).mark(atLine: line, byteColumn: column)
     }
 }

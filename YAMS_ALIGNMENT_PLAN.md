@@ -125,7 +125,9 @@ at all, so a mapping's pairs arrive in source order and `Node.Mapping` keeps
 them there. `YAMLNode` lost `mapping`, `sequence`, `scalar`, `parent`,
 `typeBits`, `typeString` and the boolean flags, and gained styles, per-scalar
 locations and normalized tags — the eager copy is now only what the Swift
-`Node` actually needs.
+`Node` actually needs. The copy went away entirely later: the bridge is now a
+plain C reader over the live rapidyaml tree (`YAMLTreeParse` / `YAMLTreeRead`),
+and `ParsedTree` keeps that tree alive while `Composer` walks it.
 
 `Composer` mirrors Yams' composition: aliases are dereferenced to the node
 their anchor names rather than surfacing as `Node.alias`, and duplicate keys

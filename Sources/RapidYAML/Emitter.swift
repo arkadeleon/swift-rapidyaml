@@ -550,7 +550,7 @@ extension Emitter {
         return "!<\(name.rawValue)>"
     }
 
-    private func scalarStyle(_ style: Node.Scalar.Style) -> YAMLNode.ScalarStyle {
+    private func scalarStyle(_ style: Node.Scalar.Style) -> YAMLScalarStyle {
         switch style {
         case .plain: return .plain
         case .singleQuoted: return .singleQuoted
@@ -562,7 +562,7 @@ extension Emitter {
     }
 
     private func collectionStyle(_ style: Node.Sequence.Style,
-                                 default defaultStyle: Node.Sequence.Style) -> YAMLNode.CollectionStyle {
+                                 default defaultStyle: Node.Sequence.Style) -> YAMLCollectionStyle {
         switch style == .any ? defaultStyle : style {
         case .block: return .block
         case .flow: return .flow
@@ -571,7 +571,7 @@ extension Emitter {
     }
 
     private func collectionStyle(_ style: Node.Mapping.Style,
-                                 default defaultStyle: Node.Mapping.Style) -> YAMLNode.CollectionStyle {
+                                 default defaultStyle: Node.Mapping.Style) -> YAMLCollectionStyle {
         switch style == .any ? defaultStyle : style {
         case .block: return .block
         case .flow: return .flow
