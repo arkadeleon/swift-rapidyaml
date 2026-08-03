@@ -354,3 +354,22 @@ extension Node {
         }
     }
 }
+
+extension Node {
+    /// This node with its anchor removed.
+    func removingAnchor() -> Self {
+        switch self {
+        case var .mapping(mapping):
+            mapping.anchor = nil
+            return .mapping(mapping)
+        case var .sequence(sequence):
+            sequence.anchor = nil
+            return .sequence(sequence)
+        case var .scalar(scalar):
+            scalar.anchor = nil
+            return .scalar(scalar)
+        case .alias:
+            return self
+        }
+    }
+}

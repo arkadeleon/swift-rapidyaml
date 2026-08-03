@@ -536,11 +536,18 @@ extension Emitter {
         return tag.name == defaultName || tag.name == .implicit ? nil : shorthand(tag.name)
     }
 
-    /// `tag:yaml.org,2002:binary` is written `!!binary`, which is what libyaml emits.
+    /// The form libyaml writes a tag in: `tag:yaml.org,2002:binary` becomes `!!binary`, a name
+    /// already carrying a handle is left alone, and anything else takes the verbatim form
+    /// `!<name>` — which is what reading it back turns into that same name again.
     private func shorthand(_ name: Tag.Name) -> String {
         let prefix = "tag:yaml.org,2002:"
-        guard name.rawValue.hasPrefix(prefix) else { return name.rawValue }
-        return "!!" + name.rawValue.dropFirst(prefix.count)
+        if name.rawValue.hasPrefix(prefix) {
+            return "!!" + name.rawValue.dropFirst(prefix.count)
+        }
+        if name.rawValue.hasPrefix("!") {
+            return name.rawValue
+        }
+        return "!<\(name.rawValue)>"
     }
 
     private func scalarStyle(_ style: Node.Scalar.Style) -> YAMLNode.ScalarStyle {

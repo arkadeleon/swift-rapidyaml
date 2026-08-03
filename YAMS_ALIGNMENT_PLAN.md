@@ -10,8 +10,8 @@ Drafted 2026-08-03.
 
 ## Current state
 
-This section describes the state the plan was drafted against. Phases 0.1
-through 7, and part of 8, have since landed; see each phase for what changed.
+This section describes the state the plan was drafted against. Every phase has
+since landed; see each one for what changed.
 
 | | |
 |---|---|
@@ -394,9 +394,9 @@ anchors in both libraries.
 
 ---
 
-## Phase 8 — Tests — **partly done**
+## Phase 8 — Tests — **done**
 
-Ported so far, into `Tests/RapidYAMLTests/Ported/`, kept as XCTest to stay close
+Ported into `Tests/RapidYAMLTests/Ported/`, kept as XCTest to stay close
 to the source (87 tests, all passing):
 
 | Yams file | lines | notes |
@@ -414,18 +414,21 @@ to the source (87 tests, all passing):
 | `DecodableWithConfigurationTests.swift` | 94 | as-is |
 | `AliasingStrategyTests.swift` | 52 | as-is |
 | `NodeInternalHelpersTests.swift` | 32 | as-is |
+| `EncoderTests.swift` | 1193 | two expectations adjusted |
+| `AnchorCodingTests.swift` | 518 | as-is |
+| `ClassReferenceDecodingTests.swift` | 322 | as-is |
+| `TagCodingTests.swift` | 260 | as-is |
+| `EmitterTests.swift` | 185 | option tests rewritten |
+| `TagTolerancesTests.swift` | 180 | one expectation adjusted |
+| `AnchorTolerancesTests.swift` | 163 | as-is |
+| `RepresenterTests.swift` | 160 | as-is |
 
-**Not yet ported**: `EncoderTests` (1193), `AnchorCodingTests` (518),
-`ClassReferenceDecodingTests` (322), `TagCodingTests` (260),
-`EmitterTests` (185), `TagTolerancesTests` (180), `AnchorTolerancesTests` (163),
-`RepresenterTests` (160). `PerformanceTests` (228) is deliberately out of scope —
-it measures rather than verifies. The encoding-side files are the ones that
-assert byte-exact emitter output, so they need the same per-case treatment
-`SpecTests` got.
+188 tests, all passing. `PerformanceTests` (228) is deliberately out of scope —
+it measures rather than verifies.
 
 ### What the port found
 
-Two bugs in our own code, both crashes:
+Three bugs in our own code, two of them crashes:
 
 - **A location lookup could fail the parse.** `parser.val_location()` rejects a
   position past the last recorded newline — a scalar on the final line of a
@@ -437,6 +440,20 @@ Two bugs in our own code, both crashes:
   callbacks — so `dump` of a multi-line string with indented continuation lines
   called `std::terminate`. The bridge now picks the style itself with
   `scalar_style_choose_flow()`, which falls back to double-quoting instead.
+- **Every anchor an aliasing strategy minted was emitted**, so a document came
+  out littered with `&1`, `&2`, `&4` that nothing referenced, and decoding it
+  back gave spurious `yamlAnchor` values. Yams sheds these by accident — its
+  `Node.anchor` is `weak`, so releasing the strategy's references kills any
+  anchor the value does not itself hold. Anchors are held strongly here
+  (Phase 2), so `YAMLEncoder` now does it deliberately: a *minted* anchor is
+  dropped unless something aliases it, while one the value provided through
+  `YAMLAnchorProviding` is always kept. That single fix took 26 ported tests
+  from failing to passing.
+
+One difference in tag output was found and corrected rather than papered over:
+a tag name that carries no `!` handle must be written in the verbatim form
+`!<name>`, which is what reading it back turns into that same name again. We
+were writing `!name`, which read back as `!name`.
 
 And three rapidyaml limitations, each pinned in `RapidYAMLLimitationTests` so a
 future upgrade that fixes one shows up as a failing test:
@@ -465,18 +482,25 @@ Each is annotated in place with why:
   thing producing a `.reader` error in Yams.
 - One `MarkTests` expectation reflects container marks pointing at the first
   child.
+- `EmitterTests` covers the option knobs rapidyaml does not have: `indent` and
+  `lineBreak` now assert the refusal, `allowUnicode` asserts that characters are
+  written through in both positions, and the flow cases expect no space after a
+  separator.
+- Two `EncoderTests` expectations: the kept `!!binary` tag, and the indented
+  sequence under a mapping key.
+- One `TagTolerancesTests` expectation: libyaml percent-encodes characters that
+  are unsafe in a verbatim tag, rapidyaml writes them through.
 
 ---
 
 ## Order of work
 
-Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → ~~4~~ → ~~5~~ → ~~6~~ → ~~7~~ → 8 (partly)**.
+Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → ~~4~~ → ~~5~~ → ~~6~~ → ~~7~~ → ~~8~~**.
 
-0.1 through 7 are done, and about half of Phase 8. Reading matches Yams;
-writing produces equivalent YAML that round-trips, but not byte-identical
-output — see Phase 7. What is left is the second half of the test port, listed
-under Phase 8: the encoding-side files, which are the ones that pin exact
-emitter output.
+All phases are done. Reading matches Yams; writing produces equivalent YAML
+that round-trips, but not byte-identical output — see Phase 7. Yams' whole
+suite is ported bar `PerformanceTests`, and every place the two libraries part
+company is annotated at the test that shows it.
 
 The "correct and usable" subset — 0.1, 3, 4 and merge keys — is already covered
 by what has landed, so everything from here on is API surface rather than

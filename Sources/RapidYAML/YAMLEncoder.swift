@@ -31,6 +31,10 @@ public class YAMLEncoder {
             if let aliasingStrategy = options.redundancyAliasingStrategy {
                 finalUserInfo[.redundancyAliasingStrategyKey] = aliasingStrategy
             }
+            let mintedAnchors = MintedAnchors()
+            if options.redundancyAliasingStrategy != nil {
+                finalUserInfo[.mintedAnchorsKey] = mintedAnchors
+            }
             let encoder = _Encoder(userInfo: finalUserInfo,
                                    sequenceStyle: options.sequenceStyle,
                                    mappingStyle: options.mappingStyle,
@@ -38,7 +42,15 @@ public class YAMLEncoder {
             var container = encoder.singleValueContainer()
             try container.encode(value)
             try options.redundancyAliasingStrategy?.releaseAnchorReferences()
-            return try serialize(node: encoder.node, options: options)
+
+            // An aliasing strategy hands out an anchor for every value it sees, but most are
+            // never aliased. Yams sheds those by accident — its `Node.anchor` is `weak`, and
+            // releasing the strategy's references is what kills them — while an anchor the value
+            // itself provided survives, because the value still holds it. Anchors are held
+            // strongly here (see Phase 2), so the same thing is done deliberately: drop a minted
+            // anchor unless something aliases it.
+            let node = mintedAnchors.stripUnaliased(from: encoder.node)
+            return try serialize(node: node, options: options)
         } catch let error as EncodingError {
             throw error
         } catch {
@@ -267,6 +279,9 @@ extension _Encoder: SingleValueEncodingContainer {
         if let redundancyAliasingStrategy = userInfo[.redundancyAliasingStrategyKey] as? RedundancyAliasingStrategy {
             switch try redundancyAliasingStrategy.alias(for: encodable) {
             case let .anchor(anchor):
+                if (encodable as? YAMLAnchorProviding)?.yamlAnchor != anchor {
+                    (userInfo[.mintedAnchorsKey] as? MintedAnchors)?.record(anchor)
+                }
                 self.node = self.node.setting(anchor: anchor) // a hack
                 try encode()
 
@@ -317,6 +332,70 @@ extension _Encoder: SingleValueEncodingContainer {
 }
 
 // MARK: -
+
+/// The anchors an aliasing strategy invented, as opposed to those a value provided itself.
+final class MintedAnchors {
+    private var anchors: Set<Anchor> = []
+
+    func record(_ anchor: Anchor) {
+        anchors.insert(anchor)
+    }
+
+    /// Removes every minted anchor that no alias in `node` refers to.
+    func stripUnaliased(from node: Node) -> Node {
+        guard !anchors.isEmpty else { return node }
+
+        var aliased: Set<Anchor> = []
+        collectAliases(in: node, into: &aliased)
+
+        let removable = anchors.subtracting(aliased)
+        guard !removable.isEmpty else { return node }
+        return strip(removable, from: node)
+    }
+
+    private func collectAliases(in node: Node, into aliased: inout Set<Anchor>) {
+        switch node {
+        case .alias(let alias):
+            aliased.insert(alias.anchor)
+        case .sequence(let sequence):
+            for child in sequence { collectAliases(in: child, into: &aliased) }
+        case .mapping(let mapping):
+            for (key, value) in mapping {
+                collectAliases(in: key, into: &aliased)
+                collectAliases(in: value, into: &aliased)
+            }
+        case .scalar:
+            break
+        }
+    }
+
+    private func strip(_ removable: Set<Anchor>, from node: Node) -> Node {
+        var node = node
+
+        switch node {
+        case .sequence(var sequence):
+            for index in sequence.indices {
+                sequence[index] = strip(removable, from: sequence[index])
+            }
+            node = .sequence(sequence)
+        case .mapping(let mapping):
+            node = .mapping(Node.Mapping(mapping.map { (strip(removable, from: $0.key),
+                                                        strip(removable, from: $0.value)) },
+                                         mapping.tag, mapping.style, mapping.mark, mapping.anchor))
+        case .scalar, .alias:
+            break
+        }
+
+        if let anchor = node.anchor, removable.contains(anchor) {
+            node = node.removingAnchor()
+        }
+        return node
+    }
+}
+
+extension CodingUserInfoKey {
+    internal static let mintedAnchorsKey = Self(rawValue: "mintedAnchors")!
+}
 
 private extension Node {
     static var null: Node { Node("null", Tag(.null)) }
