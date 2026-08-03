@@ -95,7 +95,7 @@ import Testing
     @Test func nodesAreComparable() {
         #expect(Node("a") < Node("b"))
         #expect(!(Node("b") < Node("a")))
-        #expect(!(Node("a") < Node(["a"])), "unlike kinds are never ordered")
+        #expect(!(Node("a") < Node([Node("a")])), "unlike kinds are never ordered")
     }
 
     @Test func aliasComparesByAnchor() {
@@ -105,7 +105,7 @@ import Testing
 
     @Test func implicitTagsAreResolvedFromContents() {
         #expect(Node("1").tag.name == .int)
-        #expect(Node(["1"]).tag.name == .seq)
+        #expect(Node([Node("1")]).tag.name == .seq)
         #expect(Node([(Node("a"), Node("1"))]).tag.name == .map)
         #expect(Node("1", Tag(.int)).tag.name == .int, "an explicit tag is left alone")
     }
@@ -113,7 +113,7 @@ import Testing
     @Test func nonSpecificTagsResolveToTheFailsafeSchema() {
         // `!` means "do not resolve me by value".
         #expect(Node("1", Tag(.nonSpecific)).tag.name == .str)
-        #expect(Node(["1"], Tag(.nonSpecific)).tag.name == .seq)
+        #expect(Node([Node("1")], Tag(.nonSpecific)).tag.name == .seq)
     }
 
     @Test func aResolverWithoutRulesLeavesEverythingAString() {

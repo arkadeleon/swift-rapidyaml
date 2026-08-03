@@ -58,7 +58,7 @@ import Testing
 
     @Test func resolvesTagsOfNodes() {
         #expect(Resolver.default.resolveTag(of: Node("1")) == .int)
-        #expect(Resolver.default.resolveTag(of: Node(["1"])) == .seq)
+        #expect(Resolver.default.resolveTag(of: Node([Node("1")])) == .seq)
         #expect(Resolver.default.resolveTag(of: Node([(Node("a"), Node("1"))])) == .map)
         #expect(Resolver.default.resolveTag(of: .alias(.init("x"))) == .implicit)
     }

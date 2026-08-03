@@ -184,6 +184,20 @@ extension Node {
         }
     }
 
+    /// If the node is a `.sequence` or `.mapping`, set or get the specified parameter's `Node`
+    /// representation.
+    /// If the node is a `.scalar`, this is a no-op.
+    public subscript(representable: NodeRepresentable) -> Node? {
+        get {
+            guard let node = try? representable.represented() else { return nil }
+            return self[node]
+        }
+        set {
+            guard let node = try? representable.represented() else { return }
+            self[node] = newValue
+        }
+    }
+
     /// If the node is a `.sequence` or `.mapping`, set or get the specified string's `Node` representation.
     /// If the node is a `.scalar`, this is a no-op.
     public subscript(string: String) -> Node? {

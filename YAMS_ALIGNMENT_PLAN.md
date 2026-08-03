@@ -11,7 +11,7 @@ Drafted 2026-08-03.
 ## Current state
 
 This section describes the state the plan was drafted against. Phases 0.1
-through 6 have since landed; see each phase for what changed.
+through 7 have since landed; see each phase for what changed.
 
 | | |
 |---|---|
@@ -99,9 +99,10 @@ One conversion is needed at the boundary: rapidyaml counts columns in bytes,
 `String.mark(atLine:byteColumn:)` re-indexes the column against the offending
 line.
 
-The remaining cases (`writer`, `emitter`, `representer`,
-`duplicatedKeysInMapping`) exist for API parity and are unused until Phases 4
-and 7.
+`emitter` and `representer` came into use in Phase 7, and
+`duplicatedKeysInMapping` in Phase 2. `writer` is still unused: rapidyaml
+returns a string rather than writing through a sink, so there is nothing to
+fail.
 
 ---
 
@@ -328,18 +329,68 @@ capable and used for the same job.
 
 ---
 
-## Phase 7 — Encoding / emitting
-
-Nothing exists here yet.
+## Phase 7 — Encoding / emitting — **done**
 
 | Target | Yams source | Notes |
 |---|---|---|
-| `YAMLEncoder.swift` | `Encoder.swift` (371) | |
-| `Emitter.swift` | `Emitter.swift` (572) | rapidyaml has a full emitter (`emit.hpp`, `emit_options.hpp`) |
-| `Representer.swift` | `Representer.swift` (350) | `NodeRepresentable` protocol family |
-| `RedundancyAliasingStrategy.swift` | (148) | anchor generation while encoding |
+| `YAMLEncoder.swift` | `Encoder.swift` (371) | ported |
+| `Emitter.swift` | `Emitter.swift` (572) | public shape ported, driven by rapidyaml's emitter |
+| `Representer.swift` | `Representer.swift` (350) | ported |
+| `RedundancyAliasingStrategy.swift` | (148) | ported |
 
-The top-level `dump` / `serialize` functions belong to this phase.
+`Representer`, `RedundancyAliasingStrategy` and `YAMLEncoder` are pure Swift and
+went across as-is, along with `dump` / `serialize` and `Emitter.Options`.
+`Node.subscript(NodeRepresentable)` — left out of Phase 2 because
+`NodeRepresentable` did not exist yet — is back, which is what `_Encoder` uses
+to write into a sequence by index.
+
+The bridge gained `YAMLEmitterNode` and `YAMLEmitter`: a mutable mirror of
+`YAMLNode` that Swift fills in and hands over in one call, since rapidyaml
+emits a whole tree rather than an event stream. That also means nothing is
+written until `Emitter.close()`, where libyaml streams as it goes.
+
+### The emitter is where parity ends
+
+libyaml is an event-based emitter with knobs for layout; rapidyaml emits a
+tree and has almost none. The output is valid, equivalent YAML that round-trips
+— an `Everything` struct covering every scalar kind encodes and decodes back
+equal, and so does a composed `Node` — but it is **not byte-identical to Yams**.
+Of 22 documents compared, 14 match exactly. The differences:
+
+| | Yams | here |
+|---|---|---|
+| sequence under a mapping key | not indented | indented |
+| flow separator | `[1, 2]` | `[1,2]` |
+| non-ASCII, `allowUnicode: false` | escaped `\uXXXX` | written as-is |
+| first document of a stream | no leading `---` | leading `---` |
+| scalar tags | **dropped** | kept |
+
+The last one is a deliberate improvement rather than a gap. Yams passes
+libyaml `plain_implicit` and `quoted_implicit` unconditionally, so *every*
+scalar tag is discarded on the way out: `dump(object: Data(...))` reads back as
+a `String`, and `!custom` is lost. We keep a scalar tag whenever re-reading
+would not produce it anyway, which costs a few characters and makes the round
+trip lossless. Container tags survive in both.
+
+### Options that cannot be honoured
+
+`canonical`, `indent`, `width`, `explicitEnd`, `version` and any `lineBreak`
+other than `.ln` have no rapidyaml equivalent. Rather than accept and silently
+ignore them, `Emitter.open()` throws `YAMLError.emitter` naming the option, so a
+caller finds out at once. Every default value is supported, so ordinary use
+never trips it. `allowUnicode` is accepted in both positions but only `true`
+describes what actually happens.
+
+`sortKeys`, `explicitStart`, `sequenceStyle`, `mappingStyle`,
+`newLineScalarStyle` and `redundancyAliasingStrategy` all work.
+
+### Anchors, checked
+
+Yams' `weak var anchor` bites again here: `serialize(node:)` on a tree whose
+anchors were built inline drops them entirely, because the `Anchor` is gone
+before the emitter runs. Given a *retained* anchor Yams emits `a: &x 1\nb: *x`,
+which is exactly what we produce. Composed aliases re-emit as duplicate
+anchors in both libraries.
 
 ---
 
@@ -355,11 +406,12 @@ This suite is the only reliable way to verify the earlier phases.
 
 ## Order of work
 
-Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → ~~4~~ → ~~5~~ → ~~6~~ → 7 → 8**.
+Full alignment: **~~0.1~~ → ~~1~~ → ~~2~~ → ~~3~~ → ~~4~~ → ~~5~~ → ~~6~~ → ~~7~~ → 8**.
 
-0.1 through 6 are done: the whole reading side is complete and matches Yams.
-What is left is the encoding side (Phase 7) and the ported test suite
-(Phase 8).
+0.1 through 7 are done. Reading matches Yams; writing produces equivalent YAML
+that round-trips, but not byte-identical output — see Phase 7 for why. What is
+left is Phase 8, porting Yams' own test suite, which is also the thing that
+would tell us how much the emitter differences actually matter.
 
 The "correct and usable" subset — 0.1, 3, 4 and merge keys — is already covered
 by what has landed, so everything from here on is API surface rather than
