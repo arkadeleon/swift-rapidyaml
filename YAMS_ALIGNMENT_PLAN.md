@@ -28,6 +28,8 @@ Still missing from that file, pending the phases below: Yams' scalar parsing
 semantics (Phase 4), merge keys and anchors (Phase 5), and `Decoder.mark`
 (Phase 2).
 
+`YAMLError` moved out of `YAMLDecoder.swift` into its own file in Phase 1.
+
 ## Architecture decision
 
 **Node model: option B — a public Swift value-type `Node`, with `YAMLNode`
@@ -66,17 +68,38 @@ message; their locations point into the rapidyaml C++ source, not the YAML.
 
 ---
 
-## Phase 1 — Error type
+## Phase 1 — Error type — **done**
 
 | Target | Yams source |
 |---|---|
 | `YAMLError.swift` | `YamlError.swift` (200) |
+| `Mark.swift` | `Mark.swift` (39) — pulled forward from Phase 2, `YAMLError` needs it |
+| `String+RapidYAML.swift` | `String+Yams.swift` (81) — line/column helpers behind `description` |
 
-Cases for `parser` / `scanner` / `composer` / `emitter` / `reader`, plus
-`Context` (line, column, mark, description). Data comes from 0.1.
+`YAMLError` carries the full Yams case list, and `description` is a verbatim
+port — its output was diffed against real Yams output for every case
+(`errorDescriptionsMatchYams`).
 
-rapidyaml classifies errors more coarsely than libyaml, so this is a mapping
-exercise, not a one-to-one port.
+The mapping from 0.1's `NSError` is deliberately narrow, because rapidyaml
+classifies errors more coarsely than libyaml:
+
+- parse error with a location → `.parser`, mark from `ErrorDataParse::ymlloc`
+- parse error without one → `.reader`, offset only
+- basic / visit error → `.reader`, no location at all
+
+So `.scanner` and `.composer` are never produced — rapidyaml has no equivalent
+of libyaml's separate scanner and composer stages. `context` is likewise always
+`nil`: there is no counterpart to libyaml's "while parsing a block mapping"
+half of the message.
+
+One conversion is needed at the boundary: rapidyaml counts columns in bytes,
+`Mark` counts them in `UnicodeScalar` as libyaml does, so
+`String.mark(atLine:byteColumn:)` re-indexes the column against the offending
+line.
+
+The remaining cases (`writer`, `emitter`, `representer`,
+`duplicatedKeysInMapping`) exist for API parity and are unused until Phases 4
+and 7.
 
 ---
 
@@ -91,7 +114,7 @@ exercise, not a one-to-one port.
 | `Node.Alias.swift` | (56) | `is_val_ref()` / `val_ref()` already exposed |
 | `Tag.swift` | (172) | tag parsing/normalization in `tag.hpp` |
 | `Anchor.swift` | (40) | `keyAnchor` / `valueAnchor` already exposed |
-| `Mark.swift` | (39) | needs location tracking enabled in `ParserOptions`, then `Tree::location(Parser const&, id)` |
+| ~~`Mark.swift`~~ | (39) | done in Phase 1; attaching marks to nodes still needs location tracking enabled in `ParserOptions`, then `Tree::location(Parser const&, id)` |
 
 Ordering bug to fix here: `YAMLNode.mm:101-109` builds mappings into an
 `NSMutableDictionary`, which loses key order. `Node.Mapping` is order-preserving
@@ -191,10 +214,10 @@ This suite is the only reliable way to verify the earlier phases.
 
 ## Order of work
 
-Full alignment: **~~0.1~~ → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8**.
+Full alignment: **~~0.1~~ → ~~1~~ → 2 → 3 → 4 → 5 → 6 → 7 → 8**.
 
-0.1 is done — it was the only process-crashing defect and was independent of
-everything else. Next up is Phase 1.
+0.1 and 1 are done. Next up is Phase 2, the Node model — the largest phase, and
+the one everything after it depends on.
 
 If the scope ever needs to be cut back to "correct and usable" rather than
 API-equivalent, **0.1 → 3 → 4 → 5 (merge keys)** delivers most of the practical

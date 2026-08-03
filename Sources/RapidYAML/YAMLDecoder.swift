@@ -8,10 +8,6 @@
 import Foundation
 internal import YAMLNode
 
-public enum YAMLError: Error {
-    case dataCouldNotBeDecoded(encoding: String.Encoding)
-}
-
 /// `Codable`-style `Decoder` that can be used to decode a `Decodable` type from a given `String` and optional
 /// user info mapping. Similar to `Foundation.JSONDecoder`.
 public class YAMLDecoder {
@@ -133,7 +129,7 @@ extension YAMLDecoder {
         with block: (_ yamlNode: YAMLNode) throws -> T
     ) throws -> T {
         do {
-            let yamlNode = try YAMLNode(yamlString: yamlString)
+            let yamlNode = try yamlNode(from: yamlString)
             return try block(yamlNode)
         } catch let error as DecodingError {
             throw error
@@ -144,6 +140,22 @@ extension YAMLDecoder {
                 underlyingError: error
             )
             throw DecodingError.dataCorrupted(context)
+        }
+    }
+
+    /// Parses `yamlString`, reporting a failure as a `YAMLError` rather than as the `NSError`
+    /// produced by the Objective-C++ bridge.
+    ///
+    /// - parameter yamlString: The YAML object `String` to parse.
+    ///
+    /// - returns: The root node of the parsed tree.
+    ///
+    /// - throws: `YAMLError` if the string is not valid YAML.
+    private func yamlNode(from yamlString: String) throws -> YAMLNode {
+        do {
+            return try YAMLNode(yamlString: yamlString)
+        } catch {
+            throw YAMLError(from: error as NSError, with: yamlString)
         }
     }
 }

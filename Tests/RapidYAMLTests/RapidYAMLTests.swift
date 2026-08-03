@@ -64,10 +64,10 @@ func decoderThrowsOnMalformedYAML(yamlString: String) async throws {
 }
 
 @Test func malformedYAMLErrorLocatesTheFailure() async throws {
-    let decoder = YAMLDecoder()
+    let yamlString = "Id: 501\n  Name: Red Potion\n"
 
     let error = #expect(throws: DecodingError.self) {
-        try decoder.decode(Item.self, from: "Id: 501\nName: [Red Potion\n")
+        try YAMLDecoder().decode(Item.self, from: yamlString)
     }
 
     guard case .dataCorrupted(let context) = error else {
@@ -75,8 +75,79 @@ func decoderThrowsOnMalformedYAML(yamlString: String) async throws {
         return
     }
 
-    let underlyingError = try #require(context.underlyingError as? NSError)
-    #expect(underlyingError.domain == "YAMLNodeErrorDomain")
-    #expect(underlyingError.localizedDescription == "missing terminating ]")
-    #expect(underlyingError.userInfo["YAMLNodeErrorLine"] as? Int == 3)
+    let yamlError = try #require(context.underlyingError as? YAMLError)
+    guard case .parser(let errorContext, let problem, let mark, let yaml) = yamlError else {
+        Issue.record("expected a parser error, got \(yamlError)")
+        return
+    }
+
+    // rapidyaml has no equivalent of libYAML's error context.
+    #expect(errorContext == nil)
+    #expect(problem == "multiline scalars cannot be used as keys")
+    #expect(mark.line == 2)
+    #expect(mark.column == 7)
+    #expect(yaml == yamlString)
+
+    #expect(yamlError.description == """
+        2:7: error: parser: multiline scalars cannot be used as keys:
+          Name: Red Potion
+              ^
+        """)
+}
+
+/// rapidyaml reports columns in bytes, `Mark` reports them in `UnicodeScalar`.
+@Test func malformedYAMLErrorColumnCountsUnicodeScalars() async throws {
+    // The `}` sits at scalar column 12, but at byte column 20.
+    let error = #expect(throws: DecodingError.self) {
+        try YAMLDecoder().decode(Item.self, from: "紅色藥水: [1, 2}\n")
+    }
+
+    guard case .dataCorrupted(let context) = error,
+          case .parser(_, _, let mark, _) = try #require(context.underlyingError as? YAMLError) else {
+        Issue.record("expected a parser error, got \(String(describing: error))")
+        return
+    }
+
+    #expect(mark.line == 1)
+    #expect(mark.column == 12)
+}
+
+@Test func errorDescriptionsMatchYams() async throws {
+    let yaml = "a: 1\nb: 2\n"
+    let mark = Mark(line: 2, column: 4)
+
+    #expect(YAMLError.no.description == "No error is produced")
+    #expect(YAMLError.memory.description == "Memory error")
+    #expect(YAMLError.writer(problem: "broken").description == "broken")
+    #expect(YAMLError.emitter(problem: "broken").description == "broken")
+    #expect(YAMLError.representer(problem: "broken").description == "broken")
+    #expect(YAMLError.dataCouldNotBeDecoded(encoding: .utf8).description
+        == "String could not be decoded from data using 'Unicode (UTF-8)' encoding")
+
+    #expect(YAMLError.reader(problem: "broken", offset: 5, value: -1, yaml: yaml).description == """
+        2:1: error: reader: broken:
+        b: 2
+        ^
+        """)
+    #expect(YAMLError.reader(problem: "broken", offset: nil, value: 42, yaml: yaml).description
+        == "broken at offset: nil, value: 42")
+
+    let errorContext = YAMLError.Context(text: "while parsing a block mapping", mark: Mark(line: 1, column: 1))
+    #expect(YAMLError.scanner(context: errorContext, problem: "broken", mark, yaml: yaml).description == """
+        2:4: error: scanner: while parsing a block mapping in line 1, column 1
+        broken:
+        b: 2
+           ^
+        """)
+    #expect(YAMLError.composer(context: nil, problem: "broken", mark, yaml: yaml).description == """
+        2:4: error: composer: broken:
+        b: 2
+           ^
+        """)
+    #expect(YAMLError.duplicatedKeysInMapping(duplicates: ["b", "a"], context: errorContext).description == """
+        Parser: expected all keys to be unique but found the following duplicated key(s): 'a', 'b'.
+        Context:
+        while parsing a block mapping in line 1, column 1
+
+        """)
 }
