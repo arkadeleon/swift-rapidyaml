@@ -16,6 +16,29 @@ public enum YAMLError: Error {
 /// user info mapping. Similar to `Foundation.JSONDecoder`.
 public class YAMLDecoder {
 
+    /// Options to use when decoding from YAML.
+    public struct Options {
+
+        /// Create `YAMLDecoder.Options` with the specified values.
+        public init(encoding: String.Encoding = .utf8) {
+            self.encoding = encoding
+        }
+
+        /// String encoding used when decoding from `Data`.
+        public var encoding: String.Encoding = .utf8
+    }
+
+    /// Options to use when decoding from YAML.
+    public var options = Options()
+
+    /// Creates a `YAMLDecoder` instance.
+    ///
+    /// - parameter encoding: String encoding.
+    public convenience init(encoding: String.Encoding) {
+        self.init()
+        self.options.encoding = encoding
+    }
+
     /// Creates a `YAMLDecoder` instance.
     public init() {
     }
@@ -34,7 +57,7 @@ public class YAMLDecoder {
         from yamlNode: YAMLNode,
         userInfo: [CodingUserInfoKey: Any] = [:]
     ) throws -> T where T: Decodable {
-        let decoder = _YAMLDecoder(referencing: yamlNode, userInfo: userInfo)
+        let decoder = _decoder(from: yamlNode, userInfo: userInfo)
         let container = try decoder.singleValueContainer()
         return try container.decode(type)
     }
@@ -48,23 +71,13 @@ public class YAMLDecoder {
     /// - returns: Returns the decoded type `T`.
     ///
     /// - throws: `DecodingError` or `YAMLError` if something went wrong while decoding.
-    func decode<T>(
+    public func decode<T>(
         _ type: T.Type = T.self,
         from yamlString: String,
         userInfo: [CodingUserInfoKey: Any] = [:]
     ) throws -> T where T: Decodable {
-        do {
-            let yamlNode = YAMLNode(yamlString: yamlString)
-            return try decode(type, from: yamlNode, userInfo: userInfo)
-        } catch let error as DecodingError {
-            throw error
-        } catch {
-            let context = DecodingError.Context(
-                codingPath: [],
-                debugDescription: "The given data was not valid YAML.",
-                underlyingError: error
-            )
-            throw DecodingError.dataCorrupted(context)
+        return try processYAMLNode(type, from: yamlString) { [type, userInfo] yamlNode in
+            try self.decode(type, from: yamlNode, userInfo: userInfo)
         }
     }
 
@@ -77,16 +90,61 @@ public class YAMLDecoder {
     /// - returns: Returns the decoded type `T`.
     ///
     /// - throws: `DecodingError` or `YAMLError` if something went wrong while decoding.
-    func decode<T>(
+    public func decode<T>(
         _ type: T.Type = T.self,
         from yamlData: Data,
         userInfo: [CodingUserInfoKey: Any] = [:]
     ) throws -> T where T: Decodable {
-        guard let yamlString = String(data: yamlData, encoding: .utf8) else {
-            throw YAMLError.dataCouldNotBeDecoded(encoding: .utf8)
+        guard let yamlString = String(data: yamlData, encoding: options.encoding) else {
+            throw YAMLError.dataCouldNotBeDecoded(encoding: options.encoding)
         }
 
         return try decode(type, from: yamlString, userInfo: userInfo)
+    }
+}
+
+extension YAMLDecoder {
+
+    /// Constructs a `_YAMLDecoder` referencing given YAML node to decode with a provided user info.
+    ///
+    /// - parameter yamlNode: YAML Node to decode.
+    /// - parameter userInfo: Additional key/values which can be used when looking up keys to decode.
+    ///
+    /// - returns: A constructed `_YAMLDecoder` instance.
+    ///
+    /// - note: This is a single `_YAMLDecoder` constructor for decoding `Decodable`
+    ///         and `DecodableWithConfiguration` objects.
+    private func _decoder(from yamlNode: YAMLNode, userInfo: [CodingUserInfoKey: Any]) -> _YAMLDecoder {
+        return _YAMLDecoder(referencing: yamlNode, userInfo: userInfo)
+    }
+
+    /// Returns a value of the type you specify, decoded from a YAML object.
+    ///
+    /// - parameter type:       The type of the value to decode from the supplied YAML object.
+    /// - parameter yamlString: The YAML object `String` to process.
+    /// - parameter block:      A block to decode a given object type from the YAML node.
+    ///
+    /// - returns: A value of the specified type, if the decoder can parse the data.
+    ///
+    /// - note: This is a single parser function for decoding `Decodable` and `DecodableWithConfiguration` objects.
+    private func processYAMLNode<T>(
+        _ type: T.Type,
+        from yamlString: String,
+        with block: (_ yamlNode: YAMLNode) throws -> T
+    ) throws -> T {
+        do {
+            let yamlNode = YAMLNode(yamlString: yamlString)
+            return try block(yamlNode)
+        } catch let error as DecodingError {
+            throw error
+        } catch {
+            let context = DecodingError.Context(
+                codingPath: [],
+                debugDescription: "The given data was not valid YAML.",
+                underlyingError: error
+            )
+            throw DecodingError.dataCorrupted(context)
+        }
     }
 }
 
@@ -107,14 +165,14 @@ private struct _YAMLDecoder: Decoder {
 
     func container<Key>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
         guard let mapping = node.mapping else {
-            throw _typeMismatch(at: codingPath, expectation: YAMLNode.self, reality: node)
+            throw _typeMismatch(at: codingPath, expectation: [String: YAMLNode].self, reality: node)
         }
         return .init(_YAMLKeyedDecodingContainer<Key>(decoder: self, wrapping: mapping))
     }
 
     func unkeyedContainer() throws -> any UnkeyedDecodingContainer {
         guard let sequence = node.sequence else {
-            throw _typeMismatch(at: codingPath, expectation: YAMLNode.self, reality: node)
+            throw _typeMismatch(at: codingPath, expectation: [YAMLNode].self, reality: node)
         }
         return _YAMLUnkeyedDecodingContainer(decoder: self, wrapping: sequence)
     }
@@ -125,140 +183,17 @@ private struct _YAMLDecoder: Decoder {
 
     // MARK: -
 
-    /// create a new `_Decoder` instance referencing `node` as `key` inheriting `userInfo`
+    /// create a new `_YAMLDecoder` instance referencing `node` as `key` inheriting `userInfo`
     func decoder(referencing node: YAMLNode, `as` key: any CodingKey) -> _YAMLDecoder {
         return .init(referencing: node, userInfo: userInfo, codingPath: codingPath + [key])
     }
-}
 
-extension _YAMLDecoder: SingleValueDecodingContainer {
-
-    func decodeNil() -> Bool {
-        if let _ = node.mapping {
-            return false
-        } else if let _ = node.sequence {
-            return false
-        } else if let _ = node.scalar {
-            return false
-        } else {
-            return true
+    /// returns the scalar of `node` or throws `DecodingError.typeMismatch`
+    fileprivate func scalar() throws -> String {
+        guard let scalar = node.scalar else {
+            throw _typeMismatch(at: codingPath, expectation: String.self, reality: node)
         }
-    }
-
-    func decode(_ type: Bool.Type) throws -> Bool {
-        if let value = node.scalar.flatMap(Bool.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: String.Type) throws -> String {
-        if let value = node.scalar {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: Double.Type) throws -> Double {
-        if let value = node.scalar.flatMap(Double.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: Float.Type) throws -> Float {
-        if let value = node.scalar.flatMap(Float.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: Int.Type) throws -> Int {
-        if let value = node.scalar.flatMap(Int.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: Int8.Type) throws -> Int8 {
-        if let value = node.scalar.flatMap(Int8.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: Int16.Type) throws -> Int16 {
-        if let value = node.scalar.flatMap(Int16.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: Int32.Type) throws -> Int32 {
-        if let value = node.scalar.flatMap(Int32.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: Int64.Type) throws -> Int64 {
-        if let value = node.scalar.flatMap(Int64.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: UInt.Type) throws -> UInt {
-        if let value = node.scalar.flatMap(UInt.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: UInt8.Type) throws -> UInt8 {
-        if let value = node.scalar.flatMap(UInt8.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: UInt16.Type) throws -> UInt16 {
-        if let value = node.scalar.flatMap(UInt16.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: UInt32.Type) throws -> UInt32 {
-        if let value = node.scalar.flatMap(UInt32.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode(_ type: UInt64.Type) throws -> UInt64 {
-        if let value = node.scalar.flatMap(UInt64.init) {
-            return value
-        } else {
-            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
-        }
-    }
-
-    func decode<T>(_ type: T.Type) throws -> T where T: Decodable {
-        try type.init(from: self)
+        return scalar
     }
 }
 
@@ -399,6 +334,98 @@ private struct _YAMLUnkeyedDecodingContainer: UnkeyedDecodingContainer {
     }
 }
 
+extension _YAMLDecoder: SingleValueDecodingContainer {
+
+    // MARK: - Swift.SingleValueDecodingContainer Methods
+
+    func decodeNil() -> Bool {
+        node.mapping == nil && node.sequence == nil && node.scalar == nil
+    }
+
+    func decode(_ type: Bool.Type) throws -> Bool {
+        try construct(type) { Bool($0) }
+    }
+
+    func decode(_ type: String.Type) throws -> String {
+        try construct(type) { $0 }
+    }
+
+    func decode(_ type: Double.Type) throws -> Double {
+        try construct(type) { Double($0) }
+    }
+
+    func decode(_ type: Float.Type) throws -> Float {
+        try construct(type) { Float($0) }
+    }
+
+    func decode(_ type: Int.Type) throws -> Int {
+        try construct(type) { Int($0) }
+    }
+
+    func decode(_ type: Int8.Type) throws -> Int8 {
+        try construct(type) { Int8($0) }
+    }
+
+    func decode(_ type: Int16.Type) throws -> Int16 {
+        try construct(type) { Int16($0) }
+    }
+
+    func decode(_ type: Int32.Type) throws -> Int32 {
+        try construct(type) { Int32($0) }
+    }
+
+    func decode(_ type: Int64.Type) throws -> Int64 {
+        try construct(type) { Int64($0) }
+    }
+
+    func decode(_ type: UInt.Type) throws -> UInt {
+        try construct(type) { UInt($0) }
+    }
+
+    func decode(_ type: UInt8.Type) throws -> UInt8 {
+        try construct(type) { UInt8($0) }
+    }
+
+    func decode(_ type: UInt16.Type) throws -> UInt16 {
+        try construct(type) { UInt16($0) }
+    }
+
+    func decode(_ type: UInt32.Type) throws -> UInt32 {
+        try construct(type) { UInt32($0) }
+    }
+
+    func decode(_ type: UInt64.Type) throws -> UInt64 {
+        try construct(type) { UInt64($0) }
+    }
+
+    func decode<T>(_ type: T.Type) throws -> T where T: Decodable {
+        try _decode(type)
+    }
+
+    // MARK: -
+
+    private func _decode<T: Decodable>(_ type: T.Type) throws -> T {
+        // `Decimal` and `URL` are `Decodable` through keyed containers, but YAML represents
+        // them as plain scalars, so construct them from the scalar instead.
+        switch type {
+        case is Decimal.Type:
+            return try construct(type) { Decimal(string: $0) as? T }
+        case is URL.Type:
+            return try construct(type) { URL(string: $0) as? T }
+        default:
+            return try type.init(from: self)
+        }
+    }
+
+    /// construct `T` from the scalar of `node`, or throws `DecodingError.typeMismatch`
+    private func construct<T>(_ type: T.Type, _ closure: (String) -> T?) throws -> T {
+        guard let constructed = closure(try scalar()) else {
+            throw _typeMismatch(at: codingPath, expectation: type, reality: node)
+        }
+        return constructed
+    }
+}
+
 // MARK: - CodingKey for `_UnkeyedEncodingContainer`, `_UnkeyedDecodingContainer`, `superEncoder` and `superDecoder`
 
 struct _YAMLCodingKey: CodingKey {
@@ -454,3 +481,111 @@ extension YAMLDecoder: TopLevelDecoder {
     }
 }
 #endif
+
+// MARK: DecodableWithConfiguration
+
+@available(macOS 14, iOS 17, tvOS 17, watchOS 10, *)
+extension YAMLDecoder {
+
+    // MARK: JSONDecoder API
+
+    /// Returns a value of the type you specify, decoded from a YAML object.
+    ///
+    /// - parameter type:          The type of the value to decode from the supplied YAML object.
+    /// - parameter data:          The YAML object `Data` to decode.
+    /// - parameter configuration: A decoding configuration that provides additional information necessary for decoding.
+    ///
+    /// - returns: A value of the specified type, if the decoder can parse the data.
+    public func decode<T>(
+        _ type: T.Type = T.self,
+        from data: Data,
+        configuration: T.DecodingConfiguration
+    ) throws -> T where T: DecodableWithConfiguration {
+        try decode(type, from: data, configuration: configuration, userInfo: [:])
+    }
+
+    /// Returns a value of the type you specify, decoded from a YAML object.
+    ///
+    /// - parameter type:          The type of the value to decode from the supplied YAML object.
+    /// - parameter data:          The YAML object `Data` to decode.
+    /// - parameter configuration: A configuration instance provider to help decode types that don't support
+    ///                            decoding by themselves.
+    ///
+    /// - returns: A value of the specified type, if the decoder can parse the data.
+    public func decode<T: DecodableWithConfiguration, C: DecodingConfigurationProviding>(
+        _ type: T.Type = T.self,
+        from data: Data,
+        configuration: C.Type
+    ) throws -> T where T.DecodingConfiguration == C.DecodingConfiguration {
+        try decode(type, from: data, configuration: configuration, userInfo: [:])
+    }
+
+    // MARK: RapidYAML API
+
+    /// Returns a value of the type you specify, decoded from a YAML object.
+    ///
+    /// - parameter type:          The type of the value to decode from the supplied YAML object.
+    /// - parameter data:          The YAML object `Data` to decode.
+    /// - parameter configuration: A decoding configuration that provides additional information necessary for decoding.
+    /// - parameter userInfo:      A dictionary you use to customize the decoding process by providing
+    ///                            contextual information.
+    ///
+    /// - returns: A value of the specified type, if the decoder can parse the data.
+    public func decode<T>(
+        _ type: T.Type = T.self,
+        from data: Data,
+        configuration: T.DecodingConfiguration,
+        userInfo: [CodingUserInfoKey: Any]
+    ) throws -> T where T: DecodableWithConfiguration {
+        guard let yamlString = String(data: data, encoding: options.encoding) else {
+            throw YAMLError.dataCouldNotBeDecoded(encoding: options.encoding)
+        }
+
+        return try processYAMLNode(type, from: yamlString) { [type, configuration, userInfo] yamlNode in
+            try self.decode(type, from: yamlNode, configuration: configuration, userInfo: userInfo)
+        }
+    }
+
+    /// Returns a value of the type you specify, decoded from a YAML object.
+    ///
+    /// - parameter type:          The type of the value to decode from the supplied YAML object.
+    /// - parameter data:          The YAML object `Data` to decode.
+    /// - parameter configuration: A configuration instance provider to help decode types that don't support
+    ///                            decoding by themselves.
+    /// - parameter userInfo:      A dictionary you use to customize the decoding process by providing
+    ///                            contextual information.
+    ///
+    /// - returns: A value of the specified type, if the decoder can parse the data.
+    public func decode<T: DecodableWithConfiguration, C: DecodingConfigurationProviding>(
+        _ type: T.Type = T.self,
+        from data: Data,
+        configuration: C.Type,
+        userInfo: [CodingUserInfoKey: Any]
+    ) throws -> T where T.DecodingConfiguration == C.DecodingConfiguration {
+        try decode(type, from: data, configuration: configuration.decodingConfiguration, userInfo: userInfo)
+    }
+
+    // MARK: Node decoder
+
+    /// Decode a `DecodableWithConfiguration` type from a given `YAMLNode` and optional user info mapping.
+    ///
+    /// - parameter type:          The type of the value to decode from the supplied YAML node.
+    /// - parameter yamlNode:      YAML Node to decode.
+    /// - parameter configuration: A configuration instance that provides additional information necessary
+    ///                            for decoding.
+    /// - parameter userInfo:      A dictionary you use to customize the decoding process by providing
+    ///                            contextual information.
+    ///
+    /// - returns: Returns the decoded type `T`.
+    ///
+    /// - throws: `DecodingError` or `YAMLError` if something went wrong while decoding.
+    func decode<T>(
+        _ type: T.Type = T.self,
+        from yamlNode: YAMLNode,
+        configuration: T.DecodingConfiguration,
+        userInfo: [CodingUserInfoKey: Any] = [:]
+    ) throws -> T where T: DecodableWithConfiguration {
+        let decoder = _decoder(from: yamlNode, userInfo: userInfo)
+        return try type.init(from: decoder, configuration: configuration)
+    }
+}
