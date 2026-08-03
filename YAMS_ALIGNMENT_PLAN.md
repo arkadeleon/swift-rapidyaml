@@ -426,6 +426,15 @@ to the source (87 tests, all passing):
 188 tests, all passing. `PerformanceTests` (228) is deliberately out of scope —
 it measures rather than verifies.
 
+The tests written during the port were then cut back to what Yams' suite cannot
+express, leaving three files (28 tests) beside `Ported/`:
+
+| | |
+|---|---|
+| `YAMLDecoderTests.swift` | this project's own decoding test, the Phase 0.1 abort cases, the parse-error marks, every `YAMLError.description` case, and `Decoder.mark` — the ported `MarkTests` only covers `Node.mark` |
+| `RapidYAMLDifferenceTests.swift` | where this library parts company with Yams: real container styles, kept scalar tags, verbatim tag output, unicode mark columns, eager parsing, the refused emitter options, the emitter state machine, and minted-anchor shedding |
+| `RapidYAMLLimitationTests.swift` | valid YAML rapidyaml refuses |
+
 ### What the port found
 
 Three bugs in our own code, two of them crashes:
