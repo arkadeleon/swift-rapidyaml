@@ -49,8 +49,8 @@ static YAMLNodeKind YAMLNodeKindFromNode(ryml::ConstNodeRef node) {
     if (self) {
         _parent = parent;
         _kind = YAMLNodeKindFromNode(node);
-        _typeBits = static_cast<uint32_t>(node.type().type);
-        _typeString = [NSString stringWithUTF8String:node.type_str()];
+        _typeBits = static_cast<uint32_t>(node.type().m_bits);
+        _typeString = [NSString stringWithUTF8String:node.type().type_str()];
 
         _isStream = node.is_stream();
         _isDoc = node.is_doc();
