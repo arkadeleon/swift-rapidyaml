@@ -35,3 +35,6 @@ void CRapidYAMLInstallErrorCallbacks(void);
 
 /// Turns a caught exception into the error an entry point reports.
 NSError *CRapidYAMLErrorFromException(CRapidYAMLException const& exception);
+
+/// The error reported for an exception that is not ours, which no entry point may let escape.
+NSError *CRapidYAMLUnknownError(void);

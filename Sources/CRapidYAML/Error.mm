@@ -38,16 +38,6 @@ namespace {
 
 /// Installs the throwing error callbacks. rapidyaml keeps them in global state, and objects
 /// copy them from there at construction time, so this must run before the first parse.
-void CRapidYAMLInstallErrorCallbacks() {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        ryml::Callbacks callbacks;
-        callbacks.set_error_basic(ThrowBasicError);
-        callbacks.set_error_parse(ThrowParseError);
-        callbacks.set_error_visit(ThrowVisitError);
-        ryml::set_callbacks(callbacks);
-    });
-}
 
 }
 
@@ -60,6 +50,12 @@ void CRapidYAMLInstallErrorCallbacks(void) {
         callbacks.set_error_visit(ThrowVisitError);
         ryml::set_callbacks(callbacks);
     });
+}
+
+NSError *CRapidYAMLUnknownError(void) {
+    return [NSError errorWithDomain:CRapidYAMLErrorDomain
+                               code:CRapidYAMLErrorCodeBasic
+                           userInfo:@{NSLocalizedDescriptionKey: @"an unknown error occurred"}];
 }
 
 NSError *CRapidYAMLErrorFromException(CRapidYAMLException const& exception) {

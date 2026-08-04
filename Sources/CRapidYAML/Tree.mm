@@ -8,6 +8,8 @@
 #import "include/CRapidYAMLTree.h"
 #import "Internal.h"
 
+#include <memory>
+
 namespace {
 
 static YAMLNodeKind YAMLNodeKindFromNode(ryml::ConstNodeRef node) {
@@ -157,16 +159,25 @@ static YAMLStringRef YAMLStringRefFromTag(c4::csubstr tag) {
 extern "C" YAMLTree * _Nullable YAMLTreeParse(const char *yaml, size_t length, NSError **error) {
     CRapidYAMLInstallErrorCallbacks();
 
-    YAMLTree *handle = new YAMLTree();
     try {
+        // Constructing the tree allocates, and a failed allocation reports through the same
+        // callbacks — so it belongs inside the `try`. Anything thrown out of here would cross
+        // back into Swift, where there is no handler and the process ends.
+        auto handle = std::make_unique<YAMLTree>();
+
         // Locations are opt-in because tracking them costs an extra pass over the source. `Mark`
         // is part of the public model, so they are always on.
         ryml::parse_in_arena(&handle->parser, c4::csubstr(yaml, length), &handle->tree);
-        return handle;
+        return handle.release();
     } catch (CRapidYAMLException const& exception) {
-        delete handle;
         if (error != NULL) {
             *error = CRapidYAMLErrorFromException(exception);
+        }
+        return nullptr;
+    } catch (...) {
+        // Not ours — `std::bad_alloc` from the allocation above, say. It still must not escape.
+        if (error != NULL) {
+            *error = CRapidYAMLUnknownError();
         }
         return nullptr;
     }

@@ -158,6 +158,12 @@ void BuildNode(ryml::Tree &tree, ryml::id_type id, YAMLEmitterNode *description)
             *error = CRapidYAMLErrorFromException(exception);
         }
         return nil;
+    } catch (...) {
+        // Not ours — `std::bad_alloc` while building the tree, say. It still must not escape.
+        if (error != NULL) {
+            *error = CRapidYAMLUnknownError();
+        }
+        return nil;
     }
 }
 

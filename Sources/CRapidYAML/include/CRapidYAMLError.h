@@ -34,7 +34,10 @@ extern NSErrorUserInfoKey const CRapidYAMLErrorLineKey;
 /// Only present on `CRapidYAMLErrorCodeParse` errors.
 extern NSErrorUserInfoKey const CRapidYAMLErrorColumnKey;
 
-/// One-based byte offset into the YAML source where the error was detected, as an `NSNumber`.
+/// Zero-based byte offset into the YAML source where the error was detected, as an `NSNumber`.
+///
+/// Unlike the line and column above, which rapidyaml reports one-based, this one counts from 0 —
+/// and `YAMLError.reader` expects it that way, being an offset from `yaml.startIndex`.
 ///
 /// Only present on `CRapidYAMLErrorCodeParse` errors.
 extern NSErrorUserInfoKey const CRapidYAMLErrorOffsetKey;
