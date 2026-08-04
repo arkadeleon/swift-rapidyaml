@@ -47,8 +47,8 @@ public class YAMLEncoder {
             // never aliased. Yams sheds those by accident — its `Node.anchor` is `weak`, and
             // releasing the strategy's references is what kills them — while an anchor the value
             // itself provided survives, because the value still holds it. Anchors are held
-            // strongly here (see Phase 2), so the same thing is done deliberately: drop a minted
-            // anchor unless something aliases it.
+            // strongly here, so the same thing is done deliberately: drop a minted anchor unless
+            // something aliases it.
             let node = mintedAnchors.stripUnaliased(from: encoder.node)
             return try serialize(node: node, options: options)
         } catch let error as EncodingError {

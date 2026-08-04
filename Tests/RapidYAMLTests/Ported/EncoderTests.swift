@@ -119,7 +119,7 @@ final class EncoderTests: XCTestCase, @unchecked Sendable { // swiftlint:disable
     // MARK: - Data Tests
     func testEncodingBase64Data() {
         // The `!!binary` tag is kept where Yams drops every scalar tag, so the value reads back
-        // as `Data` rather than as a `String`. See Phase 7 of YAMS_ALIGNMENT_PLAN.md.
+        // as `Data` rather than as a `String`.
         _testRoundTrip(of: Data([0xDE, 0xAD, 0xBE, 0xEF]), expectedYAML: "!!binary 3q2+7w==\n")
     }
 

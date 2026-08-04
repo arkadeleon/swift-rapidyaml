@@ -148,8 +148,8 @@ extension Node.Mapping: TagResolvable {
 extension Node.Mapping {
     /// Returns this mapping with its merge keys (`<<`) replaced by the pairs they name.
     ///
-    /// - note: The decoder does not call this yet — wiring merge keys into decoding is Phase 5.
-    ///         `Constructor` needs it, so it lands here.
+    /// Both `Constructor` and the decoder's keyed container go through this, so a merged key is
+    /// visible whether a document is read as `Any` or into a `Decodable`.
     func flatten() -> Node.Mapping {
         // Most mappings have nothing to merge, and rebuilding one costs an array of tuples plus
         // a second array of pairs. Only pay that when there is something to do.
