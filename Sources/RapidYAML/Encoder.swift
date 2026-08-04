@@ -1,5 +1,5 @@
 //
-//  YAMLEncoder.swift
+//  Encoder.swift
 //  RapidYAML
 //
 //  Created by Leon Li on 2026/8/3.
@@ -329,6 +329,30 @@ extension _Encoder: SingleValueEncodingContainer {
             "Attempt to encode value through single value container when previously value already encoded."
         )
     }
+}
+
+// MARK: - CodingKey for `_UnkeyedEncodingContainer`, `_UnkeyedDecodingContainer`, `superEncoder` and `superDecoder`
+
+struct _YAMLCodingKey: CodingKey {
+    var stringValue: String
+    var intValue: Int?
+
+    init?(stringValue: String) {
+        self.stringValue = stringValue
+        self.intValue = nil
+    }
+
+    init?(intValue: Int) {
+        self.stringValue = "\(intValue)"
+        self.intValue = intValue
+    }
+
+    init(index: Int) {
+        self.stringValue = "Index \(index)"
+        self.intValue = index
+    }
+
+    static let `super` = _YAMLCodingKey(stringValue: "super")!
 }
 
 // MARK: -
