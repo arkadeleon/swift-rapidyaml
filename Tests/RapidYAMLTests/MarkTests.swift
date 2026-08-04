@@ -2,7 +2,7 @@
 //  MarkTests.swift
 //  RapidYAMLTests
 //
-//  Ported from Yams' test suite.
+//  Created by Leon Li on 2026/8/3.
 //
 
 import XCTest

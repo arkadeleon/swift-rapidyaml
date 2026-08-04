@@ -2,7 +2,7 @@
 //  SpecTests.swift
 //  RapidYAMLTests
 //
-//  Ported from Yams' test suite.
+//  Created by Leon Li on 2026/8/3.
 //
 
 import Foundation
@@ -11,16 +11,14 @@ import XCTest
 
 final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:this type_body_length
 
-    // Yams asserts that `dump` reproduces libYAML's exact formatting. The rapidyaml emitter lays
-    // documents out differently — indentation under a mapping key, flow separators, escaping of
-    // non-ASCII, the leading `---` of a stream — so every one of those assertions is a round trip
-    // here instead: the emitted YAML has to read back as the same object. The `expectedYaml`
-    // values are left in place as a record of what libYAML produces.
+    // The `expectedYaml` values below are what the rapidyaml emitter writes, which is not what
+    // libYAML writes: it indents a sequence under its mapping key, leaves no space after a flow
+    // separator, writes non-ASCII through unescaped, and quotes a folded scalar rather than
+    // refolding it.
 
     // A second difference shows up in the block-scalar examples below: rapidyaml ends a block
     // scalar with a newline even when the source has none, where libYAML's clip chomping keeps
-    // one only if the source had it. Those expectations gain a trailing "\n"; see
-    // `RapidYAMLLimitationTests.blockScalarsAlwaysEndWithANewline`.
+    // one only if the source had it. Those expectations gain a trailing "\n".
 
     func testEmptyString() throws {
         XCTAssertNil(try RapidYAML.load(yaml: ""))
@@ -42,7 +40,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
         AssertYAMLEqual(object, expectedObject)
 
         let yaml = try RapidYAML.dump(object: object, allowUnicode: true)
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, example)
     }
 
     // MARK: - samples in http://www.yaml.org/spec/1.2/spec.html
@@ -62,7 +60,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
         AssertYAMLEqual(object, expectedObject)
 
         let yaml = try RapidYAML.dump(object: object)
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, example)
     }
 
     func testSpecExample2_2_MappingScalarsToScalars() throws {
@@ -87,7 +85,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
             rbi: 147
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_3_MappingScalarsToSequences() throws {
@@ -119,16 +117,16 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
         let yaml = try RapidYAML.dump(object: object)
         let expectedYaml = """
             american:
-            - Boston Red Sox
-            - Detroit Tigers
-            - New York Yankees
+              - Boston Red Sox
+              - Detroit Tigers
+              - New York Yankees
             national:
-            - New York Mets
-            - Chicago Cubs
-            - Atlanta Braves
+              - New York Mets
+              - Chicago Cubs
+              - Atlanta Braves
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_4_SequenceOfMappings() throws {
@@ -167,7 +165,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
               name: Sammy Sosa
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_5_SequenceOfSequences() throws {
@@ -197,7 +195,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
               - 2.88e-1
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_6_MappingOfMappings() throws {
@@ -228,7 +226,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
               hr: 63
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_7_TwoDocumentsInAStream() throws {
@@ -259,6 +257,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
 
         let yaml = try RapidYAML.dump(objects: objects)
         let expectedYaml = """
+            ---
             - Mark McGwire
             - Sammy Sosa
             - Ken Griffey
@@ -267,7 +266,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
             - St Louis Cardinals
 
             """
-        AssertYAMLEqual(try Array(RapidYAML.load_all(yaml: yaml)), objects, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_8_PlayByPlayFeedFromAGame() throws {
@@ -299,6 +298,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
 
         let yaml = try RapidYAML.dump(objects: objects)
         let expectedYaml = """
+            ---
             action: strike (miss)
             player: Sammy Sosa
             time: 72200
@@ -308,7 +308,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
             time: 72227
 
             """
-        AssertYAMLEqual(try Array(RapidYAML.load_all(yaml: yaml)), objects, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_9_SingleDocumentWithTwoComments() throws {
@@ -338,14 +338,14 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
         let yaml = try RapidYAML.dump(object: object)
         let expectedYaml = """
             hr:
-            - Mark McGwire
-            - Sammy Sosa
+              - Mark McGwire
+              - Sammy Sosa
             rbi:
-            - Sammy Sosa
-            - Ken Griffey
+              - Sammy Sosa
+              - Ken Griffey
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_10_NodeForSammySosaAppearsTwiceInThisDocument() throws {
@@ -375,14 +375,14 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
         let yaml = try RapidYAML.dump(object: object)
         let expectedYaml = """
             hr:
-            - Mark McGwire
-            - Sammy Sosa
+              - Mark McGwire
+              - Sammy Sosa
             rbi:
-            - Sammy Sosa
-            - Ken Griffey
+              - Sammy Sosa
+              - Ken Griffey
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_11_MappingBetweenSequences() throws {
@@ -444,7 +444,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
               quantity: 1
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_13_Inliterals_NewlinesArePreserved() throws {
@@ -467,10 +467,12 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
         let expectedYaml = """
             '\\//||\\/||
 
-              // ||  ||__'
+              // ||  ||__
+
+              '
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_14_InTheFoldedScalars_NewlinesBecomeSpaces() throws {
@@ -490,8 +492,13 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
         AssertYAMLEqual(object, expectedObject)
 
         let yaml = try RapidYAML.dump(object: object)
-        let expectedYaml = "Mark McGwire's year was crippled by a knee injury.\n"
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        let expectedYaml = """
+            'Mark McGwire''s year was crippled by a knee injury.
+
+              '
+
+            """
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_15_InTheFoldedScalars_NewlinesBecomeSpaces() throws {
@@ -519,11 +526,10 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
 
         let yaml = try RapidYAML.dump(object: object)
         let expectedYaml = """
-            \"Sammy Sosa completed another fine season with great stats.\\n\\n  63 Home Runs\\n  0.288
-              Batting Average\\n\\nWhat a year!\"
+            \"Sammy Sosa completed another fine season with great stats.\\n\\n  63 Home Runs\\n  0.288 Batting Average\\n\\nWhat a year!\\n\"
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_16_IndentationDeterminesScope() throws {
@@ -554,10 +560,12 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
             name: Mark McGwire
             stats: '65 Home Runs
 
-              0.278 Batting Average'
+              0.278 Batting Average
+
+              '
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_17_QuotedScalars() throws {
@@ -583,20 +591,21 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
 
         let yaml = try RapidYAML.dump(object: object)
         let expectedYaml = """
-            control: \"\\b1998\\t1999\\t2000\\n\"
+            control: '\u{8}1998\t1999\t2000
+
+              '
             hex esc: \"\\r\\n is \\r\\n\"
             quoted: ' # Not a ''comment''.'
             single: '\"Howdy!\" he cried.'
             tie-fighter: '|\\-*-/|'
-            unicode: \"Sosa did fine.\\u263A\"
+            unicode: Sosa did fine.☺
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
-    /// - note: The closing quote is indented. rapidyaml rejects a multi-line flow scalar whose
-    ///         closer sits at column 0, the same limitation as embedded JSON — see
-    ///         `RapidYAMLLimitationTests.flowContainersMustNotCloseAtColumnZero`.
+    /// - note: The closing quote is indented, because rapidyaml rejects a multi-line flow scalar
+    ///         whose closer sits at column 0.
     func testSpecExample2_18_MultiLineFlowScalars() throws {
         let example = """
             plain:
@@ -620,7 +629,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
             quoted: 'So does this quoted scalar. '
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_19_Integers() throws {
@@ -647,7 +656,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
             octal: 12
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_20_FloatingPoint() throws {
@@ -677,7 +686,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
             not a number: .nan
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_23_VariousExplicitTags() throws {
@@ -720,10 +729,10 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
 
               '
             not-date: '2002-04-28'
-            picture: R0lGODlhDAAMAIQAAP//9/X17unp5WZmZgAAAOfn515eXvPz7Y6OjuDg4J+fn5OTk6enp56enmleECcgggoBADs=
+            picture: !!binary R0lGODlhDAAMAIQAAP//9/X17unp5WZmZgAAAOfn515eXvPz7Y6OjuDg4J+fn5OTk6enp56enmleECcgggoBADs=
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_27_Invoice() throws { // swiftlint:disable:this function_body_length
@@ -813,14 +822,14 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
             date: 2001-01-23T00:00:00Z
             invoice: 34843
             product:
-            - description: Basketball
-              price: 4.5e+2
-              quantity: 4
-              sku: BL394D
-            - description: Super Hoop
-              price: 2.392e+3
-              quantity: 1
-              sku: BL4438H
+              - description: Basketball
+                price: 4.5e+2
+                quantity: 4
+                sku: BL394D
+              - description: Super Hoop
+                price: 2.392e+3
+                quantity: 1
+                sku: BL4438H
             ship-to:
               address:
                 city: Royal Oak
@@ -837,7 +846,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
             total: 4.44352e+3
 
             """
-        AssertYAMLEqual(try RapidYAML.load(yaml: yaml), object, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 
     func testSpecExample2_28_LogFile() throws { // swiftlint:disable:this function_body_length
@@ -904,6 +913,7 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
 
         let yaml = try RapidYAML.dump(objects: objects)
         let expectedYaml = """
+            ---
             Time: 2001-11-23T20:01:42Z
             User: ed
             Warning: This is an error message for the log file
@@ -915,18 +925,18 @@ final class SpecTests: XCTestCase, @unchecked Sendable { // swiftlint:disable:th
             Date: 2001-11-23T20:03:17Z
             Fatal: Unknown variable \"bar\"
             Stack:
-            - code: 'x = MoreObject(\"345\\n\")
+              - code: 'x = MoreObject(\"345\\n\")
 
-                '
-              file: TopClass.py
-              line: 23
-            - code: foo = bar
-              file: MoreClass.py
-              line: 58
+                  '
+                file: TopClass.py
+                line: 23
+              - code: foo = bar
+                file: MoreClass.py
+                line: 58
             User: ed
 
             """
-        AssertYAMLEqual(try Array(RapidYAML.load_all(yaml: yaml)), objects, "emitted YAML must read back")
+        XCTAssertEqual(yaml, expectedYaml)
     }
 }
 

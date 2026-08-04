@@ -28,7 +28,10 @@ let package = Package(
         ),
         .testTarget(
             name: "RapidYAMLTests",
-            dependencies: ["RapidYAML"]
+            dependencies: ["RapidYAML"],
+            resources: [
+                .copy("Fixtures/SourceKitten#289/debug.yaml"),
+            ]
         ),
     ]
 )

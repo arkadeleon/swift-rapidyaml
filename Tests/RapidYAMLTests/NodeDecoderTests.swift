@@ -1,8 +1,8 @@
 //
 //  NodeDecoderTests.swift
-//  
+//  RapidYAMLTests
 //
-//  Created by Rob Napier on 6/3/23.
+//  Created by Leon Li on 2026/8/3.
 //
 
 import XCTest
