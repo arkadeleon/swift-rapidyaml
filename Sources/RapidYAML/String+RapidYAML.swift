@@ -80,11 +80,12 @@ extension String {
 
 }
 
-/// A source split into lines once, so that resolving a mark costs the length of one line rather
-/// than a walk from the top of the document.
+/// Where each line of a source begins, recorded once, so that resolving a mark costs at most the
+/// length of one line rather than a walk from the top of the document.
 ///
 /// Composing a document asks for a mark per scalar. Going through `substring(at:)` each time made
-/// that quadratic in the size of the source — 74 KB took 440 ms, against 0.75 ms to parse it.
+/// that quadratic in the size of the source: composing a 74 KB file took 440 ms, against under a
+/// millisecond to parse it.
 struct LineIndex {
 
     private let yaml: String

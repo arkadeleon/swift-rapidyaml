@@ -138,9 +138,11 @@ extension YAMLDecoder {
         with block: (_ node: Node) throws -> T
     ) throws -> T {
         do {
-            // Yams decodes with `Resolver([.merge])`: the constructors key off a scalar's style
-            // rather than its tag, so the only rule decoding actually needs is the one that
-            // finds `<<`.
+            // Yams decodes with `Resolver([.merge])`, and so do we. No constructor needs a tag
+            // resolved from a scalar's contents: the numeric ones refuse anything that is not
+            // plain, and `Bool` refuses anything already tagged `.str`, which is what composing
+            // a quoted scalar produces. That leaves `<<` as the only rule decoding has a use
+            // for, and skips six regexes per scalar.
             let parser = try Parser(yaml: yamlString, resolver: Resolver([.merge]))
             let node = try parser.singleRoot() ?? ""
             return try block(node)
